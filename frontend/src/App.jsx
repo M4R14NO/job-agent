@@ -1,6 +1,9 @@
-import { useMemo, useState } from "react";
-import DOMPurify from "dompurify";
-import { marked } from "marked";
+import { useState } from "react";
+import { searchJobs } from "./api/search";
+import { useJobDescription } from "./hooks/useJobDescription";
+import SearchFilters from "./components/SearchFilters";
+import ResultsList from "./components/ResultsList";
+import JobModal from "./components/JobModal";
 
 export default function App() {
   const [resumeText, setResumeText] = useState("");
@@ -18,54 +21,17 @@ export default function App() {
   const [selectedJob, setSelectedJob] = useState(null);
 
   const jobs = response?.jobs ?? [];
-
-  const descriptionHtml = useMemo(() => {
-    if (!selectedJob) {
-      return "";
-    }
-
-    const rawDescription =
-      selectedJob.description ||
-      selectedJob.job_description ||
-      selectedJob.snippet ||
-      "";
-
-    if (!rawDescription) {
-      return "";
-    }
-
-    const html = marked.parse(rawDescription, { breaks: true });
-    return DOMPurify.sanitize(html);
-  }, [selectedJob]);
+  const descriptionHtml = useJobDescription(selectedJob);
 
   const handleSearch = async () => {
     setIsLoading(true);
     setError("");
     setResponse(null);
-
     try {
-      const res = await fetch("http://localhost:8000/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          resume_text: resumeText.trim(),
-          wishes: wishes.trim() || null,
-          search_term: searchTerm.trim() || null,
-          location: location.trim() || null,
-          results_wanted: resultsWanted,
-          hours_old: hoursOld,
-          is_remote: isRemote,
-          site_name: sites,
-          linkedin_fetch_description: fetchFullDescriptions,
-          description_format: "markdown"
-        })
+      const data = await searchJobs({
+        resumeText, wishes, searchTerm, location,
+        resultsWanted, hoursOld, isRemote, sites, fetchFullDescriptions
       });
-
-      if (!res.ok) {
-        throw new Error(`Request failed with status ${res.status}`);
-      }
-
-      const data = await res.json();
       setResponse(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -87,268 +53,31 @@ export default function App() {
       </header>
 
       <section className="card">
-        <div className="field-grid">
-          <div>
-            <label htmlFor="searchTerm" className="label">
-              Search term
-            </label>
-            <input
-              id="searchTerm"
-              placeholder="e.g. backend engineer"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-            />
-          </div>
-          <div>
-            <label htmlFor="location" className="label">
-              Location
-            </label>
-            <input
-              id="location"
-              placeholder="e.g. Berlin"
-              value={location}
-              onChange={(event) => setLocation(event.target.value)}
-            />
-          </div>
-          <div>
-            <label htmlFor="results" className="label">
-              Results wanted
-            </label>
-            <input
-              id="results"
-              type="number"
-              min={1}
-              max={50}
-              value={resultsWanted}
-              onChange={(event) =>
-                setResultsWanted(Number(event.target.value))
-              }
-            />
-          </div>
-          <div>
-            <label htmlFor="hoursOld" className="label">
-              Hours old
-            </label>
-            <input
-              id="hoursOld"
-              type="number"
-              min={1}
-              max={720}
-              value={hoursOld}
-              onChange={(event) => setHoursOld(Number(event.target.value))}
-            />
-          </div>
-        </div>
-
-        <div className="filters">
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={isRemote}
-              onChange={(event) => setIsRemote(event.target.checked)}
-            />
-            Remote only
-          </label>
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={fetchFullDescriptions}
-              onChange={(event) =>
-                setFetchFullDescriptions(event.target.checked)
-              }
-            />
-            Fetch full descriptions (slower)
-          </label>
-          <div className="site-group">
-            <span className="label">Sites</span>
-            <div className="site-options">
-              {[
-                { id: "indeed", label: "Indeed" },
-                { id: "linkedin", label: "LinkedIn" },
-                { id: "google", label: "Google" }
-              ].map((site) => (
-                <label key={site.id} className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={sites.includes(site.id)}
-                    onChange={(event) => {
-                      if (event.target.checked) {
-                        setSites((prev) => [...prev, site.id]);
-                      } else {
-                        setSites((prev) =>
-                          prev.filter((value) => value !== site.id)
-                        );
-                      }
-                    }}
-                  />
-                  {site.label}
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <label htmlFor="resume" className="label">
-          Resume text
-        </label>
-        <textarea
-          id="resume"
-          rows={10}
-          placeholder="Paste plain text from your resume here..."
-          value={resumeText}
-          onChange={(event) => setResumeText(event.target.value)}
+        <SearchFilters
+          searchTerm={searchTerm} onSearchTermChange={setSearchTerm}
+          location={location} onLocationChange={setLocation}
+          resultsWanted={resultsWanted} onResultsWantedChange={setResultsWanted}
+          hoursOld={hoursOld} onHoursOldChange={setHoursOld}
+          isRemote={isRemote} onIsRemoteChange={setIsRemote}
+          sites={sites} onSitesChange={setSites}
+          fetchFullDescriptions={fetchFullDescriptions} onFetchFullDescriptionsChange={setFetchFullDescriptions}
+          resumeText={resumeText} onResumeTextChange={setResumeText}
+          wishes={wishes} onWishesChange={setWishes}
+          isLoading={isLoading}
+          error={error}
+          onSearch={handleSearch}
         />
-        <label htmlFor="wishes" className="label">
-          Job wishes (optional)
-        </label>
-        <textarea
-          id="wishes"
-          rows={4}
-          placeholder="Preferred titles, skills, industries, or constraints..."
-          value={wishes}
-          onChange={(event) => setWishes(event.target.value)}
-        />
-
-        <button
-          className="primary"
-          disabled={!resumeText.trim() || isLoading}
-          onClick={handleSearch}
-        >
-          {isLoading ? "Running..." : "Run search"}
-        </button>
-
-        {isLoading && (
-          <p className="progress">
-            Searching job boards. This can take a minute, especially for
-            LinkedIn or Google.
-          </p>
-        )}
-
-        {error && <p className="error">{error}</p>}
         {response && (
-          <div className="results">
-            <div className="results-header">
-              <h2>Results</h2>
-              <span>{jobs.length} jobs</span>
-            </div>
-            {jobs.length === 0 ? (
-              <p className="empty">No jobs found yet.</p>
-            ) : (
-              <ul className="job-list">
-                {jobs.map((job, index) => (
-                  <li key={`${job.job_url ?? "job"}-${index}`}>
-                    <div className="job-title">{job.title ?? "Untitled"}</div>
-                    <div className="job-rank">
-                      <span className="badge">
-                        Match: {job.match_score ?? "pending"}
-                      </span>
-                    </div>
-                    <div className="job-meta">
-                      <span>{job.company ?? job.company_name ?? "Unknown"}</span>
-                      <span>{job.location ?? ""}</span>
-                      <span>{job.site ?? ""}</span>
-                    </div>
-                    <div className="job-actions">
-                      <button
-                        className="secondary"
-                        onClick={() => setSelectedJob(job)}
-                      >
-                        View details
-                      </button>
-                      {job.job_url && (
-                        <a
-                          className="job-link"
-                          href={job.job_url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          View posting
-                        </a>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <ResultsList jobs={jobs} onSelectJob={setSelectedJob} />
         )}
       </section>
 
       {selectedJob && (
-        <div className="modal" role="dialog" aria-modal="true">
-          <div className="modal-backdrop" onClick={() => setSelectedJob(null)} />
-          <div className="modal-card">
-            <div className="modal-header">
-              <div>
-                <p className="eyebrow">Job detail</p>
-                <h2>{selectedJob.title ?? "Untitled"}</h2>
-                <p className="subtitle">
-                  {selectedJob.company ?? selectedJob.company_name ?? "Unknown"}
-                </p>
-              </div>
-              <button
-                className="secondary"
-                onClick={() => setSelectedJob(null)}
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="modal-meta">
-              <span>{selectedJob.location ?? ""}</span>
-              <span>{selectedJob.site ?? ""}</span>
-              <span>{selectedJob.date_posted ?? ""}</span>
-            </div>
-
-            <div className="modal-rank">
-              <div className="rank-header">
-                <h3>Match score</h3>
-                <span className="badge">
-                  {selectedJob.match_score ?? "pending"}
-                </span>
-              </div>
-              <p className="rank-note">
-                {selectedJob.match_reasons?.length
-                  ? "Top matched keywords"
-                  : "Ranking will appear once the scoring logic is enabled."}
-              </p>
-              {selectedJob.match_reasons?.length ? (
-                <div className="reason-list">
-                  {selectedJob.match_reasons.map((reason) => (
-                    <span key={reason} className="reason-chip">
-                      {reason}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="modal-body">
-              <h3>Description</h3>
-              {descriptionHtml ? (
-                <div
-                  className="description-content"
-                  dangerouslySetInnerHTML={{ __html: descriptionHtml }}
-                />
-              ) : (
-                <p>No description available.</p>
-              )}
-            </div>
-
-            <div className="modal-actions">
-              {selectedJob.job_url && (
-                <a
-                  className="job-link"
-                  href={selectedJob.job_url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open original posting
-                </a>
-              )}
-            </div>
-          </div>
-        </div>
+        <JobModal
+          job={selectedJob}
+          descriptionHtml={descriptionHtml}
+          onClose={() => setSelectedJob(null)}
+        />
       )}
     </div>
   );

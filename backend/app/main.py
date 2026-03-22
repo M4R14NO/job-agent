@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 
+from .schemas.search import SearchRequest, SearchResponse
 from .services.search_service import fetch_jobs
 from .services.ranking_service import score_jobs
 
@@ -21,21 +21,8 @@ def health_check() -> dict:
     return {"status": "ok"}
 
 
-class SearchRequest(BaseModel):
-    resume_text: str
-    wishes: str | None = None
-    search_term: str | None = None
-    location: str | None = None
-    results_wanted: int = 10
-    hours_old: int | None = 72
-    is_remote: bool = False
-    site_name: list[str] | None = None
-    linkedin_fetch_description: bool = False
-    description_format: str = "markdown"
-
-
-@app.post("/search")
-def start_search(payload: SearchRequest) -> dict:
+@app.post("/search", response_model=SearchResponse)
+def start_search(payload: SearchRequest) -> SearchResponse:
     search_term = payload.search_term or "software engineer"
     sites = payload.site_name or ["indeed", "linkedin", "google"]
 
@@ -54,9 +41,9 @@ def start_search(payload: SearchRequest) -> dict:
         resume_text=payload.resume_text,
         wishes=payload.wishes,
     )
-    return {
-        "message": "Search completed",
-        "resume_length": len(payload.resume_text),
-        "has_wishes": bool(payload.wishes),
-        "jobs": jobs,
-    }
+    return SearchResponse(
+        message="Search completed",
+        resume_length=len(payload.resume_text),
+        has_wishes=bool(payload.wishes),
+        jobs=jobs,
+    )
