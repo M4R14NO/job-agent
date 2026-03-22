@@ -12,6 +12,7 @@ export default function App() {
   const [response, setResponse] = useState(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedJob, setSelectedJob] = useState(null);
 
   const jobs = response?.jobs ?? [];
 
@@ -201,16 +202,24 @@ export default function App() {
                       <span>{job.location ?? ""}</span>
                       <span>{job.site ?? ""}</span>
                     </div>
-                    {job.job_url && (
-                      <a
-                        className="job-link"
-                        href={job.job_url}
-                        target="_blank"
-                        rel="noreferrer"
+                    <div className="job-actions">
+                      <button
+                        className="secondary"
+                        onClick={() => setSelectedJob(job)}
                       >
-                        View posting
-                      </a>
-                    )}
+                        View details
+                      </button>
+                      {job.job_url && (
+                        <a
+                          className="job-link"
+                          href={job.job_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          View posting
+                        </a>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -218,6 +227,57 @@ export default function App() {
           </div>
         )}
       </section>
+
+      {selectedJob && (
+        <div className="modal" role="dialog" aria-modal="true">
+          <div className="modal-backdrop" onClick={() => setSelectedJob(null)} />
+          <div className="modal-card">
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Job detail</p>
+                <h2>{selectedJob.title ?? "Untitled"}</h2>
+                <p className="subtitle">
+                  {selectedJob.company ?? selectedJob.company_name ?? "Unknown"}
+                </p>
+              </div>
+              <button
+                className="secondary"
+                onClick={() => setSelectedJob(null)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="modal-meta">
+              <span>{selectedJob.location ?? ""}</span>
+              <span>{selectedJob.site ?? ""}</span>
+              <span>{selectedJob.date_posted ?? ""}</span>
+            </div>
+
+            <div className="modal-body">
+              <h3>Description</h3>
+              <p>
+                {selectedJob.description
+                  ? selectedJob.description.slice(0, 1200)
+                  : "No description available."}
+              </p>
+            </div>
+
+            <div className="modal-actions">
+              {selectedJob.job_url && (
+                <a
+                  className="job-link"
+                  href={selectedJob.job_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open original posting
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
