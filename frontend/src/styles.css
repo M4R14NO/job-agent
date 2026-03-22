@@ -64,6 +64,34 @@ h1 {
   gap: 16px;
 }
 
+.filters {
+  display: grid;
+  gap: 16px;
+}
+
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  color: #2f2f2f;
+}
+
+.checkbox input {
+  width: auto;
+}
+
+.site-group {
+  display: grid;
+  gap: 8px;
+}
+
+.site-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
 .label {
   font-weight: 600;
 }
@@ -114,6 +142,63 @@ input {
   border-radius: 12px;
   font-size: 13px;
   overflow-x: auto;
+}
+
+.results {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.results-header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.empty {
+  margin: 0;
+  color: #666666;
+}
+
+.job-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.job-list li {
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid #e6e6e6;
+  background: #ffffff;
+  display: grid;
+  gap: 8px;
+}
+
+.job-title {
+  font-weight: 600;
+}
+
+.job-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 13px;
+  color: #5f5f5f;
+}
+
+.job-link {
+  color: #1a4db3;
+  font-weight: 600;
+  text-decoration: none;
 }
 
 @media (max-width: 720px) {

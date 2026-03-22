@@ -28,6 +28,7 @@ class SearchRequest(BaseModel):
     location: str | None = None
     results_wanted: int = 10
     hours_old: int | None = 72
+    is_remote: bool = False
     site_name: list[str] | None = None
 
 
@@ -42,6 +43,7 @@ def start_search(payload: SearchRequest) -> dict:
         location=payload.location,
         results_wanted=payload.results_wanted,
         hours_old=payload.hours_old,
+        is_remote=payload.is_remote,
     )
 
     jobs = jobs.where(pd.notnull(jobs), None)

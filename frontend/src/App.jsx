@@ -6,9 +6,14 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState("");
   const [location, setLocation] = useState("");
   const [resultsWanted, setResultsWanted] = useState(10);
+  const [hoursOld, setHoursOld] = useState(72);
+  const [isRemote, setIsRemote] = useState(false);
+  const [sites, setSites] = useState(["indeed", "linkedin", "google"]);
   const [response, setResponse] = useState(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const jobs = response?.jobs ?? [];
 
   const handleSearch = async () => {
     setIsLoading(true);
@@ -24,7 +29,10 @@ export default function App() {
           wishes: wishes.trim() || null,
           search_term: searchTerm.trim() || null,
           location: location.trim() || null,
-          results_wanted: resultsWanted
+          results_wanted: resultsWanted,
+          hours_old: hoursOld,
+          is_remote: isRemote,
+          site_name: sites
         })
       });
 
@@ -92,6 +100,57 @@ export default function App() {
               }
             />
           </div>
+          <div>
+            <label htmlFor="hoursOld" className="label">
+              Hours old
+            </label>
+            <input
+              id="hoursOld"
+              type="number"
+              min={1}
+              max={720}
+              value={hoursOld}
+              onChange={(event) => setHoursOld(Number(event.target.value))}
+            />
+          </div>
+        </div>
+
+        <div className="filters">
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={isRemote}
+              onChange={(event) => setIsRemote(event.target.checked)}
+            />
+            Remote only
+          </label>
+          <div className="site-group">
+            <span className="label">Sites</span>
+            <div className="site-options">
+              {[
+                { id: "indeed", label: "Indeed" },
+                { id: "linkedin", label: "LinkedIn" },
+                { id: "google", label: "Google" }
+              ].map((site) => (
+                <label key={site.id} className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={sites.includes(site.id)}
+                    onChange={(event) => {
+                      if (event.target.checked) {
+                        setSites((prev) => [...prev, site.id]);
+                      } else {
+                        setSites((prev) =>
+                          prev.filter((value) => value !== site.id)
+                        );
+                      }
+                    }}
+                  />
+                  {site.label}
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
 
         <label htmlFor="resume" className="label">
@@ -125,7 +184,38 @@ export default function App() {
 
         {error && <p className="error">{error}</p>}
         {response && (
-          <pre className="response">{JSON.stringify(response, null, 2)}</pre>
+          <div className="results">
+            <div className="results-header">
+              <h2>Results</h2>
+              <span>{jobs.length} jobs</span>
+            </div>
+            {jobs.length === 0 ? (
+              <p className="empty">No jobs found yet.</p>
+            ) : (
+              <ul className="job-list">
+                {jobs.map((job, index) => (
+                  <li key={`${job.job_url ?? "job"}-${index}`}>
+                    <div className="job-title">{job.title ?? "Untitled"}</div>
+                    <div className="job-meta">
+                      <span>{job.company ?? job.company_name ?? "Unknown"}</span>
+                      <span>{job.location ?? ""}</span>
+                      <span>{job.site ?? ""}</span>
+                    </div>
+                    {job.job_url && (
+                      <a
+                        className="job-link"
+                        href={job.job_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View posting
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
       </section>
     </div>
