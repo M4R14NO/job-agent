@@ -139,6 +139,12 @@ input {
   cursor: not-allowed;
 }
 
+.progress {
+  margin: 0;
+  color: #4d4d4d;
+  font-size: 14px;
+}
+
 .error {
   margin: 0;
   color: #b42318;
@@ -195,6 +201,22 @@ input {
 
 .job-title {
   font-weight: 600;
+}
+
+.job-rank {
+  display: flex;
+  align-items: center;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #eef2ff;
+  color: #1d2a6d;
 }
 
 .job-meta {
@@ -264,6 +286,45 @@ input {
   color: #5f5f5f;
 }
 
+.modal-rank {
+  background: #f6f7fb;
+  border-radius: 16px;
+  padding: 16px;
+  display: grid;
+  gap: 6px;
+}
+
+.rank-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rank-header h3 {
+  margin: 0;
+}
+
+.rank-note {
+  margin: 0;
+  color: #555555;
+}
+
+.reason-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reason-chip {
+  background: #ffffff;
+  border: 1px solid #dfe3ff;
+  color: #1d2a6d;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .modal-body h3 {
   margin: 0 0 8px;
 }
@@ -272,6 +333,35 @@ input {
   margin: 0;
   line-height: 1.5;
   color: #2a2a2a;
+}
+
+.description-content {
+  display: grid;
+  gap: 12px;
+  line-height: 1.6;
+  color: #2a2a2a;
+}
+
+.description-content p {
+  margin: 0;
+}
+
+.description-content ul,
+.description-content ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.description-content li {
+  margin-bottom: 6px;
+}
+
+.description-content strong {
+  font-weight: 700;
+}
+
+.description-content a {
+  color: #1a4db3;
 }
 
 .modal-actions {

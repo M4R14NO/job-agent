@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import DOMPurify from "dompurify";
+import { marked } from "marked";
 
 export default function App() {
   const [resumeText, setResumeText] = useState("");
@@ -9,12 +11,32 @@ export default function App() {
   const [hoursOld, setHoursOld] = useState(72);
   const [isRemote, setIsRemote] = useState(false);
   const [sites, setSites] = useState(["indeed", "linkedin", "google"]);
+  const [fetchFullDescriptions, setFetchFullDescriptions] = useState(false);
   const [response, setResponse] = useState(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
 
   const jobs = response?.jobs ?? [];
+
+  const descriptionHtml = useMemo(() => {
+    if (!selectedJob) {
+      return "";
+    }
+
+    const rawDescription =
+      selectedJob.description ||
+      selectedJob.job_description ||
+      selectedJob.snippet ||
+      "";
+
+    if (!rawDescription) {
+      return "";
+    }
+
+    const html = marked.parse(rawDescription, { breaks: true });
+    return DOMPurify.sanitize(html);
+  }, [selectedJob]);
 
   const handleSearch = async () => {
     setIsLoading(true);
@@ -33,7 +55,9 @@ export default function App() {
           results_wanted: resultsWanted,
           hours_old: hoursOld,
           is_remote: isRemote,
-          site_name: sites
+          site_name: sites,
+          linkedin_fetch_description: fetchFullDescriptions,
+          description_format: "markdown"
         })
       });
 
@@ -125,6 +149,16 @@ export default function App() {
             />
             Remote only
           </label>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={fetchFullDescriptions}
+              onChange={(event) =>
+                setFetchFullDescriptions(event.target.checked)
+              }
+            />
+            Fetch full descriptions (slower)
+          </label>
           <div className="site-group">
             <span className="label">Sites</span>
             <div className="site-options">
@@ -183,6 +217,13 @@ export default function App() {
           {isLoading ? "Running..." : "Run search"}
         </button>
 
+        {isLoading && (
+          <p className="progress">
+            Searching job boards. This can take a minute, especially for
+            LinkedIn or Google.
+          </p>
+        )}
+
         {error && <p className="error">{error}</p>}
         {response && (
           <div className="results">
@@ -197,6 +238,11 @@ export default function App() {
                 {jobs.map((job, index) => (
                   <li key={`${job.job_url ?? "job"}-${index}`}>
                     <div className="job-title">{job.title ?? "Untitled"}</div>
+                    <div className="job-rank">
+                      <span className="badge">
+                        Match: {job.match_score ?? "pending"}
+                      </span>
+                    </div>
                     <div className="job-meta">
                       <span>{job.company ?? job.company_name ?? "Unknown"}</span>
                       <span>{job.location ?? ""}</span>
@@ -254,13 +300,39 @@ export default function App() {
               <span>{selectedJob.date_posted ?? ""}</span>
             </div>
 
+            <div className="modal-rank">
+              <div className="rank-header">
+                <h3>Match score</h3>
+                <span className="badge">
+                  {selectedJob.match_score ?? "pending"}
+                </span>
+              </div>
+              <p className="rank-note">
+                {selectedJob.match_reasons?.length
+                  ? "Top matched keywords"
+                  : "Ranking will appear once the scoring logic is enabled."}
+              </p>
+              {selectedJob.match_reasons?.length ? (
+                <div className="reason-list">
+                  {selectedJob.match_reasons.map((reason) => (
+                    <span key={reason} className="reason-chip">
+                      {reason}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
             <div className="modal-body">
               <h3>Description</h3>
-              <p>
-                {selectedJob.description
-                  ? selectedJob.description.slice(0, 1200)
-                  : "No description available."}
-              </p>
+              {descriptionHtml ? (
+                <div
+                  className="description-content"
+                  dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+                />
+              ) : (
+                <p>No description available.</p>
+              )}
             </div>
 
             <div className="modal-actions">
