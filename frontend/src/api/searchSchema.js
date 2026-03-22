@@ -7,7 +7,12 @@ export function buildSearchRequest({
   hoursOld,
   isRemote,
   sites,
-  fetchFullDescriptions
+  fetchFullDescriptions,
+  model,
+  enableRerank,
+  rerankTopN,
+  weightEmbedding,
+  weightKeyword
 }) {
   return {
     resume_text: resumeText.trim(),
@@ -19,7 +24,12 @@ export function buildSearchRequest({
     is_remote: isRemote,
     site_name: sites,
     linkedin_fetch_description: fetchFullDescriptions,
-    description_format: "markdown"
+    description_format: "markdown",
+    model: model || null,
+    enable_rerank: Boolean(enableRerank),
+    rerank_top_n: rerankTopN,
+    precision_weight_embedding: weightEmbedding,
+    precision_weight_keyword: weightKeyword
   };
 }
 

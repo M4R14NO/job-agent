@@ -1,4 +1,46 @@
-export default function JobModal({ job, descriptionHtml, onClose }) {
+import { useEffect, useState } from "react";
+import { generateCoverLetter } from "../api/llm";
+
+export default function JobModal({
+  job,
+  descriptionHtml,
+  resumeText,
+  selectedModel,
+  onClose
+}) {
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [coverLetter, setCoverLetter] = useState("");
+  const [coverError, setCoverError] = useState("");
+
+  useEffect(() => {
+    setCoverLetter("");
+    setCoverError("");
+    setIsGenerating(false);
+  }, [job]);
+
+  const handleGenerate = async () => {
+    if (!selectedModel) {
+      setCoverError("Select a model to generate a cover letter.");
+      return;
+    }
+    setIsGenerating(true);
+    setCoverError("");
+    try {
+      const draft = await generateCoverLetter({
+        resume_text: resumeText,
+        job_title: job.title,
+        company: job.company,
+        job_description: job.description,
+        job_url: job.job_url,
+        model: selectedModel
+      });
+      setCoverLetter(draft);
+    } catch (err) {
+      setCoverError(err instanceof Error ? err.message : "Failed to generate");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
   return (
     <div className="modal" role="dialog" aria-modal="true">
       <div className="modal-backdrop" onClick={onClose} />
@@ -47,6 +89,24 @@ export default function JobModal({ job, descriptionHtml, onClose }) {
           ) : (
             <p>No description available.</p>
           )}
+        </div>
+
+        <div className="cover-letter">
+          <div className="rank-header">
+            <h3>Cover letter draft</h3>
+            <button className="secondary" onClick={handleGenerate} disabled={isGenerating}>
+              {isGenerating ? "Drafting..." : "Generate"}
+            </button>
+          </div>
+          {isGenerating && (
+            <p className="progress">Generating cover letter with the selected model...</p>
+          )}
+          {coverError && <p className="error">{coverError}</p>}
+          <textarea
+            readOnly
+            value={coverLetter}
+            placeholder="Generate a tailored cover letter draft..."
+          />
         </div>
 
         <div className="modal-actions">

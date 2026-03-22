@@ -35,6 +35,18 @@ Local-only prototype with a FastAPI backend and React/Vite frontend. Resume inpu
 - Frontend runs on http://localhost:5173
 - Future refactoring ideas are tracked in [REFACTORING.md](REFACTORING.md)
 
+## LMStudio Integration
+
+The backend expects an OpenAI-compatible LMStudio server.
+
+Environment variables (optional):
+
+- `LMSTUDIO_BASE_URL` (default: `http://localhost:1234`)
+- `LMSTUDIO_TIMEOUT` (default: `30` seconds)
+- `LMSTUDIO_EMBEDDING_MODEL` (default: `text-embedding-3-small`)
+
+The frontend fetches available models from `GET /models` and lets you select a chat model for reranking and cover letter generation.
+
 ## Search Contract
 
 - Backend request and response schemas live in `backend/app/schemas/search.py`.
@@ -52,3 +64,8 @@ Canonical normalized job fields used by the UI:
 - `job_url`
 - `match_score`
 - `match_reasons`
+
+## Cover Letter
+
+- `POST /cover-letter` accepts resume text and the selected job details.
+- The response is plain text and shown in the job modal.

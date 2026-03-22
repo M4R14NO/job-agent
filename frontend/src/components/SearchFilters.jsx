@@ -14,6 +14,10 @@ export default function SearchFilters({
   fetchFullDescriptions, onFetchFullDescriptionsChange,
   resumeText, onResumeTextChange,
   wishes, onWishesChange,
+  models,
+  selectedModel,
+  onSelectedModelChange,
+  modelError,
   isLoading,
   error,
   onSearch
@@ -101,6 +105,22 @@ export default function SearchFilters({
             ))}
           </div>
         </div>
+      </div>
+
+      <div>
+        <label htmlFor="model" className="label">LLM model</label>
+        <select
+          id="model"
+          value={selectedModel}
+          onChange={(e) => onSelectedModelChange(e.target.value)}
+          disabled={!models.length}
+        >
+          {!models.length && <option value="">No models available</option>}
+          {models.map((model) => (
+            <option key={model} value={model}>{model}</option>
+          ))}
+        </select>
+        {modelError && <p className="error">{modelError}</p>}
       </div>
 
       <label htmlFor="resume" className="label">Resume text</label>

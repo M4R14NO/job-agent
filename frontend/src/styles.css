@@ -114,6 +114,15 @@ input {
   font-size: 15px;
 }
 
+select {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #d7d7d7;
+  padding: 12px 14px;
+  font-size: 15px;
+  background: #ffffff;
+}
+
 .primary {
   background: #ff9f1c;
   border: none;
@@ -367,6 +376,18 @@ input {
 .modal-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.cover-letter {
+  background: #f6f7fb;
+  border-radius: 16px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.cover-letter textarea {
+  min-height: 160px;
 }
 
 @media (max-width: 720px) {

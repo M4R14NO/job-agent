@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { searchJobs } from "./api/search";
+import { fetchModels } from "./api/llm";
 import { useJobDescription } from "./hooks/useJobDescription";
 import SearchFilters from "./components/SearchFilters";
 import ResultsList from "./components/ResultsList";
@@ -19,9 +20,35 @@ export default function App() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [models, setModels] = useState([]);
+  const [modelError, setModelError] = useState("");
+  const [selectedModel, setSelectedModel] = useState("");
+  const [enableRerank, setEnableRerank] = useState(true);
+  const [rerankTopN, setRerankTopN] = useState(12);
+  const [weightEmbedding, setWeightEmbedding] = useState(0.8);
+  const [weightKeyword, setWeightKeyword] = useState(0.2);
 
   const jobs = response?.jobs ?? [];
   const descriptionHtml = useJobDescription(selectedJob);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchModels()
+      .then((available) => {
+        if (!isMounted) return;
+        setModels(available);
+        if (!selectedModel && available.length > 0) {
+          setSelectedModel(available[0]);
+        }
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setModelError(err instanceof Error ? err.message : "Failed to load models");
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleSearch = async () => {
     setIsLoading(true);
@@ -30,7 +57,12 @@ export default function App() {
     try {
       const data = await searchJobs({
         resumeText, wishes, searchTerm, location,
-        resultsWanted, hoursOld, isRemote, sites, fetchFullDescriptions
+        resultsWanted, hoursOld, isRemote, sites, fetchFullDescriptions,
+        model: selectedModel,
+        enableRerank,
+        rerankTopN,
+        weightEmbedding,
+        weightKeyword
       });
       setResponse(data);
     } catch (err) {
@@ -63,6 +95,10 @@ export default function App() {
           fetchFullDescriptions={fetchFullDescriptions} onFetchFullDescriptionsChange={setFetchFullDescriptions}
           resumeText={resumeText} onResumeTextChange={setResumeText}
           wishes={wishes} onWishesChange={setWishes}
+          models={models}
+          selectedModel={selectedModel}
+          onSelectedModelChange={setSelectedModel}
+          modelError={modelError}
           isLoading={isLoading}
           error={error}
           onSearch={handleSearch}
@@ -76,6 +112,8 @@ export default function App() {
         <JobModal
           job={selectedJob}
           descriptionHtml={descriptionHtml}
+          resumeText={resumeText}
+          selectedModel={selectedModel}
           onClose={() => setSelectedJob(null)}
         />
       )}

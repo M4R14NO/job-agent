@@ -10,7 +10,7 @@ These are non-blocking improvements worth tackling as the prototype grows.
 - [x] Add a matching response schema for the `/search` endpoint in the same backend schema module, including the `jobs` payload contract.
 - [x] Create a frontend contract file such as `frontend/src/api/searchSchema.js` or `frontend/src/types/search.js` that mirrors the request and response fields used by the UI.
 - [x] Replace ad hoc field fallbacks in `frontend/src/App.jsx`, such as `job.company ?? job.company_name`, with one normalization path defined in the schema or mapper layer.
-- [ ] Document the canonical job object shape in this file or in `README.md` once the contract is stabilized.
+- [x] Document the canonical job object shape in this file or in `README.md` once the contract is stabilized.
 
 Why first: this establishes a stable contract and reduces the risk of spreading backend assumptions across later refactors.
 

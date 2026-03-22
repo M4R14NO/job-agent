@@ -1,7 +1,14 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .schemas.search import SearchRequest, SearchResponse
+from .schemas.search import (
+    CoverLetterRequest,
+    CoverLetterResponse,
+    ModelsResponse,
+    SearchRequest,
+    SearchResponse,
+)
+from .services.lmstudio_client import chat_completion, list_models, safe_request
 from .services.search_service import fetch_jobs
 from .services.ranking_service import score_jobs
 
@@ -19,6 +26,14 @@ app.add_middleware(
 @app.get("/health")
 def health_check() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/models", response_model=ModelsResponse)
+def get_models() -> ModelsResponse:
+    models, error = safe_request(list_models)
+    if error:
+        raise HTTPException(status_code=502, detail=f"LMStudio error: {error}")
+    return ModelsResponse(models=models or [])
 
 
 @app.post("/search", response_model=SearchResponse)
@@ -40,6 +55,11 @@ def start_search(payload: SearchRequest) -> SearchResponse:
         jobs=jobs,
         resume_text=payload.resume_text,
         wishes=payload.wishes,
+        model=payload.model,
+        enable_rerank=payload.enable_rerank,
+        rerank_top_n=payload.rerank_top_n,
+        weight_embedding=payload.precision_weight_embedding,
+        weight_keyword=payload.precision_weight_keyword,
     )
     return SearchResponse(
         message="Search completed",
@@ -47,3 +67,40 @@ def start_search(payload: SearchRequest) -> SearchResponse:
         has_wishes=bool(payload.wishes),
         jobs=jobs,
     )
+
+
+@app.post("/cover-letter", response_model=CoverLetterResponse)
+def generate_cover_letter(payload: CoverLetterRequest) -> CoverLetterResponse:
+    if not payload.model:
+        raise HTTPException(status_code=400, detail="Model is required")
+
+    system = (
+        "You are a hiring assistant who writes concise, tailored cover letters. "
+        "Use a professional tone, keep it under 300 words, and focus on fit. "
+        "Return only the final cover letter text with no analysis or reasoning."
+    )
+    user = (
+        f"Resume:\n{payload.resume_text}\n\n"
+        f"Job title: {payload.job_title}\n"
+        f"Company: {payload.company or ''}\n"
+        f"Job description:\n{payload.job_description}\n\n"
+        "Write a cover letter in plain text."
+    )
+
+    content, error = safe_request(
+        chat_completion,
+        model=payload.model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        temperature=0.4,
+        max_tokens=700,
+    )
+    if error:
+        raise HTTPException(status_code=502, detail=f"LMStudio error: {error}")
+
+    if not content:
+        raise HTTPException(status_code=502, detail="LMStudio returned empty content")
+
+    return CoverLetterResponse(cover_letter=content or "")
