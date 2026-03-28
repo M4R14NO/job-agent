@@ -1,6 +1,21 @@
 # Job Agent Prototype
 
-Local-only prototype with a FastAPI backend and React/Vite frontend. Resume input is plain text only (paste or .txt upload later). Docker is out of scope for now.
+A local-first job search assistant with a FastAPI backend and a React/Vite frontend. It lets you search, normalize, and rerank job results, then generate a tailored cover letter from your resume text.
+
+This repo is a public prototype. It focuses on local development and assumes you bring your own LLM endpoint (e.g. via LMStudio).
+
+## What you can do
+
+- Search job sources and view normalized results.
+- Rerank results with an LLM to surface the best matches.
+- Inspect match reasons and scores per job.
+- Generate a cover letter for a selected job using your resume text.
+- Cache and reuse the latest search response from the UI.
+
+## Screenshots
+
+- Search results (placeholder)
+- Job details popup (placeholder)
 
 ## Run backend
 
@@ -74,3 +89,15 @@ Canonical normalized job fields used by the UI:
 
 - `POST /cover-letter` accepts resume text and the selected job details.
 - The response is plain text and shown in the job modal.
+
+## Current limitations
+
+- Local-only (no auth, no hosted deployment).
+- Resume input is plain text.
+- Docker and production deployment are out of scope.
+- Job sources are limited to what the backend service currently supports.
+- Currently only LinkedIn results are returned.
+
+## Implementation notes
+
+- Search uses `jobspy` in the backend.
