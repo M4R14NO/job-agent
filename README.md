@@ -14,8 +14,20 @@ This repo is a public prototype. It focuses on local development and assumes you
 
 ## Screenshots
 
-- Search results (placeholder)
-- Job details popup (placeholder)
+- Search for suitable jobs
+<img width="918" height="725" alt="image" src="https://github.com/user-attachments/assets/2a0b3390-79e1-4c79-9306-fd905e9dc081" />
+
+- Modal with Job Details and Re-ranking reason
+
+<img width="449" height="770" alt="image" src="https://github.com/user-attachments/assets/44b00f14-ae12-43d4-b9e4-abe230eb0282" />
+
+<img width="465" height="770" alt="image" src="https://github.com/user-attachments/assets/dff11c19-a976-4950-843a-df21ebfd1ae2" />
+
+- Cover letter generation
+
+<img width="465" height="518" alt="image" src="https://github.com/user-attachments/assets/304116bd-3904-4f40-b298-d676a9b486c6" />
+
+
 
 ## Run backend
 
