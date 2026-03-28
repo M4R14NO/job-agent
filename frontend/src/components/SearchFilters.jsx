@@ -18,6 +18,15 @@ export default function SearchFilters({
   selectedModel,
   onSelectedModelChange,
   modelError,
+  enableRerank,
+  onEnableRerankChange,
+  rerankTopN,
+  onRerankTopNChange,
+  defaultRerankTopN,
+  cachedAvailable,
+  cachedAt,
+  onLoadCache,
+  onClearCache,
   isLoading,
   error,
   onSearch
@@ -123,6 +132,41 @@ export default function SearchFilters({
         {modelError && <p className="error">{modelError}</p>}
       </div>
 
+      <div className="rerank-controls">
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={enableRerank}
+            onChange={(e) => onEnableRerankChange(e.target.checked)}
+          />
+          Enable LLM rerank
+        </label>
+        {enableRerank && (
+          <div>
+            <label htmlFor="rerankTopN" className="label">Rerank top K</label>
+            <input
+              id="rerankTopN"
+              type="number"
+              min={1}
+              max={50}
+              placeholder="Auto"
+              value={rerankTopN ?? ""}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (!value) {
+                  onRerankTopNChange(null);
+                  return;
+                }
+                onRerankTopNChange(Number(value));
+              }}
+            />
+            <p className="helper">
+              Auto default: {defaultRerankTopN ?? "-"} (40% of results, min 3)
+            </p>
+          </div>
+        )}
+      </div>
+
       <label htmlFor="resume" className="label">Resume text</label>
       <textarea
         id="resume"
@@ -148,6 +192,20 @@ export default function SearchFilters({
       >
         {isLoading ? "Running..." : "Run search"}
       </button>
+
+      {cachedAvailable && (
+        <div className="cache-actions">
+          <button className="secondary" onClick={onLoadCache}>
+            Use cached results
+          </button>
+          <button className="secondary" onClick={onClearCache}>
+            Clear cache
+          </button>
+          {cachedAt && (
+            <span className="cache-note">Cached at {new Date(cachedAt).toLocaleString()}</span>
+          )}
+        </div>
+      )}
 
       {isLoading && (
         <p className="progress">

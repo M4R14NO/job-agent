@@ -128,10 +128,10 @@ def score_jobs(
     wishes: str | None,
     model: str | None,
     enable_rerank: bool,
-    rerank_top_n: int,
+    rerank_top_n: int | None,
     weight_embedding: float,
     weight_keyword: float,
-) -> list[dict]:
+) -> tuple[list[dict], bool, int | None]:
     weight_total = weight_embedding + weight_keyword
     if weight_total <= 0:
         weight_embedding = 0.8
@@ -187,8 +187,11 @@ def score_jobs(
 
     jobs.sort(key=lambda item: item.get("match_score", 0), reverse=True)
 
-    if enable_rerank and model and jobs:
-        top_n = max(1, min(rerank_top_n, len(jobs)))
+    rerank_applied = False
+    rerank_used = None
+    if enable_rerank and model and jobs and rerank_top_n and rerank_top_n > 0:
+        top_n = min(rerank_top_n, len(jobs))
+        rerank_used = top_n
         rerank_candidates = jobs[:top_n]
         messages = _build_rerank_prompt(resume_text, rerank_candidates)
         response, error = safe_request(
@@ -212,7 +215,8 @@ def score_jobs(
                     reason = rerank.get("reason")
                     if reason:
                         job["match_reasons"] = [reason]
+                    rerank_applied = True
 
             jobs.sort(key=lambda item: item.get("match_score", 0), reverse=True)
 
-    return jobs
+    return jobs, rerank_applied, rerank_used

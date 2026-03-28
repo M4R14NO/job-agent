@@ -6,6 +6,8 @@ import SearchFilters from "./components/SearchFilters";
 import ResultsList from "./components/ResultsList";
 import JobModal from "./components/JobModal";
 
+const CACHE_KEY = "job-agent:search-response";
+
 export default function App() {
   const [resumeText, setResumeText] = useState("");
   const [wishes, setWishes] = useState("");
@@ -24,12 +26,21 @@ export default function App() {
   const [modelError, setModelError] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const [enableRerank, setEnableRerank] = useState(true);
-  const [rerankTopN, setRerankTopN] = useState(12);
+  const [rerankTopN, setRerankTopN] = useState(null);
   const [weightEmbedding, setWeightEmbedding] = useState(0.8);
   const [weightKeyword, setWeightKeyword] = useState(0.2);
+  const [cachedResponse, setCachedResponse] = useState(null);
+  const [cachedAt, setCachedAt] = useState("");
 
   const jobs = response?.jobs ?? [];
   const descriptionHtml = useJobDescription(selectedJob);
+
+  const defaultRerankTopN = (() => {
+    const total = response?.jobs?.length ?? resultsWanted;
+    if (!total) return null;
+    const cap = Math.min(total, resultsWanted);
+    return Math.max(3, Math.ceil(0.4 * cap));
+  })();
 
   useEffect(() => {
     let isMounted = true;
@@ -50,6 +61,20 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const cached = sessionStorage.getItem(CACHE_KEY);
+    if (!cached) return;
+    try {
+      const parsed = JSON.parse(cached);
+      if (parsed?.response) {
+        setCachedResponse(parsed.response);
+        setCachedAt(parsed.savedAt || "");
+      }
+    } catch (err) {
+      sessionStorage.removeItem(CACHE_KEY);
+    }
+  }, []);
+
   const handleSearch = async () => {
     setIsLoading(true);
     setError("");
@@ -65,11 +90,28 @@ export default function App() {
         weightKeyword
       });
       setResponse(data);
+      const savedAt = new Date().toISOString();
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt, response: data }));
+      setCachedResponse(data);
+      setCachedAt(savedAt);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleLoadCache = () => {
+    if (!cachedResponse) return;
+    setError("");
+    setResponse(cachedResponse);
+    setSelectedJob(null);
+  };
+
+  const handleClearCache = () => {
+    sessionStorage.removeItem(CACHE_KEY);
+    setCachedResponse(null);
+    setCachedAt("");
   };
 
   return (
@@ -99,12 +141,26 @@ export default function App() {
           selectedModel={selectedModel}
           onSelectedModelChange={setSelectedModel}
           modelError={modelError}
+          enableRerank={enableRerank}
+          onEnableRerankChange={setEnableRerank}
+          rerankTopN={rerankTopN}
+          onRerankTopNChange={setRerankTopN}
+          defaultRerankTopN={defaultRerankTopN}
+          cachedAvailable={Boolean(cachedResponse)}
+          cachedAt={cachedAt}
+          onLoadCache={handleLoadCache}
+          onClearCache={handleClearCache}
           isLoading={isLoading}
           error={error}
           onSearch={handleSearch}
         />
         {response && (
-          <ResultsList jobs={jobs} onSelectJob={setSelectedJob} />
+          <ResultsList
+            jobs={jobs}
+            rerankApplied={response?.rerank_applied}
+            rerankTopN={response?.rerank_top_n}
+            onSelectJob={setSelectedJob}
+          />
         )}
       </section>
 

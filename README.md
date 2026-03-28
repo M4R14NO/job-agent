@@ -65,6 +65,11 @@ Canonical normalized job fields used by the UI:
 - `match_score`
 - `match_reasons`
 
+## Rerank and Caching
+
+- LLM rerank can be enabled with a user-selected top-K. If K is not set, the backend uses $K = \max(3, \lceil 0.4 \cdot N \rceil)$ capped by results wanted.
+- The frontend stores the latest search response in session storage to avoid repeated searches. Use "Use cached results" or "Clear cache" in the UI.
+
 ## Cover Letter
 
 - `POST /cover-letter` accepts resume text and the selected job details.

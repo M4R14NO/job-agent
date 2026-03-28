@@ -1,10 +1,13 @@
-export default function ResultsList({ jobs, onSelectJob }) {
+export default function ResultsList({ jobs, rerankApplied, rerankTopN, onSelectJob }) {
   return (
     <div className="results">
       <div className="results-header">
         <h2>Results</h2>
         <span>{jobs.length} jobs</span>
       </div>
+      {rerankApplied && rerankTopN ? (
+        <p className="helper">LLM rerank applied to top {rerankTopN} results.</p>
+      ) : null}
       {jobs.length === 0 ? (
         <p className="empty">No jobs found yet.</p>
       ) : (
@@ -16,7 +19,13 @@ export default function ResultsList({ jobs, onSelectJob }) {
                 <span className="badge">
                   Match: {job.match_score ?? "pending"}
                 </span>
+                {job.rerank_score != null && (
+                  <span className="badge badge-alt">Rerank: {job.rerank_score}</span>
+                )}
               </div>
+              {job.rerank_score != null && job.match_reasons?.[0] ? (
+                <p className="helper">Rerank reason: {job.match_reasons[0]}</p>
+              ) : null}
               <div className="job-meta">
                 <span>{job.company}</span>
                 <span>{job.location}</span>

@@ -63,7 +63,12 @@ export default function JobModal({
         <div className="modal-rank">
           <div className="rank-header">
             <h3>Match score</h3>
-            <span className="badge">{job.match_score ?? "pending"}</span>
+            <div className="rank-badges">
+              <span className="badge">{job.match_score ?? "pending"}</span>
+              {job.rerank_score != null && (
+                <span className="badge badge-alt">Rerank: {job.rerank_score}</span>
+              )}
+            </div>
           </div>
           <p className="rank-note">
             {job.match_reasons?.length
@@ -76,6 +81,9 @@ export default function JobModal({
                 <span key={reason} className="reason-chip">{reason}</span>
               ))}
             </div>
+          ) : null}
+          {job.rerank_score != null && job.match_reasons?.[0] ? (
+            <p className="helper">Rerank reason: {job.match_reasons[0]}</p>
           ) : null}
         </div>
 

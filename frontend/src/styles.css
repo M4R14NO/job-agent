@@ -17,14 +17,41 @@ body {
 .page {
   max-width: 860px;
   margin: 0 auto;
+
+.helper {
+  margin: 6px 0 0;
+  color: #666666;
+  font-size: 13px;
+}
   padding: 48px 24px 72px;
   display: grid;
   gap: 32px;
 }
 
+.rerank-controls {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e6e6e6;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
 .hero {
   display: flex;
   justify-content: space-between;
+
+.cache-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.cache-note {
+  font-size: 13px;
+  color: #555555;
+}
   gap: 24px;
   align-items: flex-end;
 }
@@ -215,6 +242,7 @@ select {
 .job-rank {
   display: flex;
   align-items: center;
+  gap: 8px;
 }
 
 .badge {
@@ -226,6 +254,11 @@ select {
   font-weight: 600;
   background: #eef2ff;
   color: #1d2a6d;
+}
+
+.badge-alt {
+  background: #ffe8d6;
+  color: #8a3b00;
 }
 
 .job-meta {
@@ -306,6 +339,12 @@ select {
 .rank-header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+}
+
+.rank-badges {
+  display: inline-flex;
+  gap: 8px;
   align-items: center;
 }
 

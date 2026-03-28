@@ -16,7 +16,7 @@ class SearchRequest(BaseModel):
     description_format: str = "markdown"
     model: str | None = None
     enable_rerank: bool = True
-    rerank_top_n: int = 12
+    rerank_top_n: int | None = None
     precision_weight_embedding: float = 0.8
     precision_weight_keyword: float = 0.2
 
@@ -47,6 +47,8 @@ class SearchResponse(BaseModel):
     resume_length: int
     has_wishes: bool
     jobs: list[SearchJob]
+    rerank_applied: bool | None = None
+    rerank_top_n: int | None = None
 
 
 class ModelsResponse(BaseModel):

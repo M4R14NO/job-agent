@@ -1,3 +1,5 @@
+import math
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -28,6 +30,13 @@ def health_check() -> dict:
     return {"status": "ok"}
 
 
+def _default_rerank_top_n(total_jobs: int, results_wanted: int) -> int:
+    if total_jobs <= 0:
+        return 0
+    cap = min(total_jobs, results_wanted)
+    return max(3, math.ceil(0.4 * cap))
+
+
 @app.get("/models", response_model=ModelsResponse)
 def get_models() -> ModelsResponse:
     models, error = safe_request(list_models)
@@ -51,13 +60,27 @@ def start_search(payload: SearchRequest) -> SearchResponse:
         linkedin_fetch_description=payload.linkedin_fetch_description,
         description_format=payload.description_format,
     )
-    jobs = score_jobs(
+    total_jobs = len(jobs)
+    rerank_top_n = payload.rerank_top_n
+    if payload.enable_rerank:
+        if rerank_top_n is None:
+            rerank_top_n = _default_rerank_top_n(total_jobs, payload.results_wanted)
+        else:
+            max_allowed = min(payload.results_wanted, total_jobs)
+            if max_allowed > 0:
+                rerank_top_n = max(1, min(rerank_top_n, max_allowed))
+            else:
+                rerank_top_n = 0
+    else:
+        rerank_top_n = 0
+
+    jobs, rerank_applied, rerank_used = score_jobs(
         jobs=jobs,
         resume_text=payload.resume_text,
         wishes=payload.wishes,
         model=payload.model,
         enable_rerank=payload.enable_rerank,
-        rerank_top_n=payload.rerank_top_n,
+        rerank_top_n=rerank_top_n,
         weight_embedding=payload.precision_weight_embedding,
         weight_keyword=payload.precision_weight_keyword,
     )
@@ -66,6 +89,8 @@ def start_search(payload: SearchRequest) -> SearchResponse:
         resume_length=len(payload.resume_text),
         has_wishes=bool(payload.wishes),
         jobs=jobs,
+        rerank_applied=rerank_applied,
+        rerank_top_n=rerank_used,
     )
 
 
