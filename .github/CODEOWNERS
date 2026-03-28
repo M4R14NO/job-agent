@@ -1,0 +1,6 @@
+# CODEOWNERS
+# Every file in this repository is owned by @M4R14NO.
+# This means @M4R14NO must approve every pull request before it can be merged.
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+* @M4R14NO
