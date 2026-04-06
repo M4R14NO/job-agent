@@ -165,8 +165,7 @@ export default function CvReview({
   docType,
   outputLanguage,
   model,
-  lmTimeout,
-  onClose
+  lmTimeout
 }) {
   const [profileId, setProfileId] = useState(canonical?.profile_id || "default");
   const [revision, setRevision] = useState(canonical?.revision ?? 0);
@@ -178,6 +177,22 @@ export default function CvReview({
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewPayload, setPreviewPayload] = useState(null);
   const [draggedSection, setDraggedSection] = useState(null);
+  const [expandedSections, setExpandedSections] = useState(() => ({
+    basics: true,
+    order: true,
+    summary: false,
+    skills: false,
+    languages: false,
+    interests: false,
+    experience: false,
+    volunteer: false,
+    honors: false,
+    certificates: false,
+    writing: false,
+    education: false,
+    preview: true,
+    previewEditor: false
+  }));
 
   const schemaVersion = canonical?.schema_version || "v1";
 
@@ -238,6 +253,31 @@ export default function CvReview({
   const updateField = (field, value) => {
     setPreviewPayload(null);
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const toggleExpandedSection = (key) => {
+    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const renderCollapsibleSection = ({ key, title, helper, actions, content }) => {
+    const isOpen = expandedSections[key];
+    return (
+      <div className={`section-card ${isOpen ? "is-open" : "is-collapsed"}`}>
+        <div className="section-header">
+          <div className="section-heading">
+            <h3>{title}</h3>
+            {helper ? <p className="helper">{helper}</p> : null}
+          </div>
+          <div className="section-actions">
+            {actions}
+            <button type="button" className="ghost" onClick={() => toggleExpandedSection(key)}>
+              {isOpen ? "Collapse" : "Expand"}
+            </button>
+          </div>
+        </div>
+        {isOpen ? <div className="section-body">{content}</div> : null}
+      </div>
+    );
   };
 
   const updateListItem = (section, index, patch) => {
@@ -939,113 +979,116 @@ export default function CvReview({
     );
   };
 
-  const renderSectionOrder = () => (
-    <div className="section-card">
-      <div className="section-header">
-        <h3>Section order</h3>
-        <p className="helper">Toggle sections and adjust their order (drag or use arrows).</p>
-      </div>
-      <div className="order-list">
-        {SECTION_KEYS.map((key) => (
-          <div
-            key={key}
-            className="order-item"
-            draggable
-            onDragStart={(event) => handleDragStart(event, key)}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={() => handleDrop(key)}
-          >
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={enabledSections.has(key)}
-                onChange={() => toggleSection(key)}
-              />
-              <span>{SECTION_LABELS[key]}</span>
-            </label>
-            <div className="order-actions">
-              <button
-                type="button"
-                className="ghost"
-                onClick={() => moveSection(key, "up")}
-                disabled={!enabledSections.has(key)}
-              >
-                Up
-              </button>
-              <button
-                type="button"
-                className="ghost"
-                onClick={() => moveSection(key, "down")}
-                disabled={!enabledSections.has(key)}
-              >
-                Down
-              </button>
+  const renderSectionOrder = () =>
+    renderCollapsibleSection({
+      key: "order",
+      title: "Section order",
+      helper: "Toggle sections and adjust their order (drag or use arrows).",
+      content: (
+        <div className="order-list">
+          {SECTION_KEYS.map((key) => (
+            <div
+              key={key}
+              className="order-item"
+              draggable
+              onDragStart={(event) => handleDragStart(event, key)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => handleDrop(key)}
+            >
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={enabledSections.has(key)}
+                  onChange={() => toggleSection(key)}
+                />
+                <span>{SECTION_LABELS[key]}</span>
+              </label>
+              <div className="order-actions">
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => moveSection(key, "up")}
+                  disabled={!enabledSections.has(key)}
+                >
+                  Up
+                </button>
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => moveSection(key, "down")}
+                  disabled={!enabledSections.has(key)}
+                >
+                  Down
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )
+    });
+
+  const renderBasics = () =>
+    renderCollapsibleSection({
+      key: "basics",
+      title: "Basics",
+      helper: "Personal details used in the header.",
+      content: (
+        <>
+          <div className="field-grid">
+            <div>
+              <label className="label">First name</label>
+              <input value={formData.first_name} onChange={(e) => updateField("first_name", e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Last name</label>
+              <input value={formData.last_name} onChange={(e) => updateField("last_name", e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Headline</label>
+              <input value={formData.headline} onChange={(e) => updateField("headline", e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Location</label>
+              <input value={formData.location} onChange={(e) => updateField("location", e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Email</label>
+              <input value={formData.email} onChange={(e) => updateField("email", e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Phone</label>
+              <input value={formData.phone} onChange={(e) => updateField("phone", e.target.value)} />
             </div>
           </div>
-        ))}
-      </div>
-    </div>
-  );
+          <div>
+            <label className="label">Links (comma separated)</label>
+            <input
+              value={formData.links.join(", ")}
+              onChange={(e) => updateField("links", e.target.value.split(",").map((item) => item.trim()).filter(Boolean))}
+            />
+          </div>
+        </>
+      )
+    });
 
-  const renderBasics = () => (
-    <div className="section-card">
-      <div className="section-header">
-        <h3>Basics</h3>
-        <p className="helper">Personal details used in the header.</p>
-      </div>
-      <div className="field-grid">
-        <div>
-          <label className="label">First name</label>
-          <input value={formData.first_name} onChange={(e) => updateField("first_name", e.target.value)} />
-        </div>
-        <div>
-          <label className="label">Last name</label>
-          <input value={formData.last_name} onChange={(e) => updateField("last_name", e.target.value)} />
-        </div>
-        <div>
-          <label className="label">Headline</label>
-          <input value={formData.headline} onChange={(e) => updateField("headline", e.target.value)} />
-        </div>
-        <div>
-          <label className="label">Location</label>
-          <input value={formData.location} onChange={(e) => updateField("location", e.target.value)} />
-        </div>
-        <div>
-          <label className="label">Email</label>
-          <input value={formData.email} onChange={(e) => updateField("email", e.target.value)} />
-        </div>
-        <div>
-          <label className="label">Phone</label>
-          <input value={formData.phone} onChange={(e) => updateField("phone", e.target.value)} />
-        </div>
-      </div>
-      <div>
-        <label className="label">Links (comma separated)</label>
-        <input
-          value={formData.links.join(", ")}
-          onChange={(e) => updateField("links", e.target.value.split(",").map((item) => item.trim()).filter(Boolean))}
+  const renderSummary = () =>
+    renderCollapsibleSection({
+      key: "summary",
+      title: "Summary",
+      content: (
+        <textarea
+          value={formData.summary}
+          onChange={(e) => updateField("summary", e.target.value)}
+          placeholder="Short professional summary"
         />
-      </div>
-    </div>
-  );
+      )
+    });
 
-  const renderSummary = () => (
-    <div className="section-card">
-      <div className="section-header">
-        <h3>Summary</h3>
-      </div>
-      <textarea
-        value={formData.summary}
-        onChange={(e) => updateField("summary", e.target.value)}
-        placeholder="Short professional summary"
-      />
-    </div>
-  );
-
-  const renderExperience = () => (
-    <div className="section-card">
-      <div className="section-header">
-        <h3>Experience</h3>
+  const renderExperience = () =>
+    renderCollapsibleSection({
+      key: "experience",
+      title: "Experience",
+      actions: (
         <button
           type="button"
           className="ghost"
@@ -1060,49 +1103,53 @@ export default function CvReview({
         >
           Add
         </button>
-      </div>
-      {formData.experience.map((entry, index) => (
-        <div key={entry.id} className="sub-card">
-          <div className="sub-card-header">
-            <strong>Role {index + 1}</strong>
-            <div className="inline-actions">
-              <button type="button" className="ghost" onClick={() => moveListItem("experience", index, "up")}>Up</button>
-              <button type="button" className="ghost" onClick={() => moveListItem("experience", index, "down")}>Down</button>
-              <button type="button" className="ghost" onClick={() => removeListItem("experience", index)}>Remove</button>
+      ),
+      content: (
+        <>
+          {formData.experience.map((entry, index) => (
+            <div key={entry.id} className="sub-card">
+              <div className="sub-card-header">
+                <strong>Role {index + 1}</strong>
+                <div className="inline-actions">
+                  <button type="button" className="ghost" onClick={() => moveListItem("experience", index, "up")}>Up</button>
+                  <button type="button" className="ghost" onClick={() => moveListItem("experience", index, "down")}>Down</button>
+                  <button type="button" className="ghost" onClick={() => removeListItem("experience", index)}>Remove</button>
+                </div>
+              </div>
+              <div className="field-grid">
+                <div>
+                  <label className="label">Title</label>
+                  <input value={entry.title} onChange={(e) => updateListItem("experience", index, { title: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Organization</label>
+                  <input value={entry.organization} onChange={(e) => updateListItem("experience", index, { organization: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Location</label>
+                  <input value={entry.location} onChange={(e) => updateListItem("experience", index, { location: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Period</label>
+                  <input value={entry.period} onChange={(e) => updateListItem("experience", index, { period: e.target.value })} />
+                </div>
+              </div>
+              <label className="label">Highlights (one per line)</label>
+              <textarea
+                value={bulletsToText(entry.bullets)}
+                onChange={(e) => updateListItem("experience", index, { bullets: textToBullets(e.target.value, "exp_bullet") })}
+              />
             </div>
-          </div>
-          <div className="field-grid">
-            <div>
-              <label className="label">Title</label>
-              <input value={entry.title} onChange={(e) => updateListItem("experience", index, { title: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Organization</label>
-              <input value={entry.organization} onChange={(e) => updateListItem("experience", index, { organization: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Location</label>
-              <input value={entry.location} onChange={(e) => updateListItem("experience", index, { location: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Period</label>
-              <input value={entry.period} onChange={(e) => updateListItem("experience", index, { period: e.target.value })} />
-            </div>
-          </div>
-          <label className="label">Highlights (one per line)</label>
-          <textarea
-            value={bulletsToText(entry.bullets)}
-            onChange={(e) => updateListItem("experience", index, { bullets: textToBullets(e.target.value, "exp_bullet") })}
-          />
-        </div>
-      ))}
-    </div>
-  );
+          ))}
+        </>
+      )
+    });
 
-  const renderEducation = () => (
-    <div className="section-card">
-      <div className="section-header">
-        <h3>Education</h3>
+  const renderEducation = () =>
+    renderCollapsibleSection({
+      key: "education",
+      title: "Education",
+      actions: (
         <button
           type="button"
           className="ghost"
@@ -1117,49 +1164,53 @@ export default function CvReview({
         >
           Add
         </button>
-      </div>
-      {formData.education.map((entry, index) => (
-        <div key={entry.id} className="sub-card">
-          <div className="sub-card-header">
-            <strong>Education {index + 1}</strong>
-            <div className="inline-actions">
-              <button type="button" className="ghost" onClick={() => moveListItem("education", index, "up")}>Up</button>
-              <button type="button" className="ghost" onClick={() => moveListItem("education", index, "down")}>Down</button>
-              <button type="button" className="ghost" onClick={() => removeListItem("education", index)}>Remove</button>
+      ),
+      content: (
+        <>
+          {formData.education.map((entry, index) => (
+            <div key={entry.id} className="sub-card">
+              <div className="sub-card-header">
+                <strong>Education {index + 1}</strong>
+                <div className="inline-actions">
+                  <button type="button" className="ghost" onClick={() => moveListItem("education", index, "up")}>Up</button>
+                  <button type="button" className="ghost" onClick={() => moveListItem("education", index, "down")}>Down</button>
+                  <button type="button" className="ghost" onClick={() => removeListItem("education", index)}>Remove</button>
+                </div>
+              </div>
+              <div className="field-grid">
+                <div>
+                  <label className="label">Degree</label>
+                  <input value={entry.degree} onChange={(e) => updateListItem("education", index, { degree: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Institution</label>
+                  <input value={entry.institution} onChange={(e) => updateListItem("education", index, { institution: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Location</label>
+                  <input value={entry.location} onChange={(e) => updateListItem("education", index, { location: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Period</label>
+                  <input value={entry.period} onChange={(e) => updateListItem("education", index, { period: e.target.value })} />
+                </div>
+              </div>
+              <label className="label">Details (one per line)</label>
+              <textarea
+                value={bulletsToText(entry.bullets)}
+                onChange={(e) => updateListItem("education", index, { bullets: textToBullets(e.target.value, "edu_bullet") })}
+              />
             </div>
-          </div>
-          <div className="field-grid">
-            <div>
-              <label className="label">Degree</label>
-              <input value={entry.degree} onChange={(e) => updateListItem("education", index, { degree: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Institution</label>
-              <input value={entry.institution} onChange={(e) => updateListItem("education", index, { institution: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Location</label>
-              <input value={entry.location} onChange={(e) => updateListItem("education", index, { location: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Period</label>
-              <input value={entry.period} onChange={(e) => updateListItem("education", index, { period: e.target.value })} />
-            </div>
-          </div>
-          <label className="label">Details (one per line)</label>
-          <textarea
-            value={bulletsToText(entry.bullets)}
-            onChange={(e) => updateListItem("education", index, { bullets: textToBullets(e.target.value, "edu_bullet") })}
-          />
-        </div>
-      ))}
-    </div>
-  );
+          ))}
+        </>
+      )
+    });
 
-  const renderSkills = () => (
-    <div className="section-card">
-      <div className="section-header">
-        <h3>Skills</h3>
+  const renderSkills = () =>
+    renderCollapsibleSection({
+      key: "skills",
+      title: "Skills",
+      actions: (
         <button
           type="button"
           className="ghost"
@@ -1167,43 +1218,47 @@ export default function CvReview({
         >
           Add
         </button>
-      </div>
-      {formData.skills.map((entry, index) => (
-        <div key={entry.id} className="sub-card">
-          <div className="sub-card-header">
-            <strong>Skill group {index + 1}</strong>
-            <div className="inline-actions">
-              <button type="button" className="ghost" onClick={() => moveListItem("skills", index, "up")}>Up</button>
-              <button type="button" className="ghost" onClick={() => moveListItem("skills", index, "down")}>Down</button>
-              <button type="button" className="ghost" onClick={() => removeListItem("skills", index)}>Remove</button>
+      ),
+      content: (
+        <>
+          {formData.skills.map((entry, index) => (
+            <div key={entry.id} className="sub-card">
+              <div className="sub-card-header">
+                <strong>Skill group {index + 1}</strong>
+                <div className="inline-actions">
+                  <button type="button" className="ghost" onClick={() => moveListItem("skills", index, "up")}>Up</button>
+                  <button type="button" className="ghost" onClick={() => moveListItem("skills", index, "down")}>Down</button>
+                  <button type="button" className="ghost" onClick={() => removeListItem("skills", index)}>Remove</button>
+                </div>
+              </div>
+              <div className="field-grid">
+                <div>
+                  <label className="label">Category</label>
+                  <input value={entry.category} onChange={(e) => updateListItem("skills", index, { category: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Items (comma separated)</label>
+                  <input
+                    value={entry.items.join(", ")}
+                    onChange={(e) =>
+                      updateListItem("skills", index, {
+                        items: e.target.value.split(",").map((item) => item.trim()).filter(Boolean)
+                      })
+                    }
+                  />
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="field-grid">
-            <div>
-              <label className="label">Category</label>
-              <input value={entry.category} onChange={(e) => updateListItem("skills", index, { category: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Items (comma separated)</label>
-              <input
-                value={entry.items.join(", ")}
-                onChange={(e) =>
-                  updateListItem("skills", index, {
-                    items: e.target.value.split(",").map((item) => item.trim()).filter(Boolean)
-                  })
-                }
-              />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+          ))}
+        </>
+      )
+    });
 
-  const renderVolunteer = () => (
-    <div className="section-card">
-      <div className="section-header">
-        <h3>Volunteer</h3>
+  const renderVolunteer = () =>
+    renderCollapsibleSection({
+      key: "volunteer",
+      title: "Volunteer",
+      actions: (
         <button
           type="button"
           className="ghost"
@@ -1218,49 +1273,53 @@ export default function CvReview({
         >
           Add
         </button>
-      </div>
-      {formData.volunteer.map((entry, index) => (
-        <div key={entry.id} className="sub-card">
-          <div className="sub-card-header">
-            <strong>Volunteer {index + 1}</strong>
-            <div className="inline-actions">
-              <button type="button" className="ghost" onClick={() => moveListItem("volunteer", index, "up")}>Up</button>
-              <button type="button" className="ghost" onClick={() => moveListItem("volunteer", index, "down")}>Down</button>
-              <button type="button" className="ghost" onClick={() => removeListItem("volunteer", index)}>Remove</button>
+      ),
+      content: (
+        <>
+          {formData.volunteer.map((entry, index) => (
+            <div key={entry.id} className="sub-card">
+              <div className="sub-card-header">
+                <strong>Volunteer {index + 1}</strong>
+                <div className="inline-actions">
+                  <button type="button" className="ghost" onClick={() => moveListItem("volunteer", index, "up")}>Up</button>
+                  <button type="button" className="ghost" onClick={() => moveListItem("volunteer", index, "down")}>Down</button>
+                  <button type="button" className="ghost" onClick={() => removeListItem("volunteer", index)}>Remove</button>
+                </div>
+              </div>
+              <div className="field-grid">
+                <div>
+                  <label className="label">Role</label>
+                  <input value={entry.role} onChange={(e) => updateListItem("volunteer", index, { role: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Organization</label>
+                  <input value={entry.organization} onChange={(e) => updateListItem("volunteer", index, { organization: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Location</label>
+                  <input value={entry.location} onChange={(e) => updateListItem("volunteer", index, { location: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Period</label>
+                  <input value={entry.period} onChange={(e) => updateListItem("volunteer", index, { period: e.target.value })} />
+                </div>
+              </div>
+              <label className="label">Highlights (one per line)</label>
+              <textarea
+                value={bulletsToText(entry.bullets)}
+                onChange={(e) => updateListItem("volunteer", index, { bullets: textToBullets(e.target.value, "vol_bullet") })}
+              />
             </div>
-          </div>
-          <div className="field-grid">
-            <div>
-              <label className="label">Role</label>
-              <input value={entry.role} onChange={(e) => updateListItem("volunteer", index, { role: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Organization</label>
-              <input value={entry.organization} onChange={(e) => updateListItem("volunteer", index, { organization: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Location</label>
-              <input value={entry.location} onChange={(e) => updateListItem("volunteer", index, { location: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Period</label>
-              <input value={entry.period} onChange={(e) => updateListItem("volunteer", index, { period: e.target.value })} />
-            </div>
-          </div>
-          <label className="label">Highlights (one per line)</label>
-          <textarea
-            value={bulletsToText(entry.bullets)}
-            onChange={(e) => updateListItem("volunteer", index, { bullets: textToBullets(e.target.value, "vol_bullet") })}
-          />
-        </div>
-      ))}
-    </div>
-  );
+          ))}
+        </>
+      )
+    });
 
-  const renderLanguages = () => (
-    <div className="section-card">
-      <div className="section-header">
-        <h3>Languages</h3>
+  const renderLanguages = () =>
+    renderCollapsibleSection({
+      key: "languages",
+      title: "Languages",
+      actions: (
         <button
           type="button"
           className="ghost"
@@ -1268,36 +1327,40 @@ export default function CvReview({
         >
           Add
         </button>
-      </div>
-      {formData.languages.map((entry, index) => (
-        <div key={entry.id} className="sub-card">
-          <div className="sub-card-header">
-            <strong>Language {index + 1}</strong>
-            <div className="inline-actions">
-              <button type="button" className="ghost" onClick={() => moveListItem("languages", index, "up")}>Up</button>
-              <button type="button" className="ghost" onClick={() => moveListItem("languages", index, "down")}>Down</button>
-              <button type="button" className="ghost" onClick={() => removeListItem("languages", index)}>Remove</button>
+      ),
+      content: (
+        <>
+          {formData.languages.map((entry, index) => (
+            <div key={entry.id} className="sub-card">
+              <div className="sub-card-header">
+                <strong>Language {index + 1}</strong>
+                <div className="inline-actions">
+                  <button type="button" className="ghost" onClick={() => moveListItem("languages", index, "up")}>Up</button>
+                  <button type="button" className="ghost" onClick={() => moveListItem("languages", index, "down")}>Down</button>
+                  <button type="button" className="ghost" onClick={() => removeListItem("languages", index)}>Remove</button>
+                </div>
+              </div>
+              <div className="field-grid">
+                <div>
+                  <label className="label">Name</label>
+                  <input value={entry.name} onChange={(e) => updateListItem("languages", index, { name: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Level</label>
+                  <input value={entry.level} onChange={(e) => updateListItem("languages", index, { level: e.target.value })} />
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="field-grid">
-            <div>
-              <label className="label">Name</label>
-              <input value={entry.name} onChange={(e) => updateListItem("languages", index, { name: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Level</label>
-              <input value={entry.level} onChange={(e) => updateListItem("languages", index, { level: e.target.value })} />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+          ))}
+        </>
+      )
+    });
 
-  const renderInterests = () => (
-    <div className="section-card">
-      <div className="section-header">
-        <h3>Interests</h3>
+  const renderInterests = () =>
+    renderCollapsibleSection({
+      key: "interests",
+      title: "Interests",
+      actions: (
         <button
           type="button"
           className="ghost"
@@ -1305,27 +1368,31 @@ export default function CvReview({
         >
           Add
         </button>
-      </div>
-      {formData.interests.map((entry, index) => (
-        <div key={entry.id} className="sub-card">
-          <div className="sub-card-header">
-            <strong>Interest {index + 1}</strong>
-            <div className="inline-actions">
-              <button type="button" className="ghost" onClick={() => moveListItem("interests", index, "up")}>Up</button>
-              <button type="button" className="ghost" onClick={() => moveListItem("interests", index, "down")}>Down</button>
-              <button type="button" className="ghost" onClick={() => removeListItem("interests", index)}>Remove</button>
+      ),
+      content: (
+        <>
+          {formData.interests.map((entry, index) => (
+            <div key={entry.id} className="sub-card">
+              <div className="sub-card-header">
+                <strong>Interest {index + 1}</strong>
+                <div className="inline-actions">
+                  <button type="button" className="ghost" onClick={() => moveListItem("interests", index, "up")}>Up</button>
+                  <button type="button" className="ghost" onClick={() => moveListItem("interests", index, "down")}>Down</button>
+                  <button type="button" className="ghost" onClick={() => removeListItem("interests", index)}>Remove</button>
+                </div>
+              </div>
+              <input value={entry.name} onChange={(e) => updateListItem("interests", index, { name: e.target.value })} />
             </div>
-          </div>
-          <input value={entry.name} onChange={(e) => updateListItem("interests", index, { name: e.target.value })} />
-        </div>
-      ))}
-    </div>
-  );
+          ))}
+        </>
+      )
+    });
 
-  const renderHonors = () => (
-    <div className="section-card">
-      <div className="section-header">
-        <h3>Honors & Awards</h3>
+  const renderHonors = () =>
+    renderCollapsibleSection({
+      key: "honors",
+      title: "Honors & Awards",
+      actions: (
         <button
           type="button"
           className="ghost"
@@ -1333,40 +1400,44 @@ export default function CvReview({
         >
           Add
         </button>
-      </div>
-      {formData.awards.map((entry, index) => (
-        <div key={entry.id} className="sub-card">
-          <div className="sub-card-header">
-            <strong>Award {index + 1}</strong>
-            <div className="inline-actions">
-              <button type="button" className="ghost" onClick={() => moveListItem("awards", index, "up")}>Up</button>
-              <button type="button" className="ghost" onClick={() => moveListItem("awards", index, "down")}>Down</button>
-              <button type="button" className="ghost" onClick={() => removeListItem("awards", index)}>Remove</button>
+      ),
+      content: (
+        <>
+          {formData.awards.map((entry, index) => (
+            <div key={entry.id} className="sub-card">
+              <div className="sub-card-header">
+                <strong>Award {index + 1}</strong>
+                <div className="inline-actions">
+                  <button type="button" className="ghost" onClick={() => moveListItem("awards", index, "up")}>Up</button>
+                  <button type="button" className="ghost" onClick={() => moveListItem("awards", index, "down")}>Down</button>
+                  <button type="button" className="ghost" onClick={() => removeListItem("awards", index)}>Remove</button>
+                </div>
+              </div>
+              <div className="field-grid">
+                <div>
+                  <label className="label">Title</label>
+                  <input value={entry.title} onChange={(e) => updateListItem("awards", index, { title: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Issuer</label>
+                  <input value={entry.issuer} onChange={(e) => updateListItem("awards", index, { issuer: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Year</label>
+                  <input value={entry.year} onChange={(e) => updateListItem("awards", index, { year: e.target.value })} />
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="field-grid">
-            <div>
-              <label className="label">Title</label>
-              <input value={entry.title} onChange={(e) => updateListItem("awards", index, { title: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Issuer</label>
-              <input value={entry.issuer} onChange={(e) => updateListItem("awards", index, { issuer: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Year</label>
-              <input value={entry.year} onChange={(e) => updateListItem("awards", index, { year: e.target.value })} />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+          ))}
+        </>
+      )
+    });
 
-  const renderCertificates = () => (
-    <div className="section-card">
-      <div className="section-header">
-        <h3>Certificates</h3>
+  const renderCertificates = () =>
+    renderCollapsibleSection({
+      key: "certificates",
+      title: "Certificates",
+      actions: (
         <button
           type="button"
           className="ghost"
@@ -1374,40 +1445,44 @@ export default function CvReview({
         >
           Add
         </button>
-      </div>
-      {formData.certificates.map((entry, index) => (
-        <div key={entry.id} className="sub-card">
-          <div className="sub-card-header">
-            <strong>Certificate {index + 1}</strong>
-            <div className="inline-actions">
-              <button type="button" className="ghost" onClick={() => moveListItem("certificates", index, "up")}>Up</button>
-              <button type="button" className="ghost" onClick={() => moveListItem("certificates", index, "down")}>Down</button>
-              <button type="button" className="ghost" onClick={() => removeListItem("certificates", index)}>Remove</button>
+      ),
+      content: (
+        <>
+          {formData.certificates.map((entry, index) => (
+            <div key={entry.id} className="sub-card">
+              <div className="sub-card-header">
+                <strong>Certificate {index + 1}</strong>
+                <div className="inline-actions">
+                  <button type="button" className="ghost" onClick={() => moveListItem("certificates", index, "up")}>Up</button>
+                  <button type="button" className="ghost" onClick={() => moveListItem("certificates", index, "down")}>Down</button>
+                  <button type="button" className="ghost" onClick={() => removeListItem("certificates", index)}>Remove</button>
+                </div>
+              </div>
+              <div className="field-grid">
+                <div>
+                  <label className="label">Title</label>
+                  <input value={entry.title} onChange={(e) => updateListItem("certificates", index, { title: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Issuer</label>
+                  <input value={entry.issuer} onChange={(e) => updateListItem("certificates", index, { issuer: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Year</label>
+                  <input value={entry.year} onChange={(e) => updateListItem("certificates", index, { year: e.target.value })} />
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="field-grid">
-            <div>
-              <label className="label">Title</label>
-              <input value={entry.title} onChange={(e) => updateListItem("certificates", index, { title: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Issuer</label>
-              <input value={entry.issuer} onChange={(e) => updateListItem("certificates", index, { issuer: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Year</label>
-              <input value={entry.year} onChange={(e) => updateListItem("certificates", index, { year: e.target.value })} />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+          ))}
+        </>
+      )
+    });
 
-  const renderWriting = () => (
-    <div className="section-card">
-      <div className="section-header">
-        <h3>Publications</h3>
+  const renderWriting = () =>
+    renderCollapsibleSection({
+      key: "writing",
+      title: "Publications",
+      actions: (
         <button
           type="button"
           className="ghost"
@@ -1415,37 +1490,40 @@ export default function CvReview({
         >
           Add
         </button>
-      </div>
-      {formData.publications.map((entry, index) => (
-        <div key={entry.id} className="sub-card">
-          <div className="sub-card-header">
-            <strong>Publication {index + 1}</strong>
-            <div className="inline-actions">
-              <button type="button" className="ghost" onClick={() => moveListItem("publications", index, "up")}>Up</button>
-              <button type="button" className="ghost" onClick={() => moveListItem("publications", index, "down")}>Down</button>
-              <button type="button" className="ghost" onClick={() => removeListItem("publications", index)}>Remove</button>
+      ),
+      content: (
+        <>
+          {formData.publications.map((entry, index) => (
+            <div key={entry.id} className="sub-card">
+              <div className="sub-card-header">
+                <strong>Publication {index + 1}</strong>
+                <div className="inline-actions">
+                  <button type="button" className="ghost" onClick={() => moveListItem("publications", index, "up")}>Up</button>
+                  <button type="button" className="ghost" onClick={() => moveListItem("publications", index, "down")}>Down</button>
+                  <button type="button" className="ghost" onClick={() => removeListItem("publications", index)}>Remove</button>
+                </div>
+              </div>
+              <div className="field-grid">
+                <div>
+                  <label className="label">Title</label>
+                  <input value={entry.title} onChange={(e) => updateListItem("publications", index, { title: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Venue</label>
+                  <input value={entry.venue} onChange={(e) => updateListItem("publications", index, { venue: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Year</label>
+                  <input value={entry.year} onChange={(e) => updateListItem("publications", index, { year: e.target.value })} />
+                </div>
+              </div>
+              <label className="label">Notes</label>
+              <textarea value={entry.notes} onChange={(e) => updateListItem("publications", index, { notes: e.target.value })} />
             </div>
-          </div>
-          <div className="field-grid">
-            <div>
-              <label className="label">Title</label>
-              <input value={entry.title} onChange={(e) => updateListItem("publications", index, { title: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Venue</label>
-              <input value={entry.venue} onChange={(e) => updateListItem("publications", index, { venue: e.target.value })} />
-            </div>
-            <div>
-              <label className="label">Year</label>
-              <input value={entry.year} onChange={(e) => updateListItem("publications", index, { year: e.target.value })} />
-            </div>
-          </div>
-          <label className="label">Notes</label>
-          <textarea value={entry.notes} onChange={(e) => updateListItem("publications", index, { notes: e.target.value })} />
-        </div>
-      ))}
-    </div>
-  );
+          ))}
+        </>
+      )
+    });
 
   const renderSection = (key) => {
     switch (key) {
@@ -1474,82 +1552,83 @@ export default function CvReview({
     }
   };
 
+  const canRender = Boolean(previewPayload);
+
   return (
-    <div className="modal" role="dialog" aria-modal="true">
-      <div className="modal-backdrop" onClick={onClose} />
-      <div className="modal-card cv-editor">
-        <div className="modal-header">
-          <div>
-            <p className="eyebrow">CV review</p>
-            <h2>CV editor</h2>
-            <p className="subtitle">Edit sections and set the final order.</p>
-          </div>
-          <button className="secondary" onClick={onClose}>Close</button>
+    <div className="panel-card cv-editor">
+      <div className="panel-header">
+        <div>
+          <p className="eyebrow">CV review</p>
+          <h2>CV editor</h2>
+          <p className="subtitle">Edit sections and set the final order.</p>
         </div>
+      </div>
 
-        <div className="field-grid">
-          <div>
-            <label className="label" htmlFor="profileId">Profile ID</label>
-            <input
-              id="profileId"
-              value={profileId}
-              onChange={(e) => setProfileId(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="label" htmlFor="revision">Revision</label>
-            <input id="revision" value={revision} readOnly />
-          </div>
+      <div className="field-grid">
+        <div>
+          <label className="label" htmlFor="profileId">Profile ID</label>
+          <input
+            id="profileId"
+            value={profileId}
+            onChange={(e) => setProfileId(e.target.value)}
+          />
         </div>
-
-        {renderBasics()}
-        {renderSectionOrder()}
-        {sectionOrder.filter((key) => enabledSections.has(key)).map((key) => (
-          <div key={key}>{renderSection(key)}</div>
-        ))}
-
-        <div className="section-card">
-          <div className="section-header">
-            <h3>Mapped CV preview</h3>
-            <button type="button" className="ghost" onClick={handlePreview} disabled={isPreviewing}>
-              {isPreviewing ? "Mapping..." : "Preview mapping"}
-            </button>
-          </div>
-          {previewPayload ? (
-            <div className="preview-grid">
-              {sectionOrder
-                .filter((key) => enabledSections.has(key))
-                .map((key) => (
-                  <div key={key} className="preview-card">
-                    <h4>{SECTION_LABELS[key]}</h4>
-                    {renderPreviewSection(key) || <p className="helper">No entries.</p>}
-                  </div>
-                ))}
-            </div>
-          ) : (
-            <p className="helper">Generate the mapped preview before rendering the PDF.</p>
-          )}
-          <div className="section-card">
-            <div className="section-header">
-              <h3>Adjust mapped values</h3>
-            </div>
-            <p className="helper">Edit the mapped payload before rendering. You can re-render after adjusting.</p>
-            {renderPreviewEditor()}
-          </div>
+        <div>
+          <label className="label" htmlFor="revision">Revision</label>
+          <input id="revision" value={revision} readOnly />
         </div>
+      </div>
 
-        {error && <p className="error">{error}</p>}
+      {renderBasics()}
+      {renderSectionOrder()}
+      {sectionOrder.filter((key) => enabledSections.has(key)).map((key) => (
+        <div key={key}>{renderSection(key)}</div>
+      ))}
 
-        <div className="modal-actions">
-          <button className="secondary" onClick={handleValidate}>Validate</button>
-          <button className="secondary" onClick={handleSave} disabled={isSaving}>
-            {isSaving ? "Saving..." : "Save"}
+      {renderCollapsibleSection({
+        key: "preview",
+        title: "Mapped CV preview",
+        helper: "Preview uses the selected model to map your CV to the template.",
+        actions: (
+          <button type="button" className="ghost" onClick={handlePreview} disabled={isPreviewing}>
+            {isPreviewing ? "Mapping..." : "Preview mapping (LLM call)"}
           </button>
-          <button className="secondary" onClick={handleDelete}>Delete</button>
-          <button onClick={handleRender} disabled={isRendering}>
-            {isRendering ? "Rendering..." : "Render PDF"}
-          </button>
-        </div>
+        ),
+        content: previewPayload ? (
+          <div className="preview-grid">
+            {sectionOrder
+              .filter((key) => enabledSections.has(key))
+              .map((key) => (
+                <div key={key} className="preview-card">
+                  <h4>{SECTION_LABELS[key]}</h4>
+                  {renderPreviewSection(key) || <p className="helper">No entries.</p>}
+                </div>
+              ))}
+          </div>
+        ) : (
+          <p className="helper">Generate the mapped preview before rendering the PDF.</p>
+        )
+      })}
+
+      {renderCollapsibleSection({
+        key: "previewEditor",
+        title: "Adjust mapped values",
+        helper: "Edit the mapped payload before rendering. You can re-render after adjusting.",
+        content: renderPreviewEditor()
+      })}
+
+      {error && <p className="error">{error}</p>}
+
+      <div className="panel-actions">
+        <button className="secondary" onClick={handleValidate}>Validate</button>
+        <button className="secondary" onClick={handleSave} disabled={isSaving}>
+          {isSaving ? "Saving..." : "Save"}
+        </button>
+        <button className="secondary" onClick={handleDelete}>Delete</button>
+        <button onClick={handleRender} disabled={!canRender || isRendering}>
+          {isRendering ? "Rendering..." : "Render PDF"}
+        </button>
+        {!canRender ? <p className="helper">Run preview before rendering a PDF.</p> : null}
       </div>
     </div>
   );

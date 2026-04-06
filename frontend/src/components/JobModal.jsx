@@ -7,8 +7,7 @@ export default function JobModal({
   resumeText,
   selectedModel,
   lmTimeout,
-  onStartCvReview,
-  onClose
+  onStartCvReview
 }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [coverLetter, setCoverLetter] = useState("");
@@ -81,17 +80,14 @@ export default function JobModal({
     }
   };
   return (
-    <div className="modal" role="dialog" aria-modal="true">
-      <div className="modal-backdrop" onClick={onClose} />
-      <div className="modal-card">
-        <div className="modal-header">
-          <div>
-            <p className="eyebrow">Job detail</p>
-            <h2>{job.title}</h2>
-            <p className="subtitle">{job.company}</p>
-          </div>
-          <button className="secondary" onClick={onClose}>Close</button>
+    <div className="panel-card job-panel">
+      <div className="panel-header">
+        <div>
+          <p className="eyebrow">Job detail</p>
+          <h2>{job.title}</h2>
+          <p className="subtitle">{job.company}</p>
         </div>
+      </div>
 
         <div className="modal-meta">
           <span>{job.location}</span>
@@ -215,7 +211,6 @@ export default function JobModal({
             </a>
           )}
         </div>
-      </div>
     </div>
   );
 }

@@ -14,6 +14,78 @@ body {
   min-height: 100vh;
 }
 
+.panel-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.panel-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid #e6e6e6;
+  padding: 16px 24px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.panel-heading h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.panel-heading .subtitle {
+  margin: 0;
+  font-size: 14px;
+}
+
+.panel-body {
+  padding: 24px;
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(360px, 1.2fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.panel-column {
+  display: grid;
+  gap: 20px;
+}
+
+.panel-card {
+  background: #ffffff;
+  padding: 24px;
+  border-radius: 20px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+  display: grid;
+  gap: 16px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.panel-empty {
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
 .page {
   max-width: 860px;
   margin: 0 auto;
@@ -318,6 +390,7 @@ select {
 
 .cv-editor {
   gap: 20px;
+  display: grid;
 }
 
 .section-card {
@@ -334,6 +407,22 @@ select {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
+}
+
+.section-heading h3 {
+  margin: 0;
+}
+
+.section-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.section-body {
+  display: grid;
+  gap: 12px;
 }
 
 .section-header h3 {
@@ -553,5 +642,15 @@ select {
   .hero {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .panel-topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .panel-body {
+    grid-template-columns: 1fr;
+    padding: 16px;
   }
 }

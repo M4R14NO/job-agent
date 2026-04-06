@@ -18,19 +18,20 @@
 %-------------------------------------------------------------------------------
 %\tCONTENT
 %-------------------------------------------------------------------------------
-\begin{cvhonors}
+\begin{cventries}
 
 %---------------------------------------------------------
 ((* for honor in subsection.honors *))
-  \cvhonor
+  \cventry
+    {((* if honor.event and honor.location *))((( honor.event | latex_escape ))) \textbar{} ((( honor.location | latex_escape )))((* elif honor.event *))((( honor.event | latex_escape )))((* elif honor.location *))((( honor.location | latex_escape )))((* endif *))} % Issuer/Location
     {((( honor.award | latex_escape )))} % Award
-    {((( honor.event | latex_escape )))} % Event
-    {((( honor.location | latex_escape )))} % Location
+    {} % Location
     {((( honor.date | latex_escape )))} % Date(s)
+    {}
 
 %---------------------------------------------------------
 ((* endfor *))
-\end{cvhonors}
+\end{cventries}
 
 
 ((* endfor *))
@@ -38,17 +39,18 @@
 %-------------------------------------------------------------------------------
 %\tCONTENT
 %-------------------------------------------------------------------------------
-\begin{cvhonors}
+\begin{cventries}
 
 %---------------------------------------------------------
 ((* for honor in honors *))
-  \cvhonor
+  \cventry
+    {((* if honor.event and honor.location *))((( honor.event | latex_escape ))) \textbar{} ((( honor.location | latex_escape )))((* elif honor.event *))((( honor.event | latex_escape )))((* elif honor.location *))((( honor.location | latex_escape )))((* endif *))} % Issuer/Location
     {((( honor.award | latex_escape )))} % Award
-    {((( honor.event | latex_escape )))} % Event
-    {((( honor.location | latex_escape )))} % Location
+    {} % Location
     {((( honor.date | latex_escape )))} % Date(s)
+    {}
 
 %---------------------------------------------------------
 ((* endfor *))
-\end{cvhonors}
+\end{cventries}
 ((* endif *))

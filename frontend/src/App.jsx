@@ -155,8 +155,72 @@ export default function App() {
 
   const handleStartCvReview = ({ canonical, job, templateId, docType, outputLanguage }) => {
     setCvReview({ canonical, job, templateId, docType, outputLanguage });
-    setSelectedJob(null);
+    setSelectedJob(job);
   };
+
+  const handleSelectJob = (job) => {
+    setSelectedJob(job);
+    setCvReview(null);
+  };
+
+  const handleBackToResults = () => {
+    setSelectedJob(null);
+    setCvReview(null);
+  };
+
+  const showPanel = Boolean(selectedJob || cvReview);
+
+  if (showPanel) {
+    return (
+      <div className="panel-page">
+        <header className="panel-topbar">
+          <button className="secondary" onClick={handleBackToResults}>
+            Back to results
+          </button>
+          <div className="panel-heading">
+            <p className="eyebrow">Review panel</p>
+            <h2>{selectedJob?.title || "Job review"}</h2>
+            {selectedJob?.company && <p className="subtitle">{selectedJob.company}</p>}
+          </div>
+        </header>
+        <div className="panel-body">
+          <div className="panel-column">
+            {selectedJob ? (
+              <JobModal
+                job={selectedJob}
+                descriptionHtml={descriptionHtml}
+                resumeText={resumeText}
+                selectedModel={selectedModel}
+                lmTimeout={lmTimeout}
+                onStartCvReview={handleStartCvReview}
+              />
+            ) : (
+              <div className="panel-card panel-empty">
+                <p className="helper">Select a job to review details and generate a CV.</p>
+              </div>
+            )}
+          </div>
+          <div className="panel-column">
+            {cvReview ? (
+              <CvReview
+                canonical={cvReview.canonical}
+                job={cvReview.job}
+                templateId={cvReview.templateId}
+                docType={cvReview.docType}
+                outputLanguage={cvReview.outputLanguage}
+                model={selectedModel}
+                lmTimeout={lmTimeout}
+              />
+            ) : (
+              <div className="panel-card panel-empty">
+                <p className="helper">Run CV review to edit the mapped data and render a PDF.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page">
@@ -205,35 +269,11 @@ export default function App() {
             jobs={jobs}
             rerankApplied={response?.rerank_applied}
             rerankTopN={response?.rerank_top_n}
-            onSelectJob={setSelectedJob}
+            onSelectJob={handleSelectJob}
           />
         )}
       </section>
 
-      {selectedJob && (
-        <JobModal
-          job={selectedJob}
-          descriptionHtml={descriptionHtml}
-          resumeText={resumeText}
-          selectedModel={selectedModel}
-          lmTimeout={lmTimeout}
-          onStartCvReview={handleStartCvReview}
-          onClose={() => setSelectedJob(null)}
-        />
-      )}
-
-      {cvReview && (
-        <CvReview
-          canonical={cvReview.canonical}
-          job={cvReview.job}
-          templateId={cvReview.templateId}
-          docType={cvReview.docType}
-          outputLanguage={cvReview.outputLanguage}
-          model={selectedModel}
-          lmTimeout={lmTimeout}
-          onClose={() => setCvReview(null)}
-        />
-      )}
     </div>
   );
 }
