@@ -1,0 +1,54 @@
+((# Auto-generated from Awesome-CV #))
+((# License: CC BY-SA 4.0 #))
+((# Source: https://github.com/posquit0/Awesome-CV #))
+%-------------------------------------------------------------------------------
+%\tSECTION TITLE
+%-------------------------------------------------------------------------------
+\cvsection{Honors \& Awards}
+
+
+((* if honor_subsections *))
+((* for subsection in honor_subsections *))
+%-------------------------------------------------------------------------------
+%\tSUBSECTION TITLE
+%-------------------------------------------------------------------------------
+\cvsubsection{((( subsection.title | latex_escape )))}
+
+
+%-------------------------------------------------------------------------------
+%\tCONTENT
+%-------------------------------------------------------------------------------
+\begin{cvhonors}
+
+%---------------------------------------------------------
+((* for honor in subsection.honors *))
+  \cvhonor
+    {((( honor.award | latex_escape )))} % Award
+    {((( honor.event | latex_escape )))} % Event
+    {((( honor.location | latex_escape )))} % Location
+    {((( honor.date | latex_escape )))} % Date(s)
+
+%---------------------------------------------------------
+((* endfor *))
+\end{cvhonors}
+
+
+((* endfor *))
+((* else *))
+%-------------------------------------------------------------------------------
+%\tCONTENT
+%-------------------------------------------------------------------------------
+\begin{cvhonors}
+
+%---------------------------------------------------------
+((* for honor in honors *))
+  \cvhonor
+    {((( honor.award | latex_escape )))} % Award
+    {((( honor.event | latex_escape )))} % Event
+    {((( honor.location | latex_escape )))} % Location
+    {((( honor.date | latex_escape )))} % Date(s)
+
+%---------------------------------------------------------
+((* endfor *))
+\end{cvhonors}
+((* endif *))

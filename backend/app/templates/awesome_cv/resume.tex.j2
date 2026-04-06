@@ -1,0 +1,190 @@
+((# Auto-generated from Awesome-CV #))
+((# License: CC BY-SA 4.0 #))
+((# Source: https://github.com/posquit0/Awesome-CV #))
+%!TEX TS-program = xelatex
+%!TEX encoding = UTF-8 Unicode
+% Awesome CV LaTeX Template for CV/Resume
+%
+% This template has been downloaded from:
+% https://github.com/posquit0/Awesome-CV
+%
+% Author:
+% Claud D. Park <posquit0.bj@gmail.com>
+% http://www.posquit0.com
+%
+% Template license:
+% CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)
+%
+
+
+%-------------------------------------------------------------------------------
+% CONFIGURATIONS
+%-------------------------------------------------------------------------------
+% A4 paper size by default, use 'letterpaper' for US letter
+\documentclass[11pt, a4paper]{awesome-cv}
+
+% Configure page margins with geometry
+\geometry{left=1.4cm, top=.8cm, right=1.4cm, bottom=1.8cm, footskip=.5cm}
+
+% Color for highlights
+% Awesome Colors: awesome-emerald, awesome-skyblue, awesome-red, awesome-pink, awesome-orange
+%                 awesome-nephritis, awesome-concrete, awesome-darknight
+((* if awesome_color *))
+\colorlet{awesome}{((( awesome_color )))}
+((* else *))
+\colorlet{awesome}{awesome-red}
+((* endif *))
+% Uncomment if you would like to specify your own color
+% \definecolor{awesome}{HTML}{3E6D9C}
+
+% Colors for text
+% Uncomment if you would like to specify your own color
+% \definecolor{darktext}{HTML}{414141}
+% \definecolor{text}{HTML}{333333}
+% \definecolor{graytext}{HTML}{5D5D5D}
+% \definecolor{lighttext}{HTML}{999999}
+% \definecolor{sectiondivider}{HTML}{5D5D5D}
+
+% Set false if you don't want to highlight section with awesome color
+\setbool{acvSectionColorHighlight}{true}
+
+% If you would like to change the social information separator from a pipe (|) to something else
+\renewcommand{\acvHeaderSocialSep}{\quad\textbar\quad}
+
+
+%-------------------------------------------------------------------------------
+%\tPERSONAL INFORMATION
+%\tComment any of the lines below if they are not required
+%-------------------------------------------------------------------------------
+% Available options: circle|rectangle,edge/noedge,left/right
+((* if photo *))
+\photo{((( photo )))}
+((* endif *))
+\name{((( first_name | latex_escape )))}{((( last_name | latex_escape )))}
+\position{((( position | latex_escape )))}
+\address{((( address | latex_escape )))}
+
+\mobile{((( mobile | latex_escape )))}
+\email{((( email | latex_escape )))}
+((* if date_of_birth *))
+\dateofbirth{((( date_of_birth | latex_escape )))}
+((* endif *))
+((* if homepage *))
+\homepage{((( homepage | latex_escape )))}
+((* endif *))
+((* if github *))
+\github{((( github | latex_escape )))}
+((* endif *))
+((* if linkedin *))
+\linkedin{((( linkedin | latex_escape )))}
+((* endif *))
+((* if gitlab *))
+\gitlab{((( gitlab | latex_escape )))}
+((* endif *))
+((* if stackoverflow *))
+\stackoverflow{((( stackoverflow | latex_escape )))}
+((* endif *))
+((* if twitter *))
+\twitter{((( twitter | latex_escape )))}
+((* endif *))
+((* if x *))
+\x{((( x | latex_escape )))}
+((* endif *))
+((* if skype *))
+\skype{((( skype | latex_escape )))}
+((* endif *))
+((* if reddit *))
+\reddit{((( reddit | latex_escape )))}
+((* endif *))
+((* if medium *))
+\medium{((( medium | latex_escape )))}
+((* endif *))
+((* if kaggle *))
+\kaggle{((( kaggle | latex_escape )))}
+((* endif *))
+((* if hackerrank *))
+\hackerrank{((( hackerrank | latex_escape )))}
+((* endif *))
+((* if telegram *))
+\telegram{((( telegram | latex_escape )))}
+((* endif *))
+((* if googlescholar *))
+\googlescholar{((( googlescholar | latex_escape )))}
+((* endif *))
+((* if extrainfo *))
+\extrainfo{((( extrainfo | latex_escape )))}
+((* endif *))
+
+((* if quote *))
+\quote{``((( quote | latex_escape )))"}
+((* endif *))
+
+
+%-------------------------------------------------------------------------------
+\begin{document}
+
+% Print the header with above personal information
+% Give optional argument to change alignment(C: center, L: left, R: right)
+((* if header_alignment *))
+\makecvheader[((( header_alignment )))]
+((* else *))
+\makecvheader[C]
+((* endif *))
+
+% Print the footer with 3 arguments(<left>, <center>, <right>)
+% Leave any of these blank if they are not needed
+\makecvfooter
+  {((( footer_left | default("\\today") ))) }
+  {((( first_name | latex_escape ))) ((( last_name | latex_escape )))~~~·~~~((( document_title | default("Resume") | latex_escape ))) }
+  {((( footer_right | default("\\thepage") ))) }
+
+
+%-------------------------------------------------------------------------------
+%\tCV/RESUME CONTENT
+%\tEach section is imported separately, open each file in turn to modify content
+%-------------------------------------------------------------------------------
+((* if sections.summary *))
+((* include "sections/summary.tex.j2" *))
+((* endif *))
+%------- MODIFIED FROM ORIGINAL
+((* if sections.skills *))
+((* include "sections/skills.tex.j2" *))
+((* endif *))
+%-------
+((* if sections.languages *))
+((* include "sections/languages.tex.j2" *))
+((* endif *))
+((* if sections.interests *))
+((* include "sections/interests.tex.j2" *))
+((* endif *))
+((* if sections.experience *))
+((* include "sections/experience.tex.j2" *))
+((* endif *))
+((* if sections.volunteer *))
+((* include "sections/volunteer.tex.j2" *))
+((* endif *))
+((* if sections.honors *))
+((* include "sections/honors.tex.j2" *))
+((* endif *))
+((* if sections.certificates *))
+((* include "sections/certificates.tex.j2" *))
+((* endif *))
+((* if sections.presentation *))
+((* include "sections/presentation.tex.j2" *))
+((* endif *))
+((* if sections.writing *))
+((* include "sections/writing.tex.j2" *))
+((* endif *))
+((* if sections.committees *))
+((* include "sections/committees.tex.j2" *))
+((* endif *))
+((* if sections.education *))
+((* include "sections/education.tex.j2" *))
+((* endif *))
+((* if sections.extracurricular *))
+((* include "sections/extracurricular.tex.j2" *))
+((* endif *))
+
+
+%-------------------------------------------------------------------------------
+\end{document}

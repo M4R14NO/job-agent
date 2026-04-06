@@ -17,6 +17,7 @@ export default function JobModal({
   const [cvError, setCvError] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("awesomecv");
   const [selectedDocType, setSelectedDocType] = useState("resume");
+  const [outputLanguage, setOutputLanguage] = useState("english");
 
   useEffect(() => {
     setCoverLetter("");
@@ -41,7 +42,8 @@ export default function JobModal({
         job_description: job.description,
         job_url: job.job_url,
         model: selectedModel,
-        lm_timeout: lmTimeout
+        lm_timeout: lmTimeout,
+        output_language: outputLanguage
       });
       setCoverLetter(draft);
     } catch (err) {
@@ -62,13 +64,15 @@ export default function JobModal({
       const canonical = await parseCvCanonical({
         resume_text: resumeText,
         model: selectedModel,
-        lm_timeout: lmTimeout
+        lm_timeout: lmTimeout,
+        output_language: outputLanguage
       });
       onStartCvReview({
         canonical,
         job,
         templateId: selectedTemplate,
-        docType: selectedDocType
+        docType: selectedDocType,
+        outputLanguage
       });
     } catch (err) {
       setCvError(err instanceof Error ? err.message : "Failed to generate CV");
@@ -179,6 +183,17 @@ export default function JobModal({
               >
                 <option value="resume">Resume</option>
                 <option value="cv">CV</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="outputLanguage" className="label">Output language</label>
+              <select
+                id="outputLanguage"
+                value={outputLanguage}
+                onChange={(e) => setOutputLanguage(e.target.value)}
+              >
+                <option value="english">English</option>
+                <option value="german">German</option>
               </select>
             </div>
           </div>

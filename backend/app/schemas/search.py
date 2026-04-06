@@ -63,6 +63,7 @@ class CoverLetterRequest(BaseModel):
     job_url: str | None = None
     model: str | None = None
     lm_timeout: float | None = None
+    output_language: str | None = None
 
 
 class CoverLetterResponse(BaseModel):
@@ -79,18 +80,19 @@ class CvRequest(BaseModel):
     template_id: str = "awesomecv"
     doc_type: str = "resume"
     lm_timeout: float | None = None
+    output_language: str | None = None
 
 
 class CvCanonicalBullet(BaseModel):
     id: str
-    text: str
+    text: str | None = None
     source_id: str | None = None
 
 
 class CvCanonicalExperience(BaseModel):
     id: str
-    title: str
-    organization: str
+    title: str | None = None
+    organization: str | None = None
     location: str | None = None
     period: str | None = None
     bullets: list[CvCanonicalBullet] = Field(default_factory=list)
@@ -98,7 +100,7 @@ class CvCanonicalExperience(BaseModel):
 
 class CvCanonicalEducation(BaseModel):
     id: str
-    degree: str
+    degree: str | None = None
     institution: str | None = None
     location: str | None = None
     period: str | None = None
@@ -107,29 +109,38 @@ class CvCanonicalEducation(BaseModel):
 
 class CvCanonicalSkillGroup(BaseModel):
     id: str
-    category: str
+    category: str | None = None
     items: list[str] = Field(default_factory=list)
 
 
 class CvCanonicalProject(BaseModel):
     id: str
-    name: str
+    name: str | None = None
     role: str | None = None
     period: str | None = None
     description: str | None = None
     bullets: list[CvCanonicalBullet] = Field(default_factory=list)
 
 
+class CvCanonicalVolunteer(BaseModel):
+    id: str
+    role: str | None = None
+    organization: str | None = None
+    location: str | None = None
+    period: str | None = None
+    bullets: list[CvCanonicalBullet] = Field(default_factory=list)
+
+
 class CvCanonicalCertificate(BaseModel):
     id: str
-    title: str
+    title: str | None = None
     issuer: str | None = None
     year: str | None = None
 
 
 class CvCanonicalPublication(BaseModel):
     id: str
-    title: str
+    title: str | None = None
     venue: str | None = None
     year: str | None = None
     notes: str | None = None
@@ -137,13 +148,18 @@ class CvCanonicalPublication(BaseModel):
 
 class CvCanonicalLanguage(BaseModel):
     id: str
-    name: str
+    name: str | None = None
     level: str | None = None
+
+
+class CvCanonicalInterest(BaseModel):
+    id: str
+    name: str | None = None
 
 
 class CvCanonicalAward(BaseModel):
     id: str
-    title: str
+    title: str | None = None
     issuer: str | None = None
     year: str | None = None
 
@@ -161,9 +177,11 @@ class CvCanonicalData(BaseModel):
     education: list[CvCanonicalEducation] = Field(default_factory=list)
     skills: list[CvCanonicalSkillGroup] = Field(default_factory=list)
     projects: list[CvCanonicalProject] = Field(default_factory=list)
+    volunteer: list[CvCanonicalVolunteer] = Field(default_factory=list)
     certificates: list[CvCanonicalCertificate] = Field(default_factory=list)
     publications: list[CvCanonicalPublication] = Field(default_factory=list)
     languages: list[CvCanonicalLanguage] = Field(default_factory=list)
+    interests: list[CvCanonicalInterest] = Field(default_factory=list)
     awards: list[CvCanonicalAward] = Field(default_factory=list)
 
 
@@ -188,6 +206,7 @@ class CvParseRequest(BaseModel):
     resume_text: str
     model: str | None = None
     lm_timeout: float | None = None
+    output_language: str | None = None
 
 
 class CvParseResponse(BaseModel):
@@ -210,6 +229,7 @@ class CvRenderRequest(BaseModel):
     template_id: str = "awesomecv"
     doc_type: str = "resume"
     lm_timeout: float | None = None
+    output_language: str | None = None
 
 
 class CvProfileListResponse(BaseModel):

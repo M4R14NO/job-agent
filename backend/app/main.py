@@ -36,6 +36,8 @@ from .services.ranking_service import score_jobs
 
 app = FastAPI(title="Job Agent API")
 
+ALLOWED_OUTPUT_LANGUAGES = {"english", "german"}
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -55,6 +57,18 @@ def _default_rerank_top_n(total_jobs: int, results_wanted: int) -> int:
         return 0
     cap = min(total_jobs, results_wanted)
     return max(3, math.ceil(0.4 * cap))
+
+
+def _normalize_output_language(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized not in ALLOWED_OUTPUT_LANGUAGES:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported output_language. Use 'english' or 'german'.",
+        )
+    return normalized
 
 
 @app.get("/models", response_model=ModelsResponse)
@@ -119,10 +133,18 @@ def generate_cover_letter(payload: CoverLetterRequest) -> CoverLetterResponse:
     if not payload.model:
         raise HTTPException(status_code=400, detail="Model is required")
 
+    output_language = _normalize_output_language(payload.output_language)
+    language_line = ""
+    if output_language == "english":
+        language_line = " Write the letter in English."
+    elif output_language == "german":
+        language_line = " Write the letter in German."
+
     system = (
         "You are a hiring assistant who writes concise, tailored cover letters. "
         "Use a professional tone, keep it under 300 words, and focus on fit. "
         "Return only the final cover letter text with no analysis or reasoning."
+        f"{language_line}"
     )
     user = (
         f"Resume:\n{payload.resume_text}\n\n"
@@ -156,6 +178,7 @@ def generate_cover_letter(payload: CoverLetterRequest) -> CoverLetterResponse:
 def generate_cv(payload: CvRequest) -> Response:
     if not payload.model:
         raise HTTPException(status_code=400, detail="Model is required")
+    output_language = _normalize_output_language(payload.output_language)
 
     try:
         pdf_bytes = generate_cv_pdf(
@@ -167,6 +190,7 @@ def generate_cv(payload: CvRequest) -> Response:
             doc_type=payload.doc_type,
             template_id=payload.template_id,
             lm_timeout=payload.lm_timeout,
+            output_language=output_language,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -188,11 +212,13 @@ def generate_cv(payload: CvRequest) -> Response:
 def parse_cv(payload: CvParseRequest) -> CvParseResponse:
     if not payload.model:
         raise HTTPException(status_code=400, detail="Model is required")
+    output_language = _normalize_output_language(payload.output_language)
     try:
         data = parse_resume_to_canonical(
             resume_text=payload.resume_text,
             model=payload.model,
             lm_timeout=payload.lm_timeout,
+            output_language=output_language,
         )
     except RuntimeError as exc:
         message = str(exc)
@@ -269,6 +295,7 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
         raise HTTPException(status_code=400, detail="Unsupported template_id")
     if payload.doc_type not in ALLOWED_DOC_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported doc_type")
+    output_language = _normalize_output_language(payload.output_language)
 
     try:
         template_payload, _ = map_canonical_to_template(
@@ -278,6 +305,7 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
             job_description=payload.job_description,
             model=payload.model,
             lm_timeout=payload.lm_timeout,
+            output_language=output_language,
         )
         pdf_bytes = render_cv_pdf_from_payload(payload=template_payload.model_dump(), doc_type=payload.doc_type)
     except RuntimeError as exc:

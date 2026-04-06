@@ -11,6 +11,7 @@ export default function CvReview({
   job,
   templateId,
   docType,
+  outputLanguage,
   model,
   lmTimeout,
   onClose
@@ -99,7 +100,8 @@ export default function CvReview({
         model,
         template_id: templateId,
         doc_type: docType,
-        lm_timeout: lmTimeout
+        lm_timeout: lmTimeout,
+        output_language: outputLanguage
       });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");

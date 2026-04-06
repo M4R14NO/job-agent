@@ -13,6 +13,9 @@ ALLOWED_DOC_TYPES = {"resume", "cv"}
 MAX_EXPERIENCE_ENTRIES = 4
 MAX_EDUCATION_ENTRIES = 3
 MAX_SKILL_GROUPS = 4
+MAX_VOLUNTEER_ENTRIES = 3
+MAX_LANGUAGE_ENTRIES = 6
+MAX_INTEREST_ENTRIES = 6
 MAX_BULLETS_PER_ENTRY = 4
 MAX_BULLET_CHARS = 180
 MAX_SUMMARY_CHARS = 600
@@ -24,6 +27,9 @@ class CvSections(BaseModel):
     experience: bool = True
     education: bool = True
     skills: bool = True
+    volunteer: bool = False
+    languages: bool = False
+    interests: bool = False
     honors: bool = False
     certificates: bool = False
     presentation: bool = False
@@ -82,6 +88,32 @@ class CvWriting(BaseModel):
     period: str | None = None
     details: list[str] | None = None
 
+
+class CvVolunteer(BaseModel):
+    role: str | None = None
+    organization: str | None = None
+    location: str | None = None
+    period: str | None = None
+    details: list[str] | None = None
+
+    class Config:
+        extra = "forbid"
+
+
+class CvLanguage(BaseModel):
+    name: str | None = None
+    level: str | None = None
+
+    class Config:
+        extra = "forbid"
+
+
+class CvInterest(BaseModel):
+    name: str | None = None
+
+    class Config:
+        extra = "forbid"
+
     class Config:
         extra = "forbid"
 
@@ -100,6 +132,9 @@ class CvAwesomePayload(BaseModel):
     experience: list[CvExperience] = Field(default_factory=list)
     education: list[CvEducation] = Field(default_factory=list)
     skills: list[CvSkill] = Field(default_factory=list)
+    volunteer: list[CvVolunteer] = Field(default_factory=list)
+    languages: list[CvLanguage] = Field(default_factory=list)
+    interests: list[CvInterest] = Field(default_factory=list)
     certificates: list[CvCertificate] = Field(default_factory=list)
     writings: list[CvWriting] = Field(default_factory=list)
     sections: CvSections = Field(default_factory=CvSections)
@@ -125,13 +160,26 @@ class CvTemplateMapping(BaseModel):
         extra = "forbid"
 
 
-def _build_template_prompt(canonical: CvCanonicalData, job_title: str, company: str | None, job_description: str) -> str:
+def _build_template_prompt(
+    canonical: CvCanonicalData,
+    job_title: str,
+    company: str | None,
+    job_description: str,
+    output_language: str | None = None,
+) -> str:
     company_text = company or ""
     canonical_json = canonical.model_dump()
+    language_line = ""
+    if output_language == "english":
+        language_line = "Write all free-text output in English. Translate if needed. "
+    elif output_language == "german":
+        language_line = "Write all free-text output in German. Translate if needed. "
     return (
         "Map canonical CV data into the AwesomeCV template JSON. "
+        f"{language_line}"
         "You may rephrase, select, and reorder bullets to fit the job description. "
-        "Respect these caps: experience entries <= 4, education entries <= 3, skills groups <= 4, bullets per entry <= 4. "
+        "Respect these caps: experience entries <= 4, education entries <= 3, skills groups <= 4, "
+        "volunteer entries <= 3, languages <= 6, interests <= 6, bullets per entry <= 4. "
         "Provide provenance by listing source IDs for each output bullet. "
         "Return JSON only with the exact keys listed below.\n\n"
         "Required JSON schema:\n"
@@ -156,6 +204,15 @@ def _build_template_prompt(canonical: CvCanonicalData, job_title: str, company: 
         "    \"skills\": [\n"
         "      {\"category\": string, \"list\": string}\n"
         "    ],\n"
+        "    \"volunteer\": [\n"
+        "      {\"role\": string or empty, \"organization\": string or empty, \"location\": string or empty, \"period\": string or empty, \"details\": [string]}\n"
+        "    ],\n"
+        "    \"languages\": [\n"
+        "      {\"name\": string or empty, \"level\": string or empty}\n"
+        "    ],\n"
+        "    \"interests\": [\n"
+        "      {\"name\": string or empty}\n"
+        "    ],\n"
         "    \"certificates\": [\n"
         "      {\"title\": string, \"organization\": string or empty, \"location\": string or empty, \"date\": string or empty}\n"
         "    ],\n"
@@ -167,6 +224,9 @@ def _build_template_prompt(canonical: CvCanonicalData, job_title: str, company: 
         "      \"experience\": true/false,\n"
         "      \"education\": true/false,\n"
         "      \"skills\": true/false,\n"
+        "      \"volunteer\": true/false,\n"
+        "      \"languages\": true/false,\n"
+        "      \"interests\": true/false,\n"
         "      \"honors\": false,\n"
         "      \"certificates\": true/false,\n"
         "      \"presentation\": false,\n"
@@ -192,6 +252,9 @@ def _enforce_template_limits(data: dict) -> dict:
     data["experience"] = data.get("experience", [])[:MAX_EXPERIENCE_ENTRIES]
     data["education"] = data.get("education", [])[:MAX_EDUCATION_ENTRIES]
     data["skills"] = data.get("skills", [])[:MAX_SKILL_GROUPS]
+    data["volunteer"] = data.get("volunteer", [])[:MAX_VOLUNTEER_ENTRIES]
+    data["languages"] = data.get("languages", [])[:MAX_LANGUAGE_ENTRIES]
+    data["interests"] = data.get("interests", [])[:MAX_INTEREST_ENTRIES]
 
     for entry in data.get("experience", []):
         items = entry.get("details") or []
@@ -203,6 +266,15 @@ def _enforce_template_limits(data: dict) -> dict:
         entry["details"] = items
 
     for entry in data.get("education", []):
+        items = entry.get("details") or []
+        items = [
+            truncate_text(item, MAX_BULLET_CHARS)
+            for item in items[:MAX_BULLETS_PER_ENTRY]
+            if isinstance(item, str)
+        ]
+        entry["details"] = items
+
+    for entry in data.get("volunteer", []):
         items = entry.get("details") or []
         items = [
             truncate_text(item, MAX_BULLET_CHARS)
@@ -224,11 +296,11 @@ def _enforce_template_limits(data: dict) -> dict:
 def _fallback_payload_from_canonical(canonical: CvCanonicalData) -> dict:
     experience = []
     for entry in canonical.experience[:MAX_EXPERIENCE_ENTRIES]:
-        items = [bullet.text for bullet in entry.bullets[:MAX_BULLETS_PER_ENTRY]]
+        items = [bullet.text for bullet in entry.bullets[:MAX_BULLETS_PER_ENTRY] if bullet.text]
         experience.append(
             {
-                "title": entry.title,
-                "organization": entry.organization,
+                "title": entry.title or "",
+                "organization": entry.organization or "",
                 "location": entry.location or "",
                 "period": entry.period or "",
                 "details": items,
@@ -237,10 +309,10 @@ def _fallback_payload_from_canonical(canonical: CvCanonicalData) -> dict:
 
     education = []
     for entry in canonical.education[:MAX_EDUCATION_ENTRIES]:
-        items = [bullet.text for bullet in entry.bullets[:MAX_BULLETS_PER_ENTRY]]
+        items = [bullet.text for bullet in entry.bullets[:MAX_BULLETS_PER_ENTRY] if bullet.text]
         education.append(
             {
-                "degree": entry.degree,
+                "degree": entry.degree or "",
                 "institution": entry.institution or "",
                 "location": entry.location or "",
                 "period": entry.period or "",
@@ -251,7 +323,28 @@ def _fallback_payload_from_canonical(canonical: CvCanonicalData) -> dict:
     skills = []
     for entry in canonical.skills[:MAX_SKILL_GROUPS]:
         items_text = ", ".join(entry.items)
-        skills.append({"category": entry.category, "list": items_text})
+        skills.append({"category": entry.category or "", "list": items_text})
+
+    volunteer = []
+    for entry in canonical.volunteer[:MAX_VOLUNTEER_ENTRIES]:
+        items = [bullet.text for bullet in entry.bullets[:MAX_BULLETS_PER_ENTRY] if bullet.text]
+        volunteer.append(
+            {
+                "role": entry.role or "",
+                "organization": entry.organization or "",
+                "location": entry.location or "",
+                "period": entry.period or "",
+                "details": items,
+            }
+        )
+
+    languages = []
+    for entry in canonical.languages[:MAX_LANGUAGE_ENTRIES]:
+        languages.append({"name": entry.name or "", "level": entry.level or ""})
+
+    interests = []
+    for entry in canonical.interests[:MAX_INTEREST_ENTRIES]:
+        interests.append({"name": entry.name or ""})
 
     certificates = []
     for entry in canonical.certificates:
@@ -281,6 +374,9 @@ def _fallback_payload_from_canonical(canonical: CvCanonicalData) -> dict:
         "experience": experience,
         "education": education,
         "skills": skills,
+        "volunteer": volunteer,
+        "languages": languages,
+        "interests": interests,
         "certificates": certificates,
         "writings": writing,
     }
@@ -300,8 +396,9 @@ def map_canonical_to_template(
     job_description: str,
     model: str,
     lm_timeout: float | None = None,
+    output_language: str | None = None,
 ) -> tuple[CvAwesomePayload, list[CvTemplateProvenance]]:
-    prompt = _build_template_prompt(canonical, job_title, company, job_description)
+    prompt = _build_template_prompt(canonical, job_title, company, job_description, output_language=output_language)
     json_schema = CvTemplateMapping.model_json_schema()
     response_format = {
         "type": "json_schema",
@@ -370,6 +467,27 @@ def map_canonical_to_template(
             items_value = entry.get("list")
             if not isinstance(items_value, str) or not items_value.strip():
                 entry["list"] = fallback["skills"][min(idx, len(fallback["skills"]) - 1)]["list"]
+
+    if not data.get("volunteer") and fallback["volunteer"]:
+        data["volunteer"] = fallback["volunteer"]
+        data["sections"]["volunteer"] = True
+    elif data.get("volunteer"):
+        for idx, entry in enumerate(data["volunteer"]):
+            if not _has_nonempty_items(entry.get("details")):
+                entry["details"] = fallback["volunteer"][min(idx, len(fallback["volunteer"]) - 1)]["details"]
+        data["sections"]["volunteer"] = True
+
+    if not data.get("languages") and fallback["languages"]:
+        data["languages"] = fallback["languages"]
+        data["sections"]["languages"] = True
+    elif data.get("languages"):
+        data["sections"]["languages"] = True
+
+    if not data.get("interests") and fallback["interests"]:
+        data["interests"] = fallback["interests"]
+        data["sections"]["interests"] = True
+    elif data.get("interests"):
+        data["sections"]["interests"] = True
 
     if not data.get("certificates") and fallback["certificates"]:
         data["certificates"] = fallback["certificates"]

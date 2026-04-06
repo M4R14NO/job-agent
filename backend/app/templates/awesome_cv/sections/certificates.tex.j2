@@ -1,0 +1,25 @@
+((# Auto-generated from Awesome-CV #))
+((# License: CC BY-SA 4.0 #))
+((# Source: https://github.com/posquit0/Awesome-CV #))
+%-------------------------------------------------------------------------------
+%\tSECTION TITLE
+%-------------------------------------------------------------------------------
+\cvsection{Certificates}
+
+
+%-------------------------------------------------------------------------------
+%\tCONTENT
+%-------------------------------------------------------------------------------
+\begin{cvhonors}
+
+%---------------------------------------------------------
+((* for certificate in certificates *))
+  \cvhonor
+    {((( certificate.title | latex_escape )))} % Name
+    {((( certificate.organization | latex_escape )))} % Issuer
+    {((( certificate.location | default("") | latex_escape )))} % Credential ID or Location
+    {((( certificate.date | latex_escape )))} % Date(s)
+
+%---------------------------------------------------------
+((* endfor *))
+\end{cvhonors}

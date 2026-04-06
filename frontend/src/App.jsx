@@ -153,8 +153,8 @@ export default function App() {
     setCachedAt("");
   };
 
-  const handleStartCvReview = ({ canonical, job, templateId, docType }) => {
-    setCvReview({ canonical, job, templateId, docType });
+  const handleStartCvReview = ({ canonical, job, templateId, docType, outputLanguage }) => {
+    setCvReview({ canonical, job, templateId, docType, outputLanguage });
     setSelectedJob(null);
   };
 
@@ -228,6 +228,7 @@ export default function App() {
           job={cvReview.job}
           templateId={cvReview.templateId}
           docType={cvReview.docType}
+          outputLanguage={cvReview.outputLanguage}
           model={selectedModel}
           lmTimeout={lmTimeout}
           onClose={() => setCvReview(null)}
