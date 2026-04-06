@@ -90,6 +90,73 @@ Canonical normalized job fields used by the UI:
 - `POST /cover-letter` accepts resume text and the selected job details.
 - The response is plain text and shown in the job modal.
 
+## CV Generation (AwesomeCV)
+
+The CV feature renders AwesomeCV templates via `awesomecv-jinja` and streams the PDF back to the browser. End users download the file directly, so server-side file permissions are not exposed to them.
+
+### macOS setup (local xelatex)
+
+1. Install `xelatex`:
+
+   ```bash
+   brew install --cask mactex-no-gui
+   ```
+
+2. Add TeX binaries to your PATH (if needed):
+
+   ```bash
+   echo 'export PATH="/Library/TeX/texbin:$PATH"' >> ~/.zshrc
+   source ~/.zshrc
+   ```
+
+3. Create a sandbox user for compilation:
+
+   ```bash
+   sudo sysadminctl -addUser latex_sandbox -shell /usr/bin/false -home /var/empty
+   ```
+
+4. Create the sandbox temp directory:
+
+   ```bash
+   sudo install -d -m 700 -o latex_sandbox -g staff /tmp/job-agent-tex
+   ```
+
+5. Install `awesomecv-jinja` in the repo virtualenv:
+
+   ```bash
+   source .venv/bin/activate
+   pip install awesomecv-jinja
+   ```
+
+### Smoke test (local)
+
+Run the renderer under the sandbox user and write the PDF inside `/tmp/job-agent-tex`:
+
+```bash
+sudo -u latex_sandbox -H bash -lc 'cd /path/to/job-agent && source .venv/bin/activate && TMPDIR=/tmp/job-agent-tex python - <<'\''PY'\''
+from awesomecv_jinja import render_pdf, load_sample
+from pathlib import Path
+
+data = load_sample("resume")
+out = Path("/tmp/job-agent-tex/resume.pdf")
+render_pdf(data, output=out)
+print("Wrote", out)
+PY'
+```
+
+Copy the file out (read permission is restricted):
+
+```bash
+sudo cp /tmp/job-agent-tex/resume.pdf /path/to/job-agent/
+sudo chown <your-user> /path/to/job-agent/resume.pdf
+```
+
+### Run the backend as the sandbox user (optional but recommended)
+
+```bash
+sudo -u latex_sandbox -H bash -lc 'cd /path/to/job-agent && source .venv/bin/activate && uvicorn backend.app.main:app --reload --port 8000'
+```
+
 ## Current limitations
 
 - Local-only (no auth, no hosted deployment).

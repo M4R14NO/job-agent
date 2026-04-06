@@ -17,6 +17,8 @@ export default function SearchFilters({
   models,
   selectedModel,
   onSelectedModelChange,
+  lmTimeout,
+  onLmTimeoutChange,
   modelError,
   enableRerank,
   onEnableRerankChange,
@@ -165,6 +167,19 @@ export default function SearchFilters({
             </p>
           </div>
         )}
+      </div>
+
+      <div>
+        <label htmlFor="lmTimeout" className="label">LLM timeout (seconds)</label>
+        <input
+          id="lmTimeout"
+          type="number"
+          min={5}
+          max={300}
+          value={lmTimeout}
+          onChange={(e) => onLmTimeoutChange(Number(e.target.value))}
+        />
+        <p className="helper">Use higher values for slower local models.</p>
       </div>
 
       <label htmlFor="resume" className="label">Resume text</label>

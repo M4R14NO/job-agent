@@ -133,6 +133,12 @@ textarea {
   min-height: 200px;
 }
 
+.code-area {
+  font-family: "Courier New", Courier, monospace;
+  min-height: 280px;
+  white-space: pre;
+}
+
 input {
   width: 100%;
   border-radius: 12px;

@@ -1,21 +1,29 @@
 import { useEffect, useState } from "react";
-import { generateCoverLetter } from "../api/llm";
+import { generateCoverLetter, parseCvCanonical } from "../api/llm";
 
 export default function JobModal({
   job,
   descriptionHtml,
   resumeText,
   selectedModel,
+  lmTimeout,
+  onStartCvReview,
   onClose
 }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [coverLetter, setCoverLetter] = useState("");
   const [coverError, setCoverError] = useState("");
+  const [isGeneratingCv, setIsGeneratingCv] = useState(false);
+  const [cvError, setCvError] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState("awesomecv");
+  const [selectedDocType, setSelectedDocType] = useState("resume");
 
   useEffect(() => {
     setCoverLetter("");
     setCoverError("");
     setIsGenerating(false);
+    setCvError("");
+    setIsGeneratingCv(false);
   }, [job]);
 
   const handleGenerate = async () => {
@@ -32,13 +40,40 @@ export default function JobModal({
         company: job.company,
         job_description: job.description,
         job_url: job.job_url,
-        model: selectedModel
+        model: selectedModel,
+        lm_timeout: lmTimeout
       });
       setCoverLetter(draft);
     } catch (err) {
       setCoverError(err instanceof Error ? err.message : "Failed to generate");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleGenerateCv = async () => {
+    if (!selectedModel) {
+      setCvError("Select a model to generate a CV.");
+      return;
+    }
+    setIsGeneratingCv(true);
+    setCvError("");
+    try {
+      const canonical = await parseCvCanonical({
+        resume_text: resumeText,
+        model: selectedModel,
+        lm_timeout: lmTimeout
+      });
+      onStartCvReview({
+        canonical,
+        job,
+        templateId: selectedTemplate,
+        docType: selectedDocType
+      });
+    } catch (err) {
+      setCvError(err instanceof Error ? err.message : "Failed to generate CV");
+    } finally {
+      setIsGeneratingCv(false);
     }
   };
   return (
@@ -115,6 +150,42 @@ export default function JobModal({
             value={coverLetter}
             placeholder="Generate a tailored cover letter draft..."
           />
+        </div>
+
+        <div className="cover-letter">
+          <div className="rank-header">
+            <h3>CV generation</h3>
+            <button className="secondary" onClick={handleGenerateCv} disabled={isGeneratingCv}>
+              {isGeneratingCv ? "Extracting..." : "Review CV data"}
+            </button>
+          </div>
+          <div className="field-grid">
+            <div>
+              <label htmlFor="cvTemplate" className="label">Template</label>
+              <select
+                id="cvTemplate"
+                value={selectedTemplate}
+                onChange={(e) => setSelectedTemplate(e.target.value)}
+              >
+                <option value="awesomecv">AwesomeCV</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="docType" className="label">Document type</label>
+              <select
+                id="docType"
+                value={selectedDocType}
+                onChange={(e) => setSelectedDocType(e.target.value)}
+              >
+                <option value="resume">Resume</option>
+                <option value="cv">CV</option>
+              </select>
+            </div>
+          </div>
+          {isGeneratingCv && (
+            <p className="progress">Extracting canonical CV data...</p>
+          )}
+          {cvError && <p className="error">{cvError}</p>}
         </div>
 
         <div className="modal-actions">

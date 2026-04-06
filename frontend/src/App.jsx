@@ -5,6 +5,7 @@ import { useJobDescription } from "./hooks/useJobDescription";
 import SearchFilters from "./components/SearchFilters";
 import ResultsList from "./components/ResultsList";
 import JobModal from "./components/JobModal";
+import CvReview from "./components/CvReview";
 
 const CACHE_KEY = "job-agent:search-response";
 
@@ -22,9 +23,11 @@ export default function App() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [cvReview, setCvReview] = useState(null);
   const [models, setModels] = useState([]);
   const [modelError, setModelError] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
+  const [lmTimeout, setLmTimeout] = useState(120);
   const [enableRerank, setEnableRerank] = useState(true);
   const [rerankTopN, setRerankTopN] = useState(null);
   const [weightEmbedding, setWeightEmbedding] = useState(0.8);
@@ -69,6 +72,21 @@ export default function App() {
       if (parsed?.response) {
         setCachedResponse(parsed.response);
         setCachedAt(parsed.savedAt || "");
+        if (typeof parsed.resumeText === "string") setResumeText(parsed.resumeText);
+        if (typeof parsed.wishes === "string") setWishes(parsed.wishes);
+        if (typeof parsed.searchTerm === "string") setSearchTerm(parsed.searchTerm);
+        if (typeof parsed.location === "string") setLocation(parsed.location);
+        if (typeof parsed.resultsWanted === "number") setResultsWanted(parsed.resultsWanted);
+        if (typeof parsed.hoursOld === "number") setHoursOld(parsed.hoursOld);
+        if (typeof parsed.isRemote === "boolean") setIsRemote(parsed.isRemote);
+        if (Array.isArray(parsed.sites)) setSites(parsed.sites);
+        if (typeof parsed.fetchFullDescriptions === "boolean") setFetchFullDescriptions(parsed.fetchFullDescriptions);
+        if (typeof parsed.selectedModel === "string") setSelectedModel(parsed.selectedModel);
+        if (typeof parsed.lmTimeout === "number") setLmTimeout(parsed.lmTimeout);
+        if (typeof parsed.enableRerank === "boolean") setEnableRerank(parsed.enableRerank);
+        if (typeof parsed.rerankTopN === "number" || parsed.rerankTopN === null) setRerankTopN(parsed.rerankTopN ?? null);
+        if (typeof parsed.weightEmbedding === "number") setWeightEmbedding(parsed.weightEmbedding);
+        if (typeof parsed.weightKeyword === "number") setWeightKeyword(parsed.weightKeyword);
       }
     } catch (err) {
       sessionStorage.removeItem(CACHE_KEY);
@@ -91,7 +109,28 @@ export default function App() {
       });
       setResponse(data);
       const savedAt = new Date().toISOString();
-      sessionStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt, response: data }));
+      sessionStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify({
+          savedAt,
+          response: data,
+          resumeText,
+          wishes,
+          searchTerm,
+          location,
+          resultsWanted,
+          hoursOld,
+          isRemote,
+          sites,
+          fetchFullDescriptions,
+          selectedModel,
+          lmTimeout,
+          enableRerank,
+          rerankTopN,
+          weightEmbedding,
+          weightKeyword
+        })
+      );
       setCachedResponse(data);
       setCachedAt(savedAt);
     } catch (err) {
@@ -112,6 +151,11 @@ export default function App() {
     sessionStorage.removeItem(CACHE_KEY);
     setCachedResponse(null);
     setCachedAt("");
+  };
+
+  const handleStartCvReview = ({ canonical, job, templateId, docType }) => {
+    setCvReview({ canonical, job, templateId, docType });
+    setSelectedJob(null);
   };
 
   return (
@@ -140,6 +184,8 @@ export default function App() {
           models={models}
           selectedModel={selectedModel}
           onSelectedModelChange={setSelectedModel}
+          lmTimeout={lmTimeout}
+          onLmTimeoutChange={setLmTimeout}
           modelError={modelError}
           enableRerank={enableRerank}
           onEnableRerankChange={setEnableRerank}
@@ -170,7 +216,21 @@ export default function App() {
           descriptionHtml={descriptionHtml}
           resumeText={resumeText}
           selectedModel={selectedModel}
+          lmTimeout={lmTimeout}
+          onStartCvReview={handleStartCvReview}
           onClose={() => setSelectedJob(null)}
+        />
+      )}
+
+      {cvReview && (
+        <CvReview
+          canonical={cvReview.canonical}
+          job={cvReview.job}
+          templateId={cvReview.templateId}
+          docType={cvReview.docType}
+          model={selectedModel}
+          lmTimeout={lmTimeout}
+          onClose={() => setCvReview(null)}
         />
       )}
     </div>

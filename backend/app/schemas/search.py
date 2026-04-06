@@ -1,6 +1,6 @@
 from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SearchRequest(BaseModel):
@@ -62,7 +62,155 @@ class CoverLetterRequest(BaseModel):
     job_description: str
     job_url: str | None = None
     model: str | None = None
+    lm_timeout: float | None = None
 
 
 class CoverLetterResponse(BaseModel):
     cover_letter: str
+
+
+class CvRequest(BaseModel):
+    resume_text: str
+    job_title: str
+    company: str | None = None
+    job_description: str
+    job_url: str | None = None
+    model: str | None = None
+    template_id: str = "awesomecv"
+    doc_type: str = "resume"
+    lm_timeout: float | None = None
+
+
+class CvCanonicalBullet(BaseModel):
+    id: str
+    text: str
+    source_id: str | None = None
+
+
+class CvCanonicalExperience(BaseModel):
+    id: str
+    title: str
+    organization: str
+    location: str | None = None
+    period: str | None = None
+    bullets: list[CvCanonicalBullet] = Field(default_factory=list)
+
+
+class CvCanonicalEducation(BaseModel):
+    id: str
+    degree: str
+    institution: str | None = None
+    location: str | None = None
+    period: str | None = None
+    bullets: list[CvCanonicalBullet] = Field(default_factory=list)
+
+
+class CvCanonicalSkillGroup(BaseModel):
+    id: str
+    category: str
+    items: list[str] = Field(default_factory=list)
+
+
+class CvCanonicalProject(BaseModel):
+    id: str
+    name: str
+    role: str | None = None
+    period: str | None = None
+    description: str | None = None
+    bullets: list[CvCanonicalBullet] = Field(default_factory=list)
+
+
+class CvCanonicalCertificate(BaseModel):
+    id: str
+    title: str
+    issuer: str | None = None
+    year: str | None = None
+
+
+class CvCanonicalPublication(BaseModel):
+    id: str
+    title: str
+    venue: str | None = None
+    year: str | None = None
+    notes: str | None = None
+
+
+class CvCanonicalLanguage(BaseModel):
+    id: str
+    name: str
+    level: str | None = None
+
+
+class CvCanonicalAward(BaseModel):
+    id: str
+    title: str
+    issuer: str | None = None
+    year: str | None = None
+
+
+class CvCanonicalData(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    headline: str | None = None
+    summary: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    location: str | None = None
+    links: list[str] = Field(default_factory=list)
+    experience: list[CvCanonicalExperience] = Field(default_factory=list)
+    education: list[CvCanonicalEducation] = Field(default_factory=list)
+    skills: list[CvCanonicalSkillGroup] = Field(default_factory=list)
+    projects: list[CvCanonicalProject] = Field(default_factory=list)
+    certificates: list[CvCanonicalCertificate] = Field(default_factory=list)
+    publications: list[CvCanonicalPublication] = Field(default_factory=list)
+    languages: list[CvCanonicalLanguage] = Field(default_factory=list)
+    awards: list[CvCanonicalAward] = Field(default_factory=list)
+
+
+class CvAuditTrail(BaseModel):
+    raw_resume_text: str | None = None
+    parsed_canonical: CvCanonicalData | None = None
+    edited_canonical: CvCanonicalData | None = None
+    final_template_payload: dict | None = None
+
+
+class CvCanonicalProfile(BaseModel):
+    schema_version: str
+    profile_id: str
+    revision: int
+    created_at: str | None = None
+    updated_at: str | None = None
+    data: CvCanonicalData
+    audit: CvAuditTrail | None = None
+
+
+class CvParseRequest(BaseModel):
+    resume_text: str
+    model: str | None = None
+    lm_timeout: float | None = None
+
+
+class CvParseResponse(BaseModel):
+    schema_version: str
+    data: CvCanonicalData
+
+
+class CvValidateRequest(BaseModel):
+    schema_version: str
+    data: CvCanonicalData
+
+
+class CvRenderRequest(BaseModel):
+    data: CvCanonicalData
+    job_title: str
+    company: str | None = None
+    job_description: str
+    job_url: str | None = None
+    model: str | None = None
+    template_id: str = "awesomecv"
+    doc_type: str = "resume"
+    lm_timeout: float | None = None
+
+
+class CvProfileListResponse(BaseModel):
+    profiles: list[CvCanonicalProfile]

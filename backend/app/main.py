@@ -1,15 +1,35 @@
 import math
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
+
+from datetime import datetime
 
 from .schemas.search import (
     CoverLetterRequest,
     CoverLetterResponse,
+    CvParseRequest,
+    CvParseResponse,
+    CvProfileListResponse,
+    CvCanonicalProfile,
+    CvRenderRequest,
+    CvRequest,
+    CvValidateRequest,
     ModelsResponse,
     SearchRequest,
     SearchResponse,
 )
+from .services.cv_service import (
+    ALLOWED_DOC_TYPES,
+    CANONICAL_SCHEMA_VERSION,
+    DEFAULT_TEMPLATE_ID,
+    generate_cv_pdf,
+    map_canonical_to_template,
+    parse_resume_to_canonical,
+    render_cv_pdf_from_payload,
+)
+from .services.cv_storage import RevisionMismatchError, get_profile_store
 from .services.lmstudio_client import chat_completion, list_models, safe_request
 from .services.search_service import fetch_jobs
 from .services.ranking_service import score_jobs
@@ -121,6 +141,7 @@ def generate_cover_letter(payload: CoverLetterRequest) -> CoverLetterResponse:
         ],
         temperature=0.4,
         max_tokens=700,
+        timeout=payload.lm_timeout,
     )
     if error:
         raise HTTPException(status_code=502, detail=f"LMStudio error: {error}")
@@ -129,3 +150,145 @@ def generate_cover_letter(payload: CoverLetterRequest) -> CoverLetterResponse:
         raise HTTPException(status_code=502, detail="LMStudio returned empty content")
 
     return CoverLetterResponse(cover_letter=content or "")
+
+
+@app.post("/cv")
+def generate_cv(payload: CvRequest) -> Response:
+    if not payload.model:
+        raise HTTPException(status_code=400, detail="Model is required")
+
+    try:
+        pdf_bytes = generate_cv_pdf(
+            resume_text=payload.resume_text,
+            job_title=payload.job_title,
+            company=payload.company,
+            job_description=payload.job_description,
+            model=payload.model,
+            doc_type=payload.doc_type,
+            template_id=payload.template_id,
+            lm_timeout=payload.lm_timeout,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        message = str(exc)
+        if "timed out" in message:
+            raise HTTPException(status_code=504, detail=message) from exc
+        raise HTTPException(status_code=502, detail=message) from exc
+
+    filename = f"cv-{payload.doc_type}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
+    )
+
+
+@app.post("/cv/parse", response_model=CvParseResponse)
+def parse_cv(payload: CvParseRequest) -> CvParseResponse:
+    if not payload.model:
+        raise HTTPException(status_code=400, detail="Model is required")
+    try:
+        data = parse_resume_to_canonical(
+            resume_text=payload.resume_text,
+            model=payload.model,
+            lm_timeout=payload.lm_timeout,
+        )
+    except RuntimeError as exc:
+        message = str(exc)
+        if "timed out" in message:
+            raise HTTPException(status_code=504, detail=message) from exc
+        raise HTTPException(status_code=502, detail=message) from exc
+    return CvParseResponse(schema_version=CANONICAL_SCHEMA_VERSION, data=data)
+
+
+@app.post("/cv/validate")
+def validate_cv(payload: CvValidateRequest) -> dict:
+    if payload.schema_version != CANONICAL_SCHEMA_VERSION:
+        raise HTTPException(status_code=400, detail="Unsupported canonical schema version")
+    return {"ok": True}
+
+
+@app.get("/cv/profiles", response_model=CvProfileListResponse)
+def list_cv_profiles() -> CvProfileListResponse:
+    store = get_profile_store()
+    profiles = store.list_profiles()
+    return CvProfileListResponse(profiles=profiles)
+
+
+@app.get("/cv/profiles/{profile_id}", response_model=CvCanonicalProfile)
+def get_cv_profile(profile_id: str) -> CvCanonicalProfile:
+    store = get_profile_store()
+    profile = store.get_profile(profile_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return profile
+
+
+@app.put("/cv/profiles/{profile_id}", response_model=CvCanonicalProfile)
+def save_cv_profile(profile_id: str, payload: CvCanonicalProfile) -> CvCanonicalProfile:
+    if payload.profile_id != profile_id:
+        raise HTTPException(status_code=400, detail="Profile ID mismatch")
+    if payload.schema_version != CANONICAL_SCHEMA_VERSION:
+        raise HTTPException(status_code=400, detail="Unsupported canonical schema version")
+
+    store = get_profile_store()
+    existing = store.get_profile(profile_id)
+    now = datetime.utcnow().isoformat()
+
+    if existing:
+        if payload.revision != existing.revision:
+            raise HTTPException(status_code=409, detail="Profile revision does not match")
+        payload.revision = existing.revision + 1
+        payload.created_at = existing.created_at
+    else:
+        if payload.revision not in (0, None):
+            raise HTTPException(status_code=409, detail="Profile revision does not match")
+        payload.revision = 1
+        payload.created_at = now
+
+    payload.updated_at = now
+    try:
+        return store.save_profile(payload, expected_revision=(existing.revision if existing else 0))
+    except RevisionMismatchError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.delete("/cv/profiles/{profile_id}")
+def delete_cv_profile(profile_id: str) -> dict:
+    store = get_profile_store()
+    store.delete_profile(profile_id)
+    return {"ok": True}
+
+
+@app.post("/cv/render")
+def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
+    if not payload.model:
+        raise HTTPException(status_code=400, detail="Model is required")
+    if payload.template_id != DEFAULT_TEMPLATE_ID:
+        raise HTTPException(status_code=400, detail="Unsupported template_id")
+    if payload.doc_type not in ALLOWED_DOC_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported doc_type")
+
+    try:
+        template_payload, _ = map_canonical_to_template(
+            canonical=payload.data,
+            job_title=payload.job_title,
+            company=payload.company,
+            job_description=payload.job_description,
+            model=payload.model,
+            lm_timeout=payload.lm_timeout,
+        )
+        pdf_bytes = render_cv_pdf_from_payload(payload=template_payload.model_dump(), doc_type=payload.doc_type)
+    except RuntimeError as exc:
+        message = str(exc)
+        if "timed out" in message:
+            raise HTTPException(status_code=504, detail=message) from exc
+        raise HTTPException(status_code=502, detail=message) from exc
+
+    filename = f"cv-{payload.doc_type}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
+    )
