@@ -177,3 +177,47 @@ export async function renderCvFromCanonical(payload) {
   const filename = getFilenameFromDisposition(response.headers.get("Content-Disposition"));
   return { blob, filename };
 }
+
+export async function previewCvMapping(payload) {
+  const response = await fetch(`${BASE_URL}/cv/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = await response.json();
+      detail = data?.detail ? `: ${data.detail}` : "";
+    } catch (err) {
+      detail = "";
+    }
+    throw new Error(`CV preview failed with status ${response.status}${detail}`);
+  }
+
+  return response.json();
+}
+
+export async function renderCvFromTemplate(payload) {
+  const response = await fetch(`${BASE_URL}/cv/render-template`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = await response.json();
+      detail = data?.detail ? `: ${data.detail}` : "";
+    } catch (err) {
+      detail = "";
+    }
+    throw new Error(`CV render failed with status ${response.status}${detail}`);
+  }
+
+  const blob = await response.blob();
+  const filename = getFilenameFromDisposition(response.headers.get("Content-Disposition"));
+  return { blob, filename };
+}

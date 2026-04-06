@@ -13,7 +13,10 @@ from .schemas.search import (
     CvParseResponse,
     CvProfileListResponse,
     CvCanonicalProfile,
+    CvPreviewRequest,
+    CvPreviewResponse,
     CvRenderRequest,
+    CvRenderTemplateRequest,
     CvRequest,
     CvValidateRequest,
     ModelsResponse,
@@ -29,6 +32,7 @@ from .services.cv_service import (
     parse_resume_to_canonical,
     render_cv_pdf_from_payload,
 )
+from .services.cv_mappers.awesomecv import CvAwesomePayload
 from .services.cv_storage import RevisionMismatchError, get_profile_store
 from .services.lmstudio_client import chat_completion, list_models, safe_request
 from .services.search_service import fetch_jobs
@@ -309,6 +313,61 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
             section_order=payload.section_order,
         )
         pdf_bytes = render_cv_pdf_from_payload(payload=template_payload.model_dump(), doc_type=payload.doc_type)
+    except RuntimeError as exc:
+        message = str(exc)
+        if "timed out" in message:
+            raise HTTPException(status_code=504, detail=message) from exc
+        raise HTTPException(status_code=502, detail=message) from exc
+
+    filename = f"cv-{payload.doc_type}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
+    )
+
+
+@app.post("/cv/preview", response_model=CvPreviewResponse)
+def preview_cv_mapping(payload: CvPreviewRequest) -> CvPreviewResponse:
+    if not payload.model:
+        raise HTTPException(status_code=400, detail="Model is required")
+    if payload.template_id != DEFAULT_TEMPLATE_ID:
+        raise HTTPException(status_code=400, detail="Unsupported template_id")
+    if payload.doc_type not in ALLOWED_DOC_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported doc_type")
+    output_language = _normalize_output_language(payload.output_language)
+
+    try:
+        template_payload, _ = map_canonical_to_template(
+            canonical=payload.data,
+            job_title=payload.job_title,
+            company=payload.company,
+            job_description=payload.job_description,
+            model=payload.model,
+            lm_timeout=payload.lm_timeout,
+            output_language=output_language,
+            section_order=payload.section_order,
+        )
+    except RuntimeError as exc:
+        message = str(exc)
+        if "timed out" in message:
+            raise HTTPException(status_code=504, detail=message) from exc
+        raise HTTPException(status_code=502, detail=message) from exc
+
+    return CvPreviewResponse(payload=template_payload.model_dump())
+
+
+@app.post("/cv/render-template")
+def render_cv_from_template(payload: CvRenderTemplateRequest) -> Response:
+    if payload.doc_type not in ALLOWED_DOC_TYPES:
+        raise HTTPException(status_code=400, detail="Unsupported doc_type")
+
+    try:
+        validated_payload = CvAwesomePayload.model_validate(payload.payload)
+        pdf_bytes = render_cv_pdf_from_payload(
+            payload=validated_payload.model_dump(),
+            doc_type=payload.doc_type,
+        )
     except RuntimeError as exc:
         message = str(exc)
         if "timed out" in message:

@@ -393,6 +393,39 @@ select {
   cursor: pointer;
 }
 
+.preview-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.preview-card {
+  border: 1px solid #ececec;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fdfdfd;
+}
+
+.preview-card h4 {
+  margin: 0 0 8px;
+}
+
+.preview-card ul {
+  margin: 8px 0 0 16px;
+}
+
+.preview-item {
+  margin-bottom: 10px;
+}
+
+.preview-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.preview-grid + .section-card {
+  margin-top: 12px;
+}
+
 .modal-header {
   display: flex;
   justify-content: space-between;

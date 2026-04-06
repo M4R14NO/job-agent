@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   deleteCvProfile,
-  renderCvFromCanonical,
+  previewCvMapping,
+  renderCvFromTemplate,
   saveCvProfile,
   validateCvCanonical
 } from "../api/llm";
@@ -174,6 +175,9 @@ export default function CvReview({
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isRendering, setIsRendering] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [previewPayload, setPreviewPayload] = useState(null);
+  const [draggedSection, setDraggedSection] = useState(null);
 
   const schemaVersion = canonical?.schema_version || "v1";
 
@@ -182,11 +186,13 @@ export default function CvReview({
     setSectionOrder(normalizeSectionOrder(canonical?.section_order));
     setProfileId(canonical?.profile_id || "default");
     setRevision(canonical?.revision ?? 0);
+    setPreviewPayload(null);
   }, [canonical]);
 
   const enabledSections = useMemo(() => new Set(sectionOrder), [sectionOrder]);
 
   const toggleSection = (key) => {
+    setPreviewPayload(null);
     setSectionOrder((current) => {
       if (current.includes(key)) {
         return current.filter((section) => section !== key);
@@ -196,6 +202,7 @@ export default function CvReview({
   };
 
   const moveSection = (key, direction) => {
+    setPreviewPayload(null);
     setSectionOrder((current) => {
       const index = current.indexOf(key);
       if (index < 0) return current;
@@ -207,11 +214,34 @@ export default function CvReview({
     });
   };
 
+  const handleDragStart = (event, key) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", key);
+    setDraggedSection(key);
+  };
+
+  const handleDrop = (targetKey) => {
+    setSectionOrder((current) => {
+      if (!draggedSection || draggedSection === targetKey) return current;
+      const updated = [...current];
+      const fromIndex = updated.indexOf(draggedSection);
+      const toIndex = updated.indexOf(targetKey);
+      if (fromIndex < 0 || toIndex < 0) return current;
+      updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, draggedSection);
+      return updated;
+    });
+    setDraggedSection(null);
+    setPreviewPayload(null);
+  };
+
   const updateField = (field, value) => {
+    setPreviewPayload(null);
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const updateListItem = (section, index, patch) => {
+    setPreviewPayload(null);
     setFormData((prev) => {
       const updated = [...prev[section]];
       updated[index] = { ...updated[index], ...patch };
@@ -220,14 +250,17 @@ export default function CvReview({
   };
 
   const addListItem = (section, item) => {
+    setPreviewPayload(null);
     setFormData((prev) => ({ ...prev, [section]: [...prev[section], item] }));
   };
 
   const removeListItem = (section, index) => {
+    setPreviewPayload(null);
     setFormData((prev) => ({ ...prev, [section]: prev[section].filter((_, idx) => idx !== index) }));
   };
 
   const moveListItem = (section, index, direction) => {
+    setPreviewPayload(null);
     setFormData((prev) => {
       const updated = [...prev[section]];
       const nextIndex = direction === "up" ? index - 1 : index + 1;
@@ -282,20 +315,15 @@ export default function CvReview({
       setError("Select a model to render a CV.");
       return;
     }
+    if (!previewPayload) {
+      setError("Preview the mapped CV data before rendering.");
+      return;
+    }
     setIsRendering(true);
     try {
-      const { blob, filename } = await renderCvFromCanonical({
-        data: formData,
-        job_title: job.title,
-        company: job.company,
-        job_description: job.description,
-        job_url: job.job_url,
-        model,
-        template_id: templateId,
-        doc_type: docType,
-        lm_timeout: lmTimeout,
-        output_language: outputLanguage,
-        section_order: sectionOrder
+      const { blob, filename } = await renderCvFromTemplate({
+        payload: previewPayload,
+        doc_type: docType
       });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -312,15 +340,621 @@ export default function CvReview({
     }
   };
 
+  const handlePreview = async () => {
+    setError("");
+    if (!model) {
+      setError("Select a model to preview the CV mapping.");
+      return;
+    }
+    setIsPreviewing(true);
+    try {
+      const result = await previewCvMapping({
+        data: formData,
+        job_title: job.title,
+        company: job.company,
+        job_description: job.description,
+        job_url: job.job_url,
+        model,
+        template_id: templateId,
+        doc_type: docType,
+        lm_timeout: lmTimeout,
+        output_language: outputLanguage,
+        section_order: sectionOrder
+      });
+      setPreviewPayload(result.payload || null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Preview failed");
+    } finally {
+      setIsPreviewing(false);
+    }
+  };
+
+  const updatePreviewField = (field, value) => {
+    setPreviewPayload((prev) => (prev ? { ...prev, [field]: value } : prev));
+  };
+
+  const updatePreviewListItem = (section, index, patch) => {
+    setPreviewPayload((prev) => {
+      if (!prev) return prev;
+      const updated = [...(prev[section] || [])];
+      updated[index] = { ...updated[index], ...patch };
+      return { ...prev, [section]: updated };
+    });
+  };
+
+  const addPreviewListItem = (section, item) => {
+    setPreviewPayload((prev) => {
+      if (!prev) return prev;
+      return { ...prev, [section]: [...(prev[section] || []), item] };
+    });
+  };
+
+  const removePreviewListItem = (section, index) => {
+    setPreviewPayload((prev) => {
+      if (!prev) return prev;
+      return { ...prev, [section]: (prev[section] || []).filter((_, idx) => idx !== index) };
+    });
+  };
+
+  const renderPreviewSection = (key) => {
+    if (!previewPayload) return null;
+    switch (key) {
+      case "summary":
+        return previewPayload.summary ? <p>{previewPayload.summary}</p> : null;
+      case "skills":
+        return (previewPayload.skills || []).map((skill, idx) => (
+          <p key={`${skill.category}-${idx}`}>
+            <strong>{skill.category}:</strong> {skill.list}
+          </p>
+        ));
+      case "languages":
+        return (previewPayload.languages || []).map((lang, idx) => (
+          <p key={`${lang.name}-${idx}`}>
+            <strong>{lang.name}</strong> {lang.level ? `- ${lang.level}` : ""}
+          </p>
+        ));
+      case "interests":
+        return (previewPayload.interests || []).length
+          ? <p>{previewPayload.interests.map((item) => item.name).filter(Boolean).join(", ")}</p>
+          : null;
+      case "experience":
+        return (previewPayload.experience || []).map((entry, idx) => (
+          <div key={`${entry.title}-${idx}`} className="preview-item">
+            <strong>{entry.title}</strong> {entry.organization ? `· ${entry.organization}` : ""}
+            <div className="helper">{[entry.location, entry.period].filter(Boolean).join(" | ")}</div>
+            <ul>
+              {(entry.details || []).map((detail, detailIdx) => (
+                <li key={`${entry.title}-detail-${detailIdx}`}>{detail}</li>
+              ))}
+            </ul>
+          </div>
+        ));
+      case "volunteer":
+        return (previewPayload.volunteer || []).map((entry, idx) => (
+          <div key={`${entry.role}-${idx}`} className="preview-item">
+            <strong>{entry.role}</strong> {entry.organization ? `· ${entry.organization}` : ""}
+            <div className="helper">{[entry.location, entry.period].filter(Boolean).join(" | ")}</div>
+            <ul>
+              {(entry.details || []).map((detail, detailIdx) => (
+                <li key={`${entry.role}-detail-${detailIdx}`}>{detail}</li>
+              ))}
+            </ul>
+          </div>
+        ));
+      case "honors":
+        return (previewPayload.honors || []).map((honor, idx) => (
+          <p key={`${honor.award}-${idx}`}>
+            <strong>{honor.award}</strong> {honor.event ? `· ${honor.event}` : ""} {honor.date ? `(${honor.date})` : ""}
+          </p>
+        ));
+      case "certificates":
+        return (previewPayload.certificates || []).map((cert, idx) => (
+          <p key={`${cert.title}-${idx}`}>
+            <strong>{cert.title}</strong> {cert.organization ? `· ${cert.organization}` : ""} {cert.date ? `(${cert.date})` : ""}
+          </p>
+        ));
+      case "writing":
+        return (previewPayload.writings || []).map((writing, idx) => (
+          <div key={`${writing.title}-${idx}`} className="preview-item">
+            <strong>{writing.title}</strong> {writing.role ? `· ${writing.role}` : ""}
+            <div className="helper">{[writing.location, writing.period].filter(Boolean).join(" | ")}</div>
+            <ul>
+              {(writing.details || []).map((detail, detailIdx) => (
+                <li key={`${writing.title}-detail-${detailIdx}`}>{detail}</li>
+              ))}
+            </ul>
+          </div>
+        ));
+      case "education":
+        return (previewPayload.education || []).map((entry, idx) => (
+          <div key={`${entry.degree}-${idx}`} className="preview-item">
+            <strong>{entry.degree}</strong> {entry.institution ? `· ${entry.institution}` : ""}
+            <div className="helper">{[entry.location, entry.period].filter(Boolean).join(" | ")}</div>
+            <ul>
+              {(entry.details || []).map((detail, detailIdx) => (
+                <li key={`${entry.degree}-detail-${detailIdx}`}>{detail}</li>
+              ))}
+            </ul>
+          </div>
+        ));
+      default:
+        return null;
+    }
+  };
+
+  const renderPreviewEditor = () => {
+    if (!previewPayload) {
+      return <p className="helper">Generate the mapped preview before editing.</p>;
+    }
+
+    return (
+      <div className="preview-grid">
+        {sectionOrder
+          .filter((key) => enabledSections.has(key))
+          .map((key) => (
+            <div key={`edit-${key}`} className="preview-card">
+              <h4>{SECTION_LABELS[key]}</h4>
+              {key === "summary" && (
+                <textarea
+                  value={previewPayload.summary || ""}
+                  onChange={(event) => updatePreviewField("summary", event.target.value)}
+                />
+              )}
+              {key === "skills" && (
+                <div className="preview-stack">
+                  {(previewPayload.skills || []).map((skill, idx) => (
+                    <div key={`skill-${idx}`} className="sub-card">
+                      <div className="sub-card-header">
+                        <strong>Skill {idx + 1}</strong>
+                        <button type="button" className="ghost" onClick={() => removePreviewListItem("skills", idx)}>
+                          Remove
+                        </button>
+                      </div>
+                      <div className="field-grid">
+                        <div>
+                          <label className="label">Category</label>
+                          <input
+                            value={skill.category || ""}
+                            onChange={(event) => updatePreviewListItem("skills", idx, { category: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">List</label>
+                          <input
+                            value={skill.list || ""}
+                            onChange={(event) => updatePreviewListItem("skills", idx, { list: event.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => addPreviewListItem("skills", { category: "", list: "" })}
+                  >
+                    Add skill
+                  </button>
+                </div>
+              )}
+              {key === "languages" && (
+                <div className="preview-stack">
+                  {(previewPayload.languages || []).map((lang, idx) => (
+                    <div key={`lang-${idx}`} className="sub-card">
+                      <div className="sub-card-header">
+                        <strong>Language {idx + 1}</strong>
+                        <button type="button" className="ghost" onClick={() => removePreviewListItem("languages", idx)}>
+                          Remove
+                        </button>
+                      </div>
+                      <div className="field-grid">
+                        <div>
+                          <label className="label">Name</label>
+                          <input
+                            value={lang.name || ""}
+                            onChange={(event) => updatePreviewListItem("languages", idx, { name: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Level</label>
+                          <input
+                            value={lang.level || ""}
+                            onChange={(event) => updatePreviewListItem("languages", idx, { level: event.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => addPreviewListItem("languages", { name: "", level: "" })}
+                  >
+                    Add language
+                  </button>
+                </div>
+              )}
+              {key === "interests" && (
+                <div className="preview-stack">
+                  {(previewPayload.interests || []).map((interest, idx) => (
+                    <div key={`interest-${idx}`} className="sub-card">
+                      <div className="sub-card-header">
+                        <strong>Interest {idx + 1}</strong>
+                        <button type="button" className="ghost" onClick={() => removePreviewListItem("interests", idx)}>
+                          Remove
+                        </button>
+                      </div>
+                      <input
+                        value={interest.name || ""}
+                        onChange={(event) => updatePreviewListItem("interests", idx, { name: event.target.value })}
+                      />
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => addPreviewListItem("interests", { name: "" })}
+                  >
+                    Add interest
+                  </button>
+                </div>
+              )}
+              {key === "experience" && (
+                <div className="preview-stack">
+                  {(previewPayload.experience || []).map((entry, idx) => (
+                    <div key={`exp-${idx}`} className="sub-card">
+                      <div className="sub-card-header">
+                        <strong>Role {idx + 1}</strong>
+                        <button type="button" className="ghost" onClick={() => removePreviewListItem("experience", idx)}>
+                          Remove
+                        </button>
+                      </div>
+                      <div className="field-grid">
+                        <div>
+                          <label className="label">Title</label>
+                          <input
+                            value={entry.title || ""}
+                            onChange={(event) => updatePreviewListItem("experience", idx, { title: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Organization</label>
+                          <input
+                            value={entry.organization || ""}
+                            onChange={(event) => updatePreviewListItem("experience", idx, { organization: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Location</label>
+                          <input
+                            value={entry.location || ""}
+                            onChange={(event) => updatePreviewListItem("experience", idx, { location: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Period</label>
+                          <input
+                            value={entry.period || ""}
+                            onChange={(event) => updatePreviewListItem("experience", idx, { period: event.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <label className="label">Details (one per line)</label>
+                      <textarea
+                        value={(entry.details || []).join("\n")}
+                        onChange={(event) =>
+                          updatePreviewListItem("experience", idx, { details: event.target.value.split("\n").map((line) => line.trim()).filter(Boolean) })
+                        }
+                      />
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => addPreviewListItem("experience", { title: "", organization: "", location: "", period: "", details: [] })}
+                  >
+                    Add experience
+                  </button>
+                </div>
+              )}
+              {key === "volunteer" && (
+                <div className="preview-stack">
+                  {(previewPayload.volunteer || []).map((entry, idx) => (
+                    <div key={`vol-${idx}`} className="sub-card">
+                      <div className="sub-card-header">
+                        <strong>Volunteer {idx + 1}</strong>
+                        <button type="button" className="ghost" onClick={() => removePreviewListItem("volunteer", idx)}>
+                          Remove
+                        </button>
+                      </div>
+                      <div className="field-grid">
+                        <div>
+                          <label className="label">Role</label>
+                          <input
+                            value={entry.role || ""}
+                            onChange={(event) => updatePreviewListItem("volunteer", idx, { role: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Organization</label>
+                          <input
+                            value={entry.organization || ""}
+                            onChange={(event) => updatePreviewListItem("volunteer", idx, { organization: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Location</label>
+                          <input
+                            value={entry.location || ""}
+                            onChange={(event) => updatePreviewListItem("volunteer", idx, { location: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Period</label>
+                          <input
+                            value={entry.period || ""}
+                            onChange={(event) => updatePreviewListItem("volunteer", idx, { period: event.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <label className="label">Details (one per line)</label>
+                      <textarea
+                        value={(entry.details || []).join("\n")}
+                        onChange={(event) =>
+                          updatePreviewListItem("volunteer", idx, { details: event.target.value.split("\n").map((line) => line.trim()).filter(Boolean) })
+                        }
+                      />
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => addPreviewListItem("volunteer", { role: "", organization: "", location: "", period: "", details: [] })}
+                  >
+                    Add volunteer
+                  </button>
+                </div>
+              )}
+              {key === "honors" && (
+                <div className="preview-stack">
+                  {(previewPayload.honors || []).map((honor, idx) => (
+                    <div key={`honor-${idx}`} className="sub-card">
+                      <div className="sub-card-header">
+                        <strong>Honor {idx + 1}</strong>
+                        <button type="button" className="ghost" onClick={() => removePreviewListItem("honors", idx)}>
+                          Remove
+                        </button>
+                      </div>
+                      <div className="field-grid">
+                        <div>
+                          <label className="label">Award</label>
+                          <input
+                            value={honor.award || ""}
+                            onChange={(event) => updatePreviewListItem("honors", idx, { award: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Event</label>
+                          <input
+                            value={honor.event || ""}
+                            onChange={(event) => updatePreviewListItem("honors", idx, { event: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Location</label>
+                          <input
+                            value={honor.location || ""}
+                            onChange={(event) => updatePreviewListItem("honors", idx, { location: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Date</label>
+                          <input
+                            value={honor.date || ""}
+                            onChange={(event) => updatePreviewListItem("honors", idx, { date: event.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => addPreviewListItem("honors", { award: "", event: "", location: "", date: "" })}
+                  >
+                    Add honor
+                  </button>
+                </div>
+              )}
+              {key === "certificates" && (
+                <div className="preview-stack">
+                  {(previewPayload.certificates || []).map((cert, idx) => (
+                    <div key={`cert-${idx}`} className="sub-card">
+                      <div className="sub-card-header">
+                        <strong>Certificate {idx + 1}</strong>
+                        <button type="button" className="ghost" onClick={() => removePreviewListItem("certificates", idx)}>
+                          Remove
+                        </button>
+                      </div>
+                      <div className="field-grid">
+                        <div>
+                          <label className="label">Title</label>
+                          <input
+                            value={cert.title || ""}
+                            onChange={(event) => updatePreviewListItem("certificates", idx, { title: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Organization</label>
+                          <input
+                            value={cert.organization || ""}
+                            onChange={(event) => updatePreviewListItem("certificates", idx, { organization: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Location</label>
+                          <input
+                            value={cert.location || ""}
+                            onChange={(event) => updatePreviewListItem("certificates", idx, { location: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Date</label>
+                          <input
+                            value={cert.date || ""}
+                            onChange={(event) => updatePreviewListItem("certificates", idx, { date: event.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => addPreviewListItem("certificates", { title: "", organization: "", location: "", date: "" })}
+                  >
+                    Add certificate
+                  </button>
+                </div>
+              )}
+              {key === "writing" && (
+                <div className="preview-stack">
+                  {(previewPayload.writings || []).map((writing, idx) => (
+                    <div key={`writing-${idx}`} className="sub-card">
+                      <div className="sub-card-header">
+                        <strong>Writing {idx + 1}</strong>
+                        <button type="button" className="ghost" onClick={() => removePreviewListItem("writings", idx)}>
+                          Remove
+                        </button>
+                      </div>
+                      <div className="field-grid">
+                        <div>
+                          <label className="label">Role</label>
+                          <input
+                            value={writing.role || ""}
+                            onChange={(event) => updatePreviewListItem("writings", idx, { role: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Title</label>
+                          <input
+                            value={writing.title || ""}
+                            onChange={(event) => updatePreviewListItem("writings", idx, { title: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Location</label>
+                          <input
+                            value={writing.location || ""}
+                            onChange={(event) => updatePreviewListItem("writings", idx, { location: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Period</label>
+                          <input
+                            value={writing.period || ""}
+                            onChange={(event) => updatePreviewListItem("writings", idx, { period: event.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <label className="label">Details (one per line)</label>
+                      <textarea
+                        value={(writing.details || []).join("\n")}
+                        onChange={(event) =>
+                          updatePreviewListItem("writings", idx, { details: event.target.value.split("\n").map((line) => line.trim()).filter(Boolean) })
+                        }
+                      />
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => addPreviewListItem("writings", { role: "", title: "", location: "", period: "", details: [] })}
+                  >
+                    Add writing
+                  </button>
+                </div>
+              )}
+              {key === "education" && (
+                <div className="preview-stack">
+                  {(previewPayload.education || []).map((entry, idx) => (
+                    <div key={`edu-${idx}`} className="sub-card">
+                      <div className="sub-card-header">
+                        <strong>Education {idx + 1}</strong>
+                        <button type="button" className="ghost" onClick={() => removePreviewListItem("education", idx)}>
+                          Remove
+                        </button>
+                      </div>
+                      <div className="field-grid">
+                        <div>
+                          <label className="label">Degree</label>
+                          <input
+                            value={entry.degree || ""}
+                            onChange={(event) => updatePreviewListItem("education", idx, { degree: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Institution</label>
+                          <input
+                            value={entry.institution || ""}
+                            onChange={(event) => updatePreviewListItem("education", idx, { institution: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Location</label>
+                          <input
+                            value={entry.location || ""}
+                            onChange={(event) => updatePreviewListItem("education", idx, { location: event.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="label">Period</label>
+                          <input
+                            value={entry.period || ""}
+                            onChange={(event) => updatePreviewListItem("education", idx, { period: event.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <label className="label">Details (one per line)</label>
+                      <textarea
+                        value={(entry.details || []).join("\n")}
+                        onChange={(event) =>
+                          updatePreviewListItem("education", idx, { details: event.target.value.split("\n").map((line) => line.trim()).filter(Boolean) })
+                        }
+                      />
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => addPreviewListItem("education", { degree: "", institution: "", location: "", period: "", details: [] })}
+                  >
+                    Add education
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+      </div>
+    );
+  };
+
   const renderSectionOrder = () => (
     <div className="section-card">
       <div className="section-header">
         <h3>Section order</h3>
-        <p className="helper">Toggle sections and adjust their order.</p>
+        <p className="helper">Toggle sections and adjust their order (drag or use arrows).</p>
       </div>
       <div className="order-list">
         {SECTION_KEYS.map((key) => (
-          <div key={key} className="order-item">
+          <div
+            key={key}
+            className="order-item"
+            draggable
+            onDragStart={(event) => handleDragStart(event, key)}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={() => handleDrop(key)}
+          >
             <label className="checkbox">
               <input
                 type="checkbox"
@@ -873,6 +1507,36 @@ export default function CvReview({
         {sectionOrder.filter((key) => enabledSections.has(key)).map((key) => (
           <div key={key}>{renderSection(key)}</div>
         ))}
+
+        <div className="section-card">
+          <div className="section-header">
+            <h3>Mapped CV preview</h3>
+            <button type="button" className="ghost" onClick={handlePreview} disabled={isPreviewing}>
+              {isPreviewing ? "Mapping..." : "Preview mapping"}
+            </button>
+          </div>
+          {previewPayload ? (
+            <div className="preview-grid">
+              {sectionOrder
+                .filter((key) => enabledSections.has(key))
+                .map((key) => (
+                  <div key={key} className="preview-card">
+                    <h4>{SECTION_LABELS[key]}</h4>
+                    {renderPreviewSection(key) || <p className="helper">No entries.</p>}
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <p className="helper">Generate the mapped preview before rendering the PDF.</p>
+          )}
+          <div className="section-card">
+            <div className="section-header">
+              <h3>Adjust mapped values</h3>
+            </div>
+            <p className="helper">Edit the mapped payload before rendering. You can re-render after adjusting.</p>
+            {renderPreviewEditor()}
+          </div>
+        </div>
 
         {error && <p className="error">{error}</p>}
 

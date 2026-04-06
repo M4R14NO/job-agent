@@ -234,5 +234,28 @@ class CvRenderRequest(BaseModel):
     section_order: list[str] | None = None
 
 
+class CvRenderTemplateRequest(BaseModel):
+    payload: dict
+    doc_type: str = "resume"
+
+
+class CvPreviewRequest(BaseModel):
+    data: CvCanonicalData
+    job_title: str
+    company: str | None = None
+    job_description: str
+    job_url: str | None = None
+    model: str | None = None
+    template_id: str = "awesomecv"
+    doc_type: str = "resume"
+    lm_timeout: float | None = None
+    output_language: str | None = None
+    section_order: list[str] | None = None
+
+
+class CvPreviewResponse(BaseModel):
+    payload: dict
+
+
 class CvProfileListResponse(BaseModel):
     profiles: list[CvCanonicalProfile]
