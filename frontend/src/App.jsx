@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { searchJobs } from "./api/search";
-import { fetchModels } from "./api/llm";
+import { fetchModels, getCvProfile, listCvProfiles, parseCvCanonical } from "./api/llm";
 import { useJobDescription } from "./hooks/useJobDescription";
 import SearchFilters from "./components/SearchFilters";
 import ResultsList from "./components/ResultsList";
@@ -34,6 +34,16 @@ export default function App() {
   const [weightKeyword, setWeightKeyword] = useState(0.2);
   const [cachedResponse, setCachedResponse] = useState(null);
   const [cachedAt, setCachedAt] = useState("");
+  const [cvProfiles, setCvProfiles] = useState([]);
+  const [profilesError, setProfilesError] = useState("");
+  const [profilesLoading, setProfilesLoading] = useState(false);
+  const [selectedProfileId, setSelectedProfileId] = useState("");
+  const [cvTemplateId, setCvTemplateId] = useState("awesomecv");
+  const [cvDocType, setCvDocType] = useState("resume");
+  const [cvOutputLanguage, setCvOutputLanguage] = useState("english");
+  const [cvEntryError, setCvEntryError] = useState("");
+  const [isCreatingCv, setIsCreatingCv] = useState(false);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
 
   const jobs = response?.jobs ?? [];
   const descriptionHtml = useJobDescription(selectedJob);
@@ -62,6 +72,29 @@ export default function App() {
     return () => {
       isMounted = false;
     };
+  }, []);
+
+  const loadProfiles = async () => {
+    setProfilesLoading(true);
+    setProfilesError("");
+    try {
+      const data = await listCvProfiles();
+      const profiles = Array.isArray(data?.profiles) ? data.profiles : [];
+      setCvProfiles(profiles);
+      if (!profiles.length) {
+        setSelectedProfileId("");
+      } else if (!selectedProfileId) {
+        setSelectedProfileId(profiles[0].profile_id || "");
+      }
+    } catch (err) {
+      setProfilesError(err instanceof Error ? err.message : "Failed to load profiles");
+    } finally {
+      setProfilesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProfiles();
   }, []);
 
   useEffect(() => {
@@ -158,6 +191,60 @@ export default function App() {
     setSelectedJob(job);
   };
 
+  const handleStartCvEditor = ({ canonical }) => {
+    setCvReview({
+      canonical,
+      job: { title: "", company: "", description: "", job_url: "" },
+      templateId: cvTemplateId,
+      docType: cvDocType,
+      outputLanguage: cvOutputLanguage
+    });
+    setSelectedJob(null);
+  };
+
+  const handleCreateCvFromResume = async () => {
+    if (!selectedModel) {
+      setCvEntryError("Select a model to create a CV profile.");
+      return;
+    }
+    if (!resumeText.trim()) {
+      setCvEntryError("Resume text is required to create a new profile.");
+      return;
+    }
+    setCvEntryError("");
+    setIsCreatingCv(true);
+    try {
+      const canonical = await parseCvCanonical({
+        resume_text: resumeText,
+        model: selectedModel,
+        lm_timeout: lmTimeout,
+        output_language: cvOutputLanguage
+      });
+      handleStartCvEditor({ canonical });
+    } catch (err) {
+      setCvEntryError(err instanceof Error ? err.message : "Failed to parse resume");
+    } finally {
+      setIsCreatingCv(false);
+    }
+  };
+
+  const handleLoadProfile = async () => {
+    if (!selectedProfileId) {
+      setCvEntryError("Select a profile to load.");
+      return;
+    }
+    setCvEntryError("");
+    setIsLoadingProfile(true);
+    try {
+      const canonical = await getCvProfile(selectedProfileId);
+      handleStartCvEditor({ canonical });
+    } catch (err) {
+      setCvEntryError(err instanceof Error ? err.message : "Failed to load profile");
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  };
+
   const handleSelectJob = (job) => {
     setSelectedJob(job);
     setCvReview(null);
@@ -169,17 +256,19 @@ export default function App() {
   };
 
   const showPanel = Boolean(selectedJob || cvReview);
+  const panelTitle = selectedJob?.title || (cvReview ? "CV editor" : "Job review");
+  const panelEyebrow = selectedJob ? "Review panel" : "CV editor";
 
   if (showPanel) {
     return (
       <div className="panel-page">
         <header className="panel-topbar">
           <button className="secondary" onClick={handleBackToResults}>
-            Back to results
+            {selectedJob ? "Back to results" : "Back to start"}
           </button>
           <div className="panel-heading">
-            <p className="eyebrow">Review panel</p>
-            <h2>{selectedJob?.title || "Job review"}</h2>
+            <p className="eyebrow">{panelEyebrow}</p>
+            <h2>{panelTitle}</h2>
             {selectedJob?.company && <p className="subtitle">{selectedJob.company}</p>}
           </div>
         </header>
@@ -196,7 +285,7 @@ export default function App() {
               />
             ) : (
               <div className="panel-card panel-empty">
-                <p className="helper">Select a job to review details and generate a CV.</p>
+                <p className="helper">No job selected. Mapping will be generic.</p>
               </div>
             )}
           </div>
@@ -263,6 +352,23 @@ export default function App() {
           isLoading={isLoading}
           error={error}
           onSearch={handleSearch}
+          cvProfiles={cvProfiles}
+          profilesLoading={profilesLoading}
+          profilesError={profilesError}
+          selectedProfileId={selectedProfileId}
+          onSelectedProfileIdChange={setSelectedProfileId}
+          onRefreshProfiles={loadProfiles}
+          onLoadProfile={handleLoadProfile}
+          onCreateCvFromResume={handleCreateCvFromResume}
+          isCreatingCv={isCreatingCv}
+          isLoadingProfile={isLoadingProfile}
+          cvEntryError={cvEntryError}
+          cvTemplateId={cvTemplateId}
+          onCvTemplateIdChange={setCvTemplateId}
+          cvDocType={cvDocType}
+          onCvDocTypeChange={setCvDocType}
+          cvOutputLanguage={cvOutputLanguage}
+          onCvOutputLanguageChange={setCvOutputLanguage}
         />
         {response && (
           <ResultsList
