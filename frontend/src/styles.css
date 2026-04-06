@@ -316,6 +316,83 @@ select {
   z-index: 1;
 }
 
+.cv-editor {
+  gap: 20px;
+}
+
+.section-card {
+  border: 1px solid #e6e6e6;
+  border-radius: 16px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  background: #ffffff;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.section-header h3 {
+  margin: 0;
+}
+
+.sub-card {
+  border: 1px solid #ececec;
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+  background: #fafafa;
+}
+
+.sub-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.inline-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.order-list {
+  display: grid;
+  gap: 10px;
+}
+
+.order-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px dashed #d8d8d8;
+  border-radius: 12px;
+  background: #fafafa;
+}
+
+.order-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.ghost {
+  background: transparent;
+  border: 1px solid #d0d0d0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .modal-header {
   display: flex;
   justify-content: space-between;

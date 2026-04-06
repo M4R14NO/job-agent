@@ -1,10 +1,161 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   deleteCvProfile,
   renderCvFromCanonical,
   saveCvProfile,
   validateCvCanonical
 } from "../api/llm";
+
+const DEFAULT_SECTION_ORDER = [
+  "summary",
+  "skills",
+  "languages",
+  "interests",
+  "experience",
+  "volunteer",
+  "honors",
+  "certificates",
+  "writing",
+  "education"
+];
+
+const SECTION_LABELS = {
+  summary: "Summary",
+  skills: "Skills",
+  languages: "Languages",
+  interests: "Interests",
+  experience: "Experience",
+  volunteer: "Volunteer",
+  honors: "Honors & Awards",
+  certificates: "Certificates",
+  writing: "Publications",
+  education: "Education"
+};
+
+const SECTION_KEYS = Object.keys(SECTION_LABELS);
+
+const emptyCanonical = {
+  first_name: "",
+  last_name: "",
+  headline: "",
+  summary: "",
+  email: "",
+  phone: "",
+  location: "",
+  links: [],
+  experience: [],
+  education: [],
+  skills: [],
+  projects: [],
+  volunteer: [],
+  certificates: [],
+  publications: [],
+  languages: [],
+  interests: [],
+  awards: []
+};
+
+const makeId = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 8)}`;
+
+const normalizeBullets = (bullets = [], prefix) =>
+  bullets
+    .filter((bullet) => bullet && typeof bullet.text === "string")
+    .map((bullet) => ({
+      id: bullet.id || makeId(prefix),
+      text: bullet.text,
+      source_id: bullet.source_id ?? null
+    }));
+
+const normalizeList = (items = [], prefix) =>
+  items.map((item) => ({ ...item, id: item.id || makeId(prefix) }));
+
+const normalizeCanonical = (data) => {
+  if (!data) return { ...emptyCanonical };
+  return {
+    ...emptyCanonical,
+    ...data,
+    first_name: data.first_name || "",
+    last_name: data.last_name || "",
+    headline: data.headline || "",
+    summary: data.summary || "",
+    email: data.email || "",
+    phone: data.phone || "",
+    location: data.location || "",
+    links: Array.isArray(data.links) ? data.links : [],
+    experience: (data.experience || []).map((entry) => ({
+      id: entry.id || makeId("exp"),
+      title: entry.title || "",
+      organization: entry.organization || "",
+      location: entry.location || "",
+      period: entry.period || "",
+      bullets: normalizeBullets(entry.bullets, "exp_bullet")
+    })),
+    education: (data.education || []).map((entry) => ({
+      id: entry.id || makeId("edu"),
+      degree: entry.degree || "",
+      institution: entry.institution || "",
+      location: entry.location || "",
+      period: entry.period || "",
+      bullets: normalizeBullets(entry.bullets, "edu_bullet")
+    })),
+    skills: normalizeList(data.skills || [], "skill").map((entry) => ({
+      ...entry,
+      category: entry.category || "",
+      items: Array.isArray(entry.items) ? entry.items : []
+    })),
+    volunteer: (data.volunteer || []).map((entry) => ({
+      id: entry.id || makeId("vol"),
+      role: entry.role || "",
+      organization: entry.organization || "",
+      location: entry.location || "",
+      period: entry.period || "",
+      bullets: normalizeBullets(entry.bullets, "vol_bullet")
+    })),
+    certificates: normalizeList(data.certificates || [], "cert").map((entry) => ({
+      ...entry,
+      title: entry.title || "",
+      issuer: entry.issuer || "",
+      year: entry.year || ""
+    })),
+    publications: normalizeList(data.publications || [], "pub").map((entry) => ({
+      ...entry,
+      title: entry.title || "",
+      venue: entry.venue || "",
+      year: entry.year || "",
+      notes: entry.notes || ""
+    })),
+    languages: normalizeList(data.languages || [], "lang").map((entry) => ({
+      ...entry,
+      name: entry.name || "",
+      level: entry.level || ""
+    })),
+    interests: normalizeList(data.interests || [], "int").map((entry) => ({
+      ...entry,
+      name: entry.name || ""
+    })),
+    awards: normalizeList(data.awards || [], "award").map((entry) => ({
+      ...entry,
+      title: entry.title || "",
+      issuer: entry.issuer || "",
+      year: entry.year || ""
+    }))
+  };
+};
+
+const normalizeSectionOrder = (order) => {
+  const base = Array.isArray(order) && order.length ? order : DEFAULT_SECTION_ORDER;
+  const filtered = base.filter((section) => SECTION_KEYS.includes(section));
+  return filtered.length ? filtered : DEFAULT_SECTION_ORDER;
+};
+
+const bulletsToText = (bullets) => bullets.map((bullet) => bullet.text).join("\n");
+
+const textToBullets = (text, prefix) =>
+  text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => ({ id: makeId(prefix), text: line, source_id: null }));
 
 export default function CvReview({
   canonical,
@@ -18,29 +169,78 @@ export default function CvReview({
 }) {
   const [profileId, setProfileId] = useState(canonical?.profile_id || "default");
   const [revision, setRevision] = useState(canonical?.revision ?? 0);
-  const [jsonText, setJsonText] = useState(() => JSON.stringify(canonical?.data || {}, null, 2));
+  const [formData, setFormData] = useState(() => normalizeCanonical(canonical?.data));
+  const [sectionOrder, setSectionOrder] = useState(() => normalizeSectionOrder(canonical?.section_order));
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isRendering, setIsRendering] = useState(false);
 
   const schemaVersion = canonical?.schema_version || "v1";
 
-  const parsedData = useMemo(() => {
-    try {
-      return JSON.parse(jsonText);
-    } catch (err) {
-      return null;
-    }
-  }, [jsonText]);
+  useEffect(() => {
+    setFormData(normalizeCanonical(canonical?.data));
+    setSectionOrder(normalizeSectionOrder(canonical?.section_order));
+    setProfileId(canonical?.profile_id || "default");
+    setRevision(canonical?.revision ?? 0);
+  }, [canonical]);
+
+  const enabledSections = useMemo(() => new Set(sectionOrder), [sectionOrder]);
+
+  const toggleSection = (key) => {
+    setSectionOrder((current) => {
+      if (current.includes(key)) {
+        return current.filter((section) => section !== key);
+      }
+      return [...current, key];
+    });
+  };
+
+  const moveSection = (key, direction) => {
+    setSectionOrder((current) => {
+      const index = current.indexOf(key);
+      if (index < 0) return current;
+      const nextIndex = direction === "up" ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= current.length) return current;
+      const updated = [...current];
+      [updated[index], updated[nextIndex]] = [updated[nextIndex], updated[index]];
+      return updated;
+    });
+  };
+
+  const updateField = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updateListItem = (section, index, patch) => {
+    setFormData((prev) => {
+      const updated = [...prev[section]];
+      updated[index] = { ...updated[index], ...patch };
+      return { ...prev, [section]: updated };
+    });
+  };
+
+  const addListItem = (section, item) => {
+    setFormData((prev) => ({ ...prev, [section]: [...prev[section], item] }));
+  };
+
+  const removeListItem = (section, index) => {
+    setFormData((prev) => ({ ...prev, [section]: prev[section].filter((_, idx) => idx !== index) }));
+  };
+
+  const moveListItem = (section, index, direction) => {
+    setFormData((prev) => {
+      const updated = [...prev[section]];
+      const nextIndex = direction === "up" ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= updated.length) return prev;
+      [updated[index], updated[nextIndex]] = [updated[nextIndex], updated[index]];
+      return { ...prev, [section]: updated };
+    });
+  };
 
   const handleValidate = async () => {
     setError("");
-    if (!parsedData) {
-      setError("Invalid JSON in canonical data.");
-      return;
-    }
     try {
-      await validateCvCanonical({ schema_version: schemaVersion, data: parsedData });
+      await validateCvCanonical({ schema_version: schemaVersion, data: formData });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Validation failed");
     }
@@ -48,17 +248,14 @@ export default function CvReview({
 
   const handleSave = async () => {
     setError("");
-    if (!parsedData) {
-      setError("Invalid JSON in canonical data.");
-      return;
-    }
     setIsSaving(true);
     try {
       const payload = {
         schema_version: schemaVersion,
         profile_id: profileId,
         revision,
-        data: parsedData
+        data: formData,
+        section_order: sectionOrder
       };
       const saved = await saveCvProfile(profileId, payload);
       setRevision(saved.revision);
@@ -81,10 +278,6 @@ export default function CvReview({
 
   const handleRender = async () => {
     setError("");
-    if (!parsedData) {
-      setError("Invalid JSON in canonical data.");
-      return;
-    }
     if (!model) {
       setError("Select a model to render a CV.");
       return;
@@ -92,7 +285,7 @@ export default function CvReview({
     setIsRendering(true);
     try {
       const { blob, filename } = await renderCvFromCanonical({
-        data: parsedData,
+        data: formData,
         job_title: job.title,
         company: job.company,
         job_description: job.description,
@@ -101,7 +294,8 @@ export default function CvReview({
         template_id: templateId,
         doc_type: docType,
         lm_timeout: lmTimeout,
-        output_language: outputLanguage
+        output_language: outputLanguage,
+        section_order: sectionOrder
       });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -118,15 +312,543 @@ export default function CvReview({
     }
   };
 
+  const renderSectionOrder = () => (
+    <div className="section-card">
+      <div className="section-header">
+        <h3>Section order</h3>
+        <p className="helper">Toggle sections and adjust their order.</p>
+      </div>
+      <div className="order-list">
+        {SECTION_KEYS.map((key) => (
+          <div key={key} className="order-item">
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={enabledSections.has(key)}
+                onChange={() => toggleSection(key)}
+              />
+              <span>{SECTION_LABELS[key]}</span>
+            </label>
+            <div className="order-actions">
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => moveSection(key, "up")}
+                disabled={!enabledSections.has(key)}
+              >
+                Up
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => moveSection(key, "down")}
+                disabled={!enabledSections.has(key)}
+              >
+                Down
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderBasics = () => (
+    <div className="section-card">
+      <div className="section-header">
+        <h3>Basics</h3>
+        <p className="helper">Personal details used in the header.</p>
+      </div>
+      <div className="field-grid">
+        <div>
+          <label className="label">First name</label>
+          <input value={formData.first_name} onChange={(e) => updateField("first_name", e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Last name</label>
+          <input value={formData.last_name} onChange={(e) => updateField("last_name", e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Headline</label>
+          <input value={formData.headline} onChange={(e) => updateField("headline", e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Location</label>
+          <input value={formData.location} onChange={(e) => updateField("location", e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Email</label>
+          <input value={formData.email} onChange={(e) => updateField("email", e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Phone</label>
+          <input value={formData.phone} onChange={(e) => updateField("phone", e.target.value)} />
+        </div>
+      </div>
+      <div>
+        <label className="label">Links (comma separated)</label>
+        <input
+          value={formData.links.join(", ")}
+          onChange={(e) => updateField("links", e.target.value.split(",").map((item) => item.trim()).filter(Boolean))}
+        />
+      </div>
+    </div>
+  );
+
+  const renderSummary = () => (
+    <div className="section-card">
+      <div className="section-header">
+        <h3>Summary</h3>
+      </div>
+      <textarea
+        value={formData.summary}
+        onChange={(e) => updateField("summary", e.target.value)}
+        placeholder="Short professional summary"
+      />
+    </div>
+  );
+
+  const renderExperience = () => (
+    <div className="section-card">
+      <div className="section-header">
+        <h3>Experience</h3>
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => addListItem("experience", {
+            id: makeId("exp"),
+            title: "",
+            organization: "",
+            location: "",
+            period: "",
+            bullets: []
+          })}
+        >
+          Add
+        </button>
+      </div>
+      {formData.experience.map((entry, index) => (
+        <div key={entry.id} className="sub-card">
+          <div className="sub-card-header">
+            <strong>Role {index + 1}</strong>
+            <div className="inline-actions">
+              <button type="button" className="ghost" onClick={() => moveListItem("experience", index, "up")}>Up</button>
+              <button type="button" className="ghost" onClick={() => moveListItem("experience", index, "down")}>Down</button>
+              <button type="button" className="ghost" onClick={() => removeListItem("experience", index)}>Remove</button>
+            </div>
+          </div>
+          <div className="field-grid">
+            <div>
+              <label className="label">Title</label>
+              <input value={entry.title} onChange={(e) => updateListItem("experience", index, { title: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Organization</label>
+              <input value={entry.organization} onChange={(e) => updateListItem("experience", index, { organization: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Location</label>
+              <input value={entry.location} onChange={(e) => updateListItem("experience", index, { location: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Period</label>
+              <input value={entry.period} onChange={(e) => updateListItem("experience", index, { period: e.target.value })} />
+            </div>
+          </div>
+          <label className="label">Highlights (one per line)</label>
+          <textarea
+            value={bulletsToText(entry.bullets)}
+            onChange={(e) => updateListItem("experience", index, { bullets: textToBullets(e.target.value, "exp_bullet") })}
+          />
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderEducation = () => (
+    <div className="section-card">
+      <div className="section-header">
+        <h3>Education</h3>
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => addListItem("education", {
+            id: makeId("edu"),
+            degree: "",
+            institution: "",
+            location: "",
+            period: "",
+            bullets: []
+          })}
+        >
+          Add
+        </button>
+      </div>
+      {formData.education.map((entry, index) => (
+        <div key={entry.id} className="sub-card">
+          <div className="sub-card-header">
+            <strong>Education {index + 1}</strong>
+            <div className="inline-actions">
+              <button type="button" className="ghost" onClick={() => moveListItem("education", index, "up")}>Up</button>
+              <button type="button" className="ghost" onClick={() => moveListItem("education", index, "down")}>Down</button>
+              <button type="button" className="ghost" onClick={() => removeListItem("education", index)}>Remove</button>
+            </div>
+          </div>
+          <div className="field-grid">
+            <div>
+              <label className="label">Degree</label>
+              <input value={entry.degree} onChange={(e) => updateListItem("education", index, { degree: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Institution</label>
+              <input value={entry.institution} onChange={(e) => updateListItem("education", index, { institution: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Location</label>
+              <input value={entry.location} onChange={(e) => updateListItem("education", index, { location: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Period</label>
+              <input value={entry.period} onChange={(e) => updateListItem("education", index, { period: e.target.value })} />
+            </div>
+          </div>
+          <label className="label">Details (one per line)</label>
+          <textarea
+            value={bulletsToText(entry.bullets)}
+            onChange={(e) => updateListItem("education", index, { bullets: textToBullets(e.target.value, "edu_bullet") })}
+          />
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderSkills = () => (
+    <div className="section-card">
+      <div className="section-header">
+        <h3>Skills</h3>
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => addListItem("skills", { id: makeId("skill"), category: "", items: [] })}
+        >
+          Add
+        </button>
+      </div>
+      {formData.skills.map((entry, index) => (
+        <div key={entry.id} className="sub-card">
+          <div className="sub-card-header">
+            <strong>Skill group {index + 1}</strong>
+            <div className="inline-actions">
+              <button type="button" className="ghost" onClick={() => moveListItem("skills", index, "up")}>Up</button>
+              <button type="button" className="ghost" onClick={() => moveListItem("skills", index, "down")}>Down</button>
+              <button type="button" className="ghost" onClick={() => removeListItem("skills", index)}>Remove</button>
+            </div>
+          </div>
+          <div className="field-grid">
+            <div>
+              <label className="label">Category</label>
+              <input value={entry.category} onChange={(e) => updateListItem("skills", index, { category: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Items (comma separated)</label>
+              <input
+                value={entry.items.join(", ")}
+                onChange={(e) =>
+                  updateListItem("skills", index, {
+                    items: e.target.value.split(",").map((item) => item.trim()).filter(Boolean)
+                  })
+                }
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderVolunteer = () => (
+    <div className="section-card">
+      <div className="section-header">
+        <h3>Volunteer</h3>
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => addListItem("volunteer", {
+            id: makeId("vol"),
+            role: "",
+            organization: "",
+            location: "",
+            period: "",
+            bullets: []
+          })}
+        >
+          Add
+        </button>
+      </div>
+      {formData.volunteer.map((entry, index) => (
+        <div key={entry.id} className="sub-card">
+          <div className="sub-card-header">
+            <strong>Volunteer {index + 1}</strong>
+            <div className="inline-actions">
+              <button type="button" className="ghost" onClick={() => moveListItem("volunteer", index, "up")}>Up</button>
+              <button type="button" className="ghost" onClick={() => moveListItem("volunteer", index, "down")}>Down</button>
+              <button type="button" className="ghost" onClick={() => removeListItem("volunteer", index)}>Remove</button>
+            </div>
+          </div>
+          <div className="field-grid">
+            <div>
+              <label className="label">Role</label>
+              <input value={entry.role} onChange={(e) => updateListItem("volunteer", index, { role: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Organization</label>
+              <input value={entry.organization} onChange={(e) => updateListItem("volunteer", index, { organization: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Location</label>
+              <input value={entry.location} onChange={(e) => updateListItem("volunteer", index, { location: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Period</label>
+              <input value={entry.period} onChange={(e) => updateListItem("volunteer", index, { period: e.target.value })} />
+            </div>
+          </div>
+          <label className="label">Highlights (one per line)</label>
+          <textarea
+            value={bulletsToText(entry.bullets)}
+            onChange={(e) => updateListItem("volunteer", index, { bullets: textToBullets(e.target.value, "vol_bullet") })}
+          />
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderLanguages = () => (
+    <div className="section-card">
+      <div className="section-header">
+        <h3>Languages</h3>
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => addListItem("languages", { id: makeId("lang"), name: "", level: "" })}
+        >
+          Add
+        </button>
+      </div>
+      {formData.languages.map((entry, index) => (
+        <div key={entry.id} className="sub-card">
+          <div className="sub-card-header">
+            <strong>Language {index + 1}</strong>
+            <div className="inline-actions">
+              <button type="button" className="ghost" onClick={() => moveListItem("languages", index, "up")}>Up</button>
+              <button type="button" className="ghost" onClick={() => moveListItem("languages", index, "down")}>Down</button>
+              <button type="button" className="ghost" onClick={() => removeListItem("languages", index)}>Remove</button>
+            </div>
+          </div>
+          <div className="field-grid">
+            <div>
+              <label className="label">Name</label>
+              <input value={entry.name} onChange={(e) => updateListItem("languages", index, { name: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Level</label>
+              <input value={entry.level} onChange={(e) => updateListItem("languages", index, { level: e.target.value })} />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderInterests = () => (
+    <div className="section-card">
+      <div className="section-header">
+        <h3>Interests</h3>
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => addListItem("interests", { id: makeId("int"), name: "" })}
+        >
+          Add
+        </button>
+      </div>
+      {formData.interests.map((entry, index) => (
+        <div key={entry.id} className="sub-card">
+          <div className="sub-card-header">
+            <strong>Interest {index + 1}</strong>
+            <div className="inline-actions">
+              <button type="button" className="ghost" onClick={() => moveListItem("interests", index, "up")}>Up</button>
+              <button type="button" className="ghost" onClick={() => moveListItem("interests", index, "down")}>Down</button>
+              <button type="button" className="ghost" onClick={() => removeListItem("interests", index)}>Remove</button>
+            </div>
+          </div>
+          <input value={entry.name} onChange={(e) => updateListItem("interests", index, { name: e.target.value })} />
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderHonors = () => (
+    <div className="section-card">
+      <div className="section-header">
+        <h3>Honors & Awards</h3>
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => addListItem("awards", { id: makeId("award"), title: "", issuer: "", year: "" })}
+        >
+          Add
+        </button>
+      </div>
+      {formData.awards.map((entry, index) => (
+        <div key={entry.id} className="sub-card">
+          <div className="sub-card-header">
+            <strong>Award {index + 1}</strong>
+            <div className="inline-actions">
+              <button type="button" className="ghost" onClick={() => moveListItem("awards", index, "up")}>Up</button>
+              <button type="button" className="ghost" onClick={() => moveListItem("awards", index, "down")}>Down</button>
+              <button type="button" className="ghost" onClick={() => removeListItem("awards", index)}>Remove</button>
+            </div>
+          </div>
+          <div className="field-grid">
+            <div>
+              <label className="label">Title</label>
+              <input value={entry.title} onChange={(e) => updateListItem("awards", index, { title: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Issuer</label>
+              <input value={entry.issuer} onChange={(e) => updateListItem("awards", index, { issuer: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Year</label>
+              <input value={entry.year} onChange={(e) => updateListItem("awards", index, { year: e.target.value })} />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderCertificates = () => (
+    <div className="section-card">
+      <div className="section-header">
+        <h3>Certificates</h3>
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => addListItem("certificates", { id: makeId("cert"), title: "", issuer: "", year: "" })}
+        >
+          Add
+        </button>
+      </div>
+      {formData.certificates.map((entry, index) => (
+        <div key={entry.id} className="sub-card">
+          <div className="sub-card-header">
+            <strong>Certificate {index + 1}</strong>
+            <div className="inline-actions">
+              <button type="button" className="ghost" onClick={() => moveListItem("certificates", index, "up")}>Up</button>
+              <button type="button" className="ghost" onClick={() => moveListItem("certificates", index, "down")}>Down</button>
+              <button type="button" className="ghost" onClick={() => removeListItem("certificates", index)}>Remove</button>
+            </div>
+          </div>
+          <div className="field-grid">
+            <div>
+              <label className="label">Title</label>
+              <input value={entry.title} onChange={(e) => updateListItem("certificates", index, { title: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Issuer</label>
+              <input value={entry.issuer} onChange={(e) => updateListItem("certificates", index, { issuer: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Year</label>
+              <input value={entry.year} onChange={(e) => updateListItem("certificates", index, { year: e.target.value })} />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderWriting = () => (
+    <div className="section-card">
+      <div className="section-header">
+        <h3>Publications</h3>
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => addListItem("publications", { id: makeId("pub"), title: "", venue: "", year: "", notes: "" })}
+        >
+          Add
+        </button>
+      </div>
+      {formData.publications.map((entry, index) => (
+        <div key={entry.id} className="sub-card">
+          <div className="sub-card-header">
+            <strong>Publication {index + 1}</strong>
+            <div className="inline-actions">
+              <button type="button" className="ghost" onClick={() => moveListItem("publications", index, "up")}>Up</button>
+              <button type="button" className="ghost" onClick={() => moveListItem("publications", index, "down")}>Down</button>
+              <button type="button" className="ghost" onClick={() => removeListItem("publications", index)}>Remove</button>
+            </div>
+          </div>
+          <div className="field-grid">
+            <div>
+              <label className="label">Title</label>
+              <input value={entry.title} onChange={(e) => updateListItem("publications", index, { title: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Venue</label>
+              <input value={entry.venue} onChange={(e) => updateListItem("publications", index, { venue: e.target.value })} />
+            </div>
+            <div>
+              <label className="label">Year</label>
+              <input value={entry.year} onChange={(e) => updateListItem("publications", index, { year: e.target.value })} />
+            </div>
+          </div>
+          <label className="label">Notes</label>
+          <textarea value={entry.notes} onChange={(e) => updateListItem("publications", index, { notes: e.target.value })} />
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderSection = (key) => {
+    switch (key) {
+      case "summary":
+        return renderSummary();
+      case "skills":
+        return renderSkills();
+      case "languages":
+        return renderLanguages();
+      case "interests":
+        return renderInterests();
+      case "experience":
+        return renderExperience();
+      case "volunteer":
+        return renderVolunteer();
+      case "honors":
+        return renderHonors();
+      case "certificates":
+        return renderCertificates();
+      case "writing":
+        return renderWriting();
+      case "education":
+        return renderEducation();
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="modal" role="dialog" aria-modal="true">
       <div className="modal-backdrop" onClick={onClose} />
-      <div className="modal-card">
+      <div className="modal-card cv-editor">
         <div className="modal-header">
           <div>
             <p className="eyebrow">CV review</p>
-            <h2>Canonical CV data</h2>
-            <p className="subtitle">Review and edit before rendering.</p>
+            <h2>CV editor</h2>
+            <p className="subtitle">Edit sections and set the final order.</p>
           </div>
           <button className="secondary" onClick={onClose}>Close</button>
         </div>
@@ -146,13 +868,11 @@ export default function CvReview({
           </div>
         </div>
 
-        <label className="label" htmlFor="canonicalJson">Canonical JSON</label>
-        <textarea
-          id="canonicalJson"
-          className="code-area"
-          value={jsonText}
-          onChange={(e) => setJsonText(e.target.value)}
-        />
+        {renderBasics()}
+        {renderSectionOrder()}
+        {sectionOrder.filter((key) => enabledSections.has(key)).map((key) => (
+          <div key={key}>{renderSection(key)}</div>
+        ))}
 
         {error && <p className="error">{error}</p>}
 

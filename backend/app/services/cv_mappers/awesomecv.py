@@ -16,6 +16,7 @@ MAX_SKILL_GROUPS = 4
 MAX_VOLUNTEER_ENTRIES = 3
 MAX_LANGUAGE_ENTRIES = 6
 MAX_INTEREST_ENTRIES = 6
+MAX_HONOR_ENTRIES = 6
 MAX_BULLETS_PER_ENTRY = 4
 MAX_BULLET_CHARS = 180
 MAX_SUMMARY_CHARS = 600
@@ -88,6 +89,9 @@ class CvWriting(BaseModel):
     period: str | None = None
     details: list[str] | None = None
 
+    class Config:
+        extra = "forbid"
+
 
 class CvVolunteer(BaseModel):
     role: str | None = None
@@ -114,6 +118,13 @@ class CvInterest(BaseModel):
     class Config:
         extra = "forbid"
 
+
+class CvHonor(BaseModel):
+    award: str | None = None
+    event: str | None = None
+    location: str | None = None
+    date: str | None = None
+
     class Config:
         extra = "forbid"
 
@@ -135,9 +146,11 @@ class CvAwesomePayload(BaseModel):
     volunteer: list[CvVolunteer] = Field(default_factory=list)
     languages: list[CvLanguage] = Field(default_factory=list)
     interests: list[CvInterest] = Field(default_factory=list)
+    honors: list[CvHonor] = Field(default_factory=list)
     certificates: list[CvCertificate] = Field(default_factory=list)
     writings: list[CvWriting] = Field(default_factory=list)
     sections: CvSections = Field(default_factory=CvSections)
+    section_order: list[str] = Field(default_factory=list)
 
     class Config:
         extra = "forbid"
@@ -179,7 +192,7 @@ def _build_template_prompt(
         f"{language_line}"
         "You may rephrase, select, and reorder bullets to fit the job description. "
         "Respect these caps: experience entries <= 4, education entries <= 3, skills groups <= 4, "
-        "volunteer entries <= 3, languages <= 6, interests <= 6, bullets per entry <= 4. "
+        "volunteer entries <= 3, languages <= 6, interests <= 6, honors <= 6, bullets per entry <= 4. "
         "Provide provenance by listing source IDs for each output bullet. "
         "Return JSON only with the exact keys listed below.\n\n"
         "Required JSON schema:\n"
@@ -213,6 +226,9 @@ def _build_template_prompt(
         "    \"interests\": [\n"
         "      {\"name\": string or empty}\n"
         "    ],\n"
+        "    \"honors\": [\n"
+        "      {\"award\": string or empty, \"event\": string or empty, \"location\": string or empty, \"date\": string or empty}\n"
+        "    ],\n"
         "    \"certificates\": [\n"
         "      {\"title\": string, \"organization\": string or empty, \"location\": string or empty, \"date\": string or empty}\n"
         "    ],\n"
@@ -227,7 +243,7 @@ def _build_template_prompt(
         "      \"volunteer\": true/false,\n"
         "      \"languages\": true/false,\n"
         "      \"interests\": true/false,\n"
-        "      \"honors\": false,\n"
+        "      \"honors\": true/false,\n"
         "      \"certificates\": true/false,\n"
         "      \"presentation\": false,\n"
         "      \"writing\": true/false,\n"
@@ -255,6 +271,7 @@ def _enforce_template_limits(data: dict) -> dict:
     data["volunteer"] = data.get("volunteer", [])[:MAX_VOLUNTEER_ENTRIES]
     data["languages"] = data.get("languages", [])[:MAX_LANGUAGE_ENTRIES]
     data["interests"] = data.get("interests", [])[:MAX_INTEREST_ENTRIES]
+    data["honors"] = data.get("honors", [])[:MAX_HONOR_ENTRIES]
 
     for entry in data.get("experience", []):
         items = entry.get("details") or []
@@ -346,6 +363,17 @@ def _fallback_payload_from_canonical(canonical: CvCanonicalData) -> dict:
     for entry in canonical.interests[:MAX_INTEREST_ENTRIES]:
         interests.append({"name": entry.name or ""})
 
+    honors = []
+    for entry in canonical.awards[:MAX_HONOR_ENTRIES]:
+        honors.append(
+            {
+                "award": entry.title or "",
+                "event": entry.issuer or "",
+                "location": "",
+                "date": entry.year or "",
+            }
+        )
+
     certificates = []
     for entry in canonical.certificates:
         certificates.append(
@@ -377,6 +405,7 @@ def _fallback_payload_from_canonical(canonical: CvCanonicalData) -> dict:
         "volunteer": volunteer,
         "languages": languages,
         "interests": interests,
+        "honors": honors,
         "certificates": certificates,
         "writings": writing,
     }
@@ -397,6 +426,7 @@ def map_canonical_to_template(
     model: str,
     lm_timeout: float | None = None,
     output_language: str | None = None,
+    section_order: list[str] | None = None,
 ) -> tuple[CvAwesomePayload, list[CvTemplateProvenance]]:
     prompt = _build_template_prompt(canonical, job_title, company, job_description, output_language=output_language)
     json_schema = CvTemplateMapping.model_json_schema()
@@ -489,6 +519,12 @@ def map_canonical_to_template(
     elif data.get("interests"):
         data["sections"]["interests"] = True
 
+    if not data.get("honors") and fallback["honors"]:
+        data["honors"] = fallback["honors"]
+        data["sections"]["honors"] = True
+    elif data.get("honors"):
+        data["sections"]["honors"] = True
+
     if not data.get("certificates") and fallback["certificates"]:
         data["certificates"] = fallback["certificates"]
         data["sections"]["certificates"] = True
@@ -496,6 +532,9 @@ def map_canonical_to_template(
     if not data.get("writings") and fallback["writings"]:
         data["writings"] = fallback["writings"]
         data["sections"]["writing"] = True
+
+    if section_order:
+        data["section_order"] = section_order
 
     validated_payload = CvAwesomePayload.model_validate(data)
     return validated_payload, validated.provenance

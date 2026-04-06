@@ -199,6 +199,7 @@ class CvCanonicalProfile(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
     data: CvCanonicalData
+    section_order: list[str] | None = None
     audit: CvAuditTrail | None = None
 
 
@@ -230,6 +231,7 @@ class CvRenderRequest(BaseModel):
     doc_type: str = "resume"
     lm_timeout: float | None = None
     output_language: str | None = None
+    section_order: list[str] | None = None
 
 
 class CvProfileListResponse(BaseModel):

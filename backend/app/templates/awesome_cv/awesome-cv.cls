@@ -676,6 +676,9 @@
 \newenvironment{cventries}{%
   \vspace{\acvSectionContentTopSkip}
   \begin{center}
+  \setlength{\leftskip}{0pt}
+  \setlength{\rightskip}{0pt}
+  \setlength{\parindent}{0pt}
 }{%
   \end{center}
 }

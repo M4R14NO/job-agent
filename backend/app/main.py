@@ -306,6 +306,7 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
             model=payload.model,
             lm_timeout=payload.lm_timeout,
             output_language=output_language,
+            section_order=payload.section_order,
         )
         pdf_bytes = render_cv_pdf_from_payload(payload=template_payload.model_dump(), doc_type=payload.doc_type)
     except RuntimeError as exc:

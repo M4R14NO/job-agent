@@ -9,7 +9,8 @@ from pydantic import ValidationError
 from ..schemas.search import CvCanonicalProfile
 
 
-DEFAULT_PROFILE_STORE = os.getenv("CV_PROFILE_STORE", "/tmp/job-agent-profiles.json")
+REPO_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_PROFILE_STORE = os.getenv("CV_PROFILE_STORE") or str(REPO_ROOT / ".data" / "cv_profiles.json")
 
 
 class RevisionMismatchError(Exception):

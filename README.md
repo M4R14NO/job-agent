@@ -94,6 +94,8 @@ Canonical normalized job fields used by the UI:
 
 The CV feature renders AwesomeCV templates via `awesomecv-jinja` and streams the PDF back to the browser. End users download the file directly, so server-side file permissions are not exposed to them.
 
+CV profiles are stored locally at `.data/cv_profiles.json` by default (ignored by git). The CV editor lets users reorder sections, and that order is persisted per profile.
+
 ### macOS setup (local xelatex)
 
 1. Install `xelatex`:
