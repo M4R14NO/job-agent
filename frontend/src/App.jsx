@@ -4,8 +4,10 @@ import { fetchModels, getCvProfile, listCvProfiles, parseCvCanonical } from "./a
 import { useJobDescription } from "./hooks/useJobDescription";
 import SearchFilters from "./components/SearchFilters";
 import ResultsList from "./components/ResultsList";
-import JobModal from "./components/JobModal";
+import { JobActionsCard, JobDetailsCard } from "./components/JobModal";
 import CvReview from "./components/CvReview";
+import CvEntry from "./components/CvEntry";
+import { Box, Grid, GridItem } from "@chakra-ui/react";
 
 const CACHE_KEY = "job-agent:search-response";
 
@@ -44,9 +46,12 @@ export default function App() {
   const [cvEntryError, setCvEntryError] = useState("");
   const [isCreatingCv, setIsCreatingCv] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [activeView, setActiveView] = useState("find");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const jobs = response?.jobs ?? [];
   const descriptionHtml = useJobDescription(selectedJob);
+  const isFindView = activeView === "find";
 
   const defaultRerankTopN = (() => {
     const total = response?.jobs?.length ?? resultsWanted;
@@ -200,6 +205,7 @@ export default function App() {
       outputLanguage: cvOutputLanguage
     });
     setSelectedJob(null);
+    setActiveView("create");
   };
 
   const handleCreateCvFromResume = async () => {
@@ -248,14 +254,26 @@ export default function App() {
   const handleSelectJob = (job) => {
     setSelectedJob(job);
     setCvReview(null);
+    setActiveView("find");
   };
 
   const handleBackToResults = () => {
     setSelectedJob(null);
     setCvReview(null);
+    setActiveView("find");
   };
 
-  const showPanel = Boolean(selectedJob || cvReview);
+  const handleSetView = (view) => {
+    setActiveView(view);
+    setSelectedJob(null);
+    setIsSidebarOpen(false);
+  };
+
+  useEffect(() => {
+    if (!isFindView) setIsSidebarOpen(false);
+  }, [isFindView]);
+
+  const showPanel = Boolean(selectedJob);
   const panelTitle = selectedJob?.title || (cvReview ? "CV editor" : "Job review");
   const panelEyebrow = selectedJob ? "Review panel" : "CV editor";
 
@@ -274,22 +292,19 @@ export default function App() {
         </header>
         <div className="panel-body">
           <div className="panel-column">
-            {selectedJob ? (
-              <JobModal
-                job={selectedJob}
-                descriptionHtml={descriptionHtml}
-                resumeText={resumeText}
-                selectedModel={selectedModel}
-                lmTimeout={lmTimeout}
-                onStartCvReview={handleStartCvReview}
-              />
-            ) : (
-              <div className="panel-card panel-empty">
-                <p className="helper">No job selected. Mapping will be generic.</p>
-              </div>
-            )}
+            <JobDetailsCard
+              job={selectedJob}
+              descriptionHtml={descriptionHtml}
+            />
           </div>
           <div className="panel-column">
+            <JobActionsCard
+              job={selectedJob}
+              resumeText={resumeText}
+              selectedModel={selectedModel}
+              lmTimeout={lmTimeout}
+              onStartCvReview={handleStartCvReview}
+            />
             {cvReview ? (
               <CvReview
                 canonical={cvReview.canonical}
@@ -300,11 +315,7 @@ export default function App() {
                 model={selectedModel}
                 lmTimeout={lmTimeout}
               />
-            ) : (
-              <div className="panel-card panel-empty">
-                <p className="helper">Run CV review to edit the mapped data and render a PDF.</p>
-              </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -312,74 +323,155 @@ export default function App() {
   }
 
   return (
-    <div className="page">
-      <header className="hero">
-        <div>
-          <p className="eyebrow">Local-only prototype</p>
-          <h1>Job Agent</h1>
-          <p className="subtitle">
-            Paste your resume text to start a search and ranking flow.
-          </p>
-        </div>
-      </header>
+    <Box className={`app-shell ${isSidebarOpen ? "is-sidebar-open" : ""}`}>
+      <Grid
+        templateColumns={isFindView ? "72px minmax(260px, 320px) 1fr" : "72px 1fr"}
+        minHeight="100vh"
+      >
+        <GridItem className="app-rail">
+          <button
+            type="button"
+            className={`rail-button ${isFindView ? "is-active" : ""}`}
+            onClick={() => handleSetView("find")}
+          >
+            <span className="rail-icon">🔎</span>
+            <span>Find a job</span>
+          </button>
+          <button
+            type="button"
+            className={`rail-button ${!isFindView ? "is-active" : ""}`}
+            onClick={() => handleSetView("create")}
+          >
+            <span className="rail-icon">📝</span>
+            <span>Create CV</span>
+          </button>
+          {isFindView && (
+            <button
+              type="button"
+              className="rail-button rail-toggle"
+              onClick={() => setIsSidebarOpen(true)}
+            >
+              <span className="rail-icon">⚙️</span>
+              <span>Filters</span>
+            </button>
+          )}
+        </GridItem>
 
-      <section className="card">
-        <SearchFilters
-          searchTerm={searchTerm} onSearchTermChange={setSearchTerm}
-          location={location} onLocationChange={setLocation}
-          resultsWanted={resultsWanted} onResultsWantedChange={setResultsWanted}
-          hoursOld={hoursOld} onHoursOldChange={setHoursOld}
-          isRemote={isRemote} onIsRemoteChange={setIsRemote}
-          sites={sites} onSitesChange={setSites}
-          fetchFullDescriptions={fetchFullDescriptions} onFetchFullDescriptionsChange={setFetchFullDescriptions}
-          resumeText={resumeText} onResumeTextChange={setResumeText}
-          wishes={wishes} onWishesChange={setWishes}
-          models={models}
-          selectedModel={selectedModel}
-          onSelectedModelChange={setSelectedModel}
-          lmTimeout={lmTimeout}
-          onLmTimeoutChange={setLmTimeout}
-          modelError={modelError}
-          enableRerank={enableRerank}
-          onEnableRerankChange={setEnableRerank}
-          rerankTopN={rerankTopN}
-          onRerankTopNChange={setRerankTopN}
-          defaultRerankTopN={defaultRerankTopN}
-          cachedAvailable={Boolean(cachedResponse)}
-          cachedAt={cachedAt}
-          onLoadCache={handleLoadCache}
-          onClearCache={handleClearCache}
-          isLoading={isLoading}
-          error={error}
-          onSearch={handleSearch}
-          cvProfiles={cvProfiles}
-          profilesLoading={profilesLoading}
-          profilesError={profilesError}
-          selectedProfileId={selectedProfileId}
-          onSelectedProfileIdChange={setSelectedProfileId}
-          onRefreshProfiles={loadProfiles}
-          onLoadProfile={handleLoadProfile}
-          onCreateCvFromResume={handleCreateCvFromResume}
-          isCreatingCv={isCreatingCv}
-          isLoadingProfile={isLoadingProfile}
-          cvEntryError={cvEntryError}
-          cvTemplateId={cvTemplateId}
-          onCvTemplateIdChange={setCvTemplateId}
-          cvDocType={cvDocType}
-          onCvDocTypeChange={setCvDocType}
-          cvOutputLanguage={cvOutputLanguage}
-          onCvOutputLanguageChange={setCvOutputLanguage}
-        />
-        {response && (
-          <ResultsList
-            jobs={jobs}
-            rerankApplied={response?.rerank_applied}
-            rerankTopN={response?.rerank_top_n}
-            onSelectJob={handleSelectJob}
-          />
+        {isFindView && (
+          <GridItem className="app-sidebar">
+            <SearchFilters
+              searchTerm={searchTerm} onSearchTermChange={setSearchTerm}
+              location={location} onLocationChange={setLocation}
+              resultsWanted={resultsWanted} onResultsWantedChange={setResultsWanted}
+              hoursOld={hoursOld} onHoursOldChange={setHoursOld}
+              isRemote={isRemote} onIsRemoteChange={setIsRemote}
+              sites={sites} onSitesChange={setSites}
+              fetchFullDescriptions={fetchFullDescriptions} onFetchFullDescriptionsChange={setFetchFullDescriptions}
+              resumeText={resumeText} onResumeTextChange={setResumeText}
+              wishes={wishes} onWishesChange={setWishes}
+              models={models}
+              selectedModel={selectedModel}
+              onSelectedModelChange={setSelectedModel}
+              lmTimeout={lmTimeout}
+              onLmTimeoutChange={setLmTimeout}
+              modelError={modelError}
+              enableRerank={enableRerank}
+              onEnableRerankChange={setEnableRerank}
+              rerankTopN={rerankTopN}
+              onRerankTopNChange={setRerankTopN}
+              defaultRerankTopN={defaultRerankTopN}
+              cachedAvailable={Boolean(cachedResponse)}
+              cachedAt={cachedAt}
+              onLoadCache={handleLoadCache}
+              onClearCache={handleClearCache}
+              isLoading={isLoading}
+              error={error}
+              onSearch={handleSearch}
+            />
+          </GridItem>
         )}
-      </section>
 
-    </div>
+        <GridItem className="app-main">
+          {isFindView ? (
+            <>
+              <header className="main-header">
+                <p className="eyebrow">Local-only prototype</p>
+                <h1>Job Agent</h1>
+                <p className="subtitle">
+                  Paste your resume text to start a search and ranking flow.
+                </p>
+              </header>
+              <section className="card">
+                {response && (
+                  <ResultsList
+                    jobs={jobs}
+                    rerankApplied={response?.rerank_applied}
+                    rerankTopN={response?.rerank_top_n}
+                    onSelectJob={handleSelectJob}
+                  />
+                )}
+                {!response && <p className="helper">Run a search to see results.</p>}
+              </section>
+            </>
+          ) : (
+            <>
+              <header className="main-header">
+                <p className="eyebrow">CV workspace</p>
+                <h1>Create CV</h1>
+                <p className="subtitle">
+                  Load a profile or generate one from resume text.
+                </p>
+              </header>
+              <div className="create-layout">
+                <section className="card">
+                  <CvEntry
+                    cvProfiles={cvProfiles}
+                    profilesLoading={profilesLoading}
+                    profilesError={profilesError}
+                    selectedProfileId={selectedProfileId}
+                    onSelectedProfileIdChange={setSelectedProfileId}
+                    onRefreshProfiles={loadProfiles}
+                    onLoadProfile={handleLoadProfile}
+                    onCreateCvFromResume={handleCreateCvFromResume}
+                    isCreatingCv={isCreatingCv}
+                    isLoadingProfile={isLoadingProfile}
+                    cvEntryError={cvEntryError}
+                    cvTemplateId={cvTemplateId}
+                    onCvTemplateIdChange={setCvTemplateId}
+                    cvDocType={cvDocType}
+                    onCvDocTypeChange={setCvDocType}
+                    cvOutputLanguage={cvOutputLanguage}
+                    onCvOutputLanguageChange={setCvOutputLanguage}
+                    resumeText={resumeText}
+                    onResumeTextChange={setResumeText}
+                  />
+                </section>
+                {cvReview ? (
+                  <CvReview
+                    canonical={cvReview.canonical}
+                    job={cvReview.job}
+                    templateId={cvReview.templateId}
+                    docType={cvReview.docType}
+                    outputLanguage={cvReview.outputLanguage}
+                    model={selectedModel}
+                    lmTimeout={lmTimeout}
+                  />
+                ) : (
+                  <div className="panel-card panel-empty">
+                    <p className="helper">Load a profile or create one to start editing.</p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </GridItem>
+      </Grid>
+      {isFindView && (
+        <div
+          className={`sidebar-backdrop ${isSidebarOpen ? "is-open" : ""}`}
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+    </Box>
   );
 }

@@ -177,6 +177,7 @@ export default function CvReview({
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewPayload, setPreviewPayload] = useState(null);
   const [draggedSection, setDraggedSection] = useState(null);
+  const [dragOverKey, setDragOverKey] = useState(null);
   const [activeStep, setActiveStep] = useState(0);
   const [openPreviewEditors, setOpenPreviewEditors] = useState({});
   const [showChangeSummary, setShowChangeSummary] = useState(false);
@@ -272,6 +273,7 @@ export default function CvReview({
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", key);
     setDraggedSection(key);
+    setDragOverKey(null);
   };
 
   const handleDrop = (targetKey) => {
@@ -286,6 +288,7 @@ export default function CvReview({
       return updated;
     });
     setDraggedSection(null);
+    setDragOverKey(null);
     setPreviewPayload(null);
   };
 
@@ -310,11 +313,13 @@ export default function CvReview({
     const isOpen = expandedSections[key];
     const isDraggable = Boolean(dragKey) && isEnabled;
     const isDragged = draggedSection === dragKey;
+    const isDropTarget = dragOverKey === dragKey && draggedSection && draggedSection !== dragKey;
     return (
       <div
-        className={`section-card ${isOpen ? "is-open" : "is-collapsed"} ${isDragged ? "is-dragged" : ""} ${!isEnabled ? "is-disabled" : ""}`}
-        onDragOver={dragKey ? (event) => event.preventDefault() : undefined}
-        onDrop={dragKey ? () => handleDrop(dragKey) : undefined}
+        className={`section-card ${isOpen ? "is-open" : "is-collapsed"} ${isDragged ? "is-dragged" : ""} ${isDropTarget ? "is-drop-target" : ""} ${!isEnabled ? "is-disabled" : ""}`}
+        onDragOver={dragKey ? (event) => { event.preventDefault(); setDragOverKey(dragKey); } : undefined}
+        onDragLeave={dragKey ? () => setDragOverKey(null) : undefined}
+        onDrop={dragKey ? () => { handleDrop(dragKey); setDragOverKey(null); } : undefined}
       >
         <div className="section-header">
           <div className="section-heading">
@@ -1061,13 +1066,15 @@ export default function CvReview({
             className="drag-handle"
             draggable={isEnabled}
             onDragStart={(event) => handleDragStart(event, key)}
-            onDragEnd={() => setDraggedSection(null)}
+            onDragEnd={() => {
+              setDraggedSection(null);
+              setDragOverKey(null);
+            }}
             disabled={!isEnabled}
             aria-label="Drag to reorder"
           >
             <span aria-hidden="true">⋮⋮</span>
             <span aria-hidden="true">⋮⋮</span>
-            <span className="drag-hint" aria-hidden="true">Drag</span>
           </button>
           <div className="arrow-stack" aria-label="Reorder">
             <button
@@ -1985,6 +1992,17 @@ export default function CvReview({
             {previewPayload ? renderMappingSummary() : (
               <p className="helper">Mapping will run automatically and is required before review.</p>
             )}
+            <div className="step-cta">
+              <button
+                type="button"
+                className="primary"
+                onClick={() => setActiveStep(2)}
+                disabled={!previewPayload || isPreviewing}
+              >
+                Next: Review mapped values
+              </button>
+              <p className="helper">Continue to review and edit the mapped sections.</p>
+            </div>
           </div>
         )}
 
@@ -2026,7 +2044,7 @@ export default function CvReview({
           {isSaving ? "Saving..." : "Save"}
         </button>
         <button className="secondary" onClick={handleDelete}>Delete</button>
-        <button onClick={handleRender} disabled={!canRender || isRendering}>
+        <button className="primary" onClick={handleRender} disabled={!canRender || isRendering}>
           {isRendering ? "Rendering..." : "Render PDF"}
         </button>
         {!canRender ? <p className="helper">Run preview before rendering a PDF.</p> : null}

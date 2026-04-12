@@ -1,9 +1,80 @@
 import { useEffect, useState } from "react";
 import { generateCoverLetter, parseCvCanonical } from "../api/llm";
 
-export default function JobModal({
+export function JobDetailsCard({ job, descriptionHtml }) {
+  return (
+    <div className="panel-card job-panel">
+      <div className="panel-header">
+        <div>
+          <p className="eyebrow">Job detail</p>
+          <h2>{job.title}</h2>
+          <p className="subtitle">{job.company}</p>
+        </div>
+      </div>
+
+      <div className="modal-meta">
+        <span>{job.location}</span>
+        <span>{job.site}</span>
+        <span>{job.date_posted}</span>
+      </div>
+
+      <div className="modal-rank">
+        <div className="rank-header">
+          <h3>Match score</h3>
+          <div className="rank-badges">
+            <span className="badge">{job.match_score ?? "pending"}</span>
+            {job.rerank_score != null && (
+              <span className="badge badge-alt">Rerank: {job.rerank_score}</span>
+            )}
+          </div>
+        </div>
+        <p className="rank-note">
+          {job.match_reasons?.length
+            ? "Top matched keywords"
+            : "Ranking will appear once the scoring logic is enabled."}
+        </p>
+        {job.match_reasons?.length ? (
+          <div className="reason-list">
+            {job.match_reasons.map((reason) => (
+              <span key={reason} className="reason-chip">{reason}</span>
+            ))}
+          </div>
+        ) : null}
+        {job.rerank_score != null && job.match_reasons?.[0] ? (
+          <p className="helper">Rerank reason: {job.match_reasons[0]}</p>
+        ) : null}
+      </div>
+
+      <div className="modal-body">
+        <h3>Description</h3>
+        {descriptionHtml ? (
+          <div
+            className="description-content"
+            dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+          />
+        ) : (
+          <p>No description available.</p>
+        )}
+      </div>
+
+      <div className="modal-actions">
+        {job.job_url && (
+          <a
+            className="job-link"
+            href={job.job_url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open original posting
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function JobActionsCard({
   job,
-  descriptionHtml,
   resumeText,
   selectedModel,
   lmTimeout,
@@ -79,138 +150,73 @@ export default function JobModal({
       setIsGeneratingCv(false);
     }
   };
+
   return (
-    <div className="panel-card job-panel">
-      <div className="panel-header">
-        <div>
-          <p className="eyebrow">Job detail</p>
-          <h2>{job.title}</h2>
-          <p className="subtitle">{job.company}</p>
+    <div className="panel-card job-actions">
+      <div className="cover-letter">
+        <div className="rank-header">
+          <h3>Cover letter draft</h3>
+          <button className="secondary" onClick={handleGenerate} disabled={isGenerating}>
+            {isGenerating ? "Drafting..." : "Generate"}
+          </button>
         </div>
+        {isGenerating && (
+          <p className="progress">Generating cover letter with the selected model...</p>
+        )}
+        {coverError && <p className="error">{coverError}</p>}
+        <textarea
+          readOnly
+          value={coverLetter}
+          placeholder="Generate a tailored cover letter draft..."
+        />
       </div>
 
-        <div className="modal-meta">
-          <span>{job.location}</span>
-          <span>{job.site}</span>
-          <span>{job.date_posted}</span>
+      <div className="cover-letter">
+        <div className="rank-header">
+          <h3>CV generation</h3>
+          <button className="secondary" onClick={handleGenerateCv} disabled={isGeneratingCv}>
+            {isGeneratingCv ? "Extracting..." : "Review CV data"}
+          </button>
         </div>
-
-        <div className="modal-rank">
-          <div className="rank-header">
-            <h3>Match score</h3>
-            <div className="rank-badges">
-              <span className="badge">{job.match_score ?? "pending"}</span>
-              {job.rerank_score != null && (
-                <span className="badge badge-alt">Rerank: {job.rerank_score}</span>
-              )}
-            </div>
-          </div>
-          <p className="rank-note">
-            {job.match_reasons?.length
-              ? "Top matched keywords"
-              : "Ranking will appear once the scoring logic is enabled."}
-          </p>
-          {job.match_reasons?.length ? (
-            <div className="reason-list">
-              {job.match_reasons.map((reason) => (
-                <span key={reason} className="reason-chip">{reason}</span>
-              ))}
-            </div>
-          ) : null}
-          {job.rerank_score != null && job.match_reasons?.[0] ? (
-            <p className="helper">Rerank reason: {job.match_reasons[0]}</p>
-          ) : null}
-        </div>
-
-        <div className="modal-body">
-          <h3>Description</h3>
-          {descriptionHtml ? (
-            <div
-              className="description-content"
-              dangerouslySetInnerHTML={{ __html: descriptionHtml }}
-            />
-          ) : (
-            <p>No description available.</p>
-          )}
-        </div>
-
-        <div className="cover-letter">
-          <div className="rank-header">
-            <h3>Cover letter draft</h3>
-            <button className="secondary" onClick={handleGenerate} disabled={isGenerating}>
-              {isGenerating ? "Drafting..." : "Generate"}
-            </button>
-          </div>
-          {isGenerating && (
-            <p className="progress">Generating cover letter with the selected model...</p>
-          )}
-          {coverError && <p className="error">{coverError}</p>}
-          <textarea
-            readOnly
-            value={coverLetter}
-            placeholder="Generate a tailored cover letter draft..."
-          />
-        </div>
-
-        <div className="cover-letter">
-          <div className="rank-header">
-            <h3>CV generation</h3>
-            <button className="secondary" onClick={handleGenerateCv} disabled={isGeneratingCv}>
-              {isGeneratingCv ? "Extracting..." : "Review CV data"}
-            </button>
-          </div>
-          <div className="field-grid">
-            <div>
-              <label htmlFor="cvTemplate" className="label">Template</label>
-              <select
-                id="cvTemplate"
-                value={selectedTemplate}
-                onChange={(e) => setSelectedTemplate(e.target.value)}
-              >
-                <option value="awesomecv">AwesomeCV</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="docType" className="label">Document type</label>
-              <select
-                id="docType"
-                value={selectedDocType}
-                onChange={(e) => setSelectedDocType(e.target.value)}
-              >
-                <option value="resume">Resume</option>
-                <option value="cv">CV</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="outputLanguage" className="label">Output language</label>
-              <select
-                id="outputLanguage"
-                value={outputLanguage}
-                onChange={(e) => setOutputLanguage(e.target.value)}
-              >
-                <option value="english">English</option>
-                <option value="german">German</option>
-              </select>
-            </div>
-          </div>
-          {isGeneratingCv && (
-            <p className="progress">Extracting canonical CV data...</p>
-          )}
-          {cvError && <p className="error">{cvError}</p>}
-        </div>
-
-        <div className="modal-actions">
-          {job.job_url && (
-            <a
-              className="job-link"
-              href={job.job_url}
-              target="_blank"
-              rel="noreferrer"
+        <div className="field-grid">
+          <div>
+            <label htmlFor="cvTemplate" className="label">Template</label>
+            <select
+              id="cvTemplate"
+              value={selectedTemplate}
+              onChange={(e) => setSelectedTemplate(e.target.value)}
             >
-              Open original posting
-            </a>
-          )}
+              <option value="awesomecv">AwesomeCV</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="docType" className="label">Document type</label>
+            <select
+              id="docType"
+              value={selectedDocType}
+              onChange={(e) => setSelectedDocType(e.target.value)}
+            >
+              <option value="resume">Resume</option>
+              <option value="cv">CV</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="outputLanguage" className="label">Output language</label>
+            <select
+              id="outputLanguage"
+              value={outputLanguage}
+              onChange={(e) => setOutputLanguage(e.target.value)}
+            >
+              <option value="english">English</option>
+              <option value="german">German</option>
+            </select>
+          </div>
         </div>
+        {isGeneratingCv && (
+          <p className="progress">Extracting canonical CV data...</p>
+        )}
+        {cvError && <p className="error">{cvError}</p>}
+      </div>
     </div>
   );
 }
