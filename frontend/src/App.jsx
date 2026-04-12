@@ -48,6 +48,7 @@ export default function App() {
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [activeView, setActiveView] = useState("find");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeJobAction, setActiveJobAction] = useState("none");
 
   const jobs = response?.jobs ?? [];
   const descriptionHtml = useJobDescription(selectedJob);
@@ -194,6 +195,7 @@ export default function App() {
   const handleStartCvReview = ({ canonical, job, templateId, docType, outputLanguage }) => {
     setCvReview({ canonical, job, templateId, docType, outputLanguage });
     setSelectedJob(job);
+    setActiveJobAction("cv");
   };
 
   const handleStartCvEditor = ({ canonical }) => {
@@ -255,12 +257,14 @@ export default function App() {
     setSelectedJob(job);
     setCvReview(null);
     setActiveView("find");
+    setActiveJobAction("none");
   };
 
   const handleBackToResults = () => {
     setSelectedJob(null);
     setCvReview(null);
     setActiveView("find");
+    setActiveJobAction("none");
   };
 
   const handleSetView = (view) => {
@@ -274,8 +278,12 @@ export default function App() {
   }, [isFindView]);
 
   const showPanel = Boolean(selectedJob);
-  const panelTitle = selectedJob?.title || (cvReview ? "CV editor" : "Job review");
-  const panelEyebrow = selectedJob ? "Review panel" : "CV editor";
+  const panelTitle = selectedJob?.title || (cvReview ? "CV editor" : "Job detail");
+  const panelEyebrow = selectedJob ? "Job detail" : "CV editor";
+  const showActionsPanel = activeJobAction !== "none" && !cvReview;
+  const showActionSwitcher = activeJobAction !== "none" && !cvReview;
+  const actionLabel = activeJobAction === "cover" ? "Cover letter" : "CV generation";
+  const switchActionLabel = activeJobAction === "cover" ? "Switch to CV generation" : "Switch to Cover letter";
 
   if (showPanel) {
     return (
@@ -289,34 +297,69 @@ export default function App() {
             <h2>{panelTitle}</h2>
             {selectedJob?.company && <p className="subtitle">{selectedJob.company}</p>}
           </div>
+          <div className="panel-actions">
+            {activeJobAction === "none" && !cvReview ? (
+              <>
+                <button
+                  className="cta cta-cover"
+                  onClick={() => setActiveJobAction("cover")}
+                >
+                  Generate cover letter
+                </button>
+                <button
+                  className="cta cta-cv"
+                  onClick={() => setActiveJobAction("cv")}
+                >
+                  Generate CV
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="action-pill">{actionLabel}</span>
+                {showActionSwitcher && (
+                  <button
+                    className="ghost"
+                    onClick={() => setActiveJobAction(activeJobAction === "cover" ? "cv" : "cover")}
+                  >
+                    {switchActionLabel}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </header>
-        <div className="panel-body">
+        <div className={`panel-body ${showActionsPanel || cvReview ? "" : "is-single"}`}>
           <div className="panel-column">
             <JobDetailsCard
               job={selectedJob}
               descriptionHtml={descriptionHtml}
             />
           </div>
-          <div className="panel-column">
-            <JobActionsCard
-              job={selectedJob}
-              resumeText={resumeText}
-              selectedModel={selectedModel}
-              lmTimeout={lmTimeout}
-              onStartCvReview={handleStartCvReview}
-            />
-            {cvReview ? (
-              <CvReview
-                canonical={cvReview.canonical}
-                job={cvReview.job}
-                templateId={cvReview.templateId}
-                docType={cvReview.docType}
-                outputLanguage={cvReview.outputLanguage}
-                model={selectedModel}
-                lmTimeout={lmTimeout}
-              />
-            ) : null}
-          </div>
+          {showActionsPanel || cvReview ? (
+            <div className="panel-column">
+              {showActionsPanel && (
+                <JobActionsCard
+                  mode={activeJobAction}
+                  job={selectedJob}
+                  resumeText={resumeText}
+                  selectedModel={selectedModel}
+                  lmTimeout={lmTimeout}
+                  onStartCvReview={handleStartCvReview}
+                />
+              )}
+              {cvReview ? (
+                <CvReview
+                  canonical={cvReview.canonical}
+                  job={cvReview.job}
+                  templateId={cvReview.templateId}
+                  docType={cvReview.docType}
+                  outputLanguage={cvReview.outputLanguage}
+                  model={selectedModel}
+                  lmTimeout={lmTimeout}
+                />
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     );

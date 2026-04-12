@@ -74,6 +74,7 @@ export function JobDetailsCard({ job, descriptionHtml }) {
 }
 
 export function JobActionsCard({
+  mode,
   job,
   resumeText,
   selectedModel,
@@ -88,6 +89,7 @@ export function JobActionsCard({
   const [selectedTemplate, setSelectedTemplate] = useState("awesomecv");
   const [selectedDocType, setSelectedDocType] = useState("resume");
   const [outputLanguage, setOutputLanguage] = useState("english");
+  const [showCvOptions, setShowCvOptions] = useState(false);
 
   useEffect(() => {
     setCoverLetter("");
@@ -95,6 +97,7 @@ export function JobActionsCard({
     setIsGenerating(false);
     setCvError("");
     setIsGeneratingCv(false);
+    setShowCvOptions(false);
   }, [job]);
 
   const handleGenerate = async () => {
@@ -151,72 +154,96 @@ export function JobActionsCard({
     }
   };
 
+  if (!mode || mode === "none") {
+    return null;
+  }
+
+  const showCoverOutput = Boolean(coverLetter) || isGenerating || coverError;
+
   return (
     <div className="panel-card job-actions">
-      <div className="cover-letter">
-        <div className="rank-header">
-          <h3>Cover letter draft</h3>
-          <button className="secondary" onClick={handleGenerate} disabled={isGenerating}>
-            {isGenerating ? "Drafting..." : "Generate"}
-          </button>
+      {mode === "cover" ? (
+        <div className="cover-letter">
+          <div className="rank-header">
+            <h3>Cover letter</h3>
+            <button className="secondary" onClick={handleGenerate} disabled={isGenerating}>
+              {isGenerating ? "Drafting..." : "Generate"}
+            </button>
+          </div>
+          {isGenerating && (
+            <p className="progress">Generating cover letter with the selected model...</p>
+          )}
+          {coverError && <p className="error">{coverError}</p>}
+          {showCoverOutput && (
+            <textarea
+              readOnly
+              value={coverLetter}
+              placeholder="Generate a tailored cover letter draft..."
+            />
+          )}
         </div>
-        {isGenerating && (
-          <p className="progress">Generating cover letter with the selected model...</p>
-        )}
-        {coverError && <p className="error">{coverError}</p>}
-        <textarea
-          readOnly
-          value={coverLetter}
-          placeholder="Generate a tailored cover letter draft..."
-        />
-      </div>
+      ) : null}
 
-      <div className="cover-letter">
-        <div className="rank-header">
-          <h3>CV generation</h3>
-          <button className="secondary" onClick={handleGenerateCv} disabled={isGeneratingCv}>
-            {isGeneratingCv ? "Extracting..." : "Review CV data"}
-          </button>
+      {mode === "cv" ? (
+        <div className="cover-letter">
+          <div className="rank-header">
+            <h3>CV generation</h3>
+            <button
+              className="secondary"
+              onClick={() => setShowCvOptions((prev) => !prev)}
+            >
+              {showCvOptions ? "Hide options" : "Generate CV"}
+            </button>
+          </div>
+          {showCvOptions && (
+            <>
+              <div className="field-grid">
+                <div>
+                  <label htmlFor="cvTemplate" className="label">Template</label>
+                  <select
+                    id="cvTemplate"
+                    value={selectedTemplate}
+                    onChange={(e) => setSelectedTemplate(e.target.value)}
+                  >
+                    <option value="awesomecv">AwesomeCV</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="docType" className="label">Document type</label>
+                  <select
+                    id="docType"
+                    value={selectedDocType}
+                    onChange={(e) => setSelectedDocType(e.target.value)}
+                  >
+                    <option value="resume">Resume</option>
+                    <option value="cv">CV</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="outputLanguage" className="label">Output language</label>
+                  <select
+                    id="outputLanguage"
+                    value={outputLanguage}
+                    onChange={(e) => setOutputLanguage(e.target.value)}
+                  >
+                    <option value="english">English</option>
+                    <option value="german">German</option>
+                  </select>
+                </div>
+              </div>
+              <div className="action-footer">
+                <button className="primary" onClick={handleGenerateCv} disabled={isGeneratingCv}>
+                  {isGeneratingCv ? "Extracting..." : "Review CV data"}
+                </button>
+              </div>
+            </>
+          )}
+          {isGeneratingCv && (
+            <p className="progress">Extracting canonical CV data...</p>
+          )}
+          {cvError && <p className="error">{cvError}</p>}
         </div>
-        <div className="field-grid">
-          <div>
-            <label htmlFor="cvTemplate" className="label">Template</label>
-            <select
-              id="cvTemplate"
-              value={selectedTemplate}
-              onChange={(e) => setSelectedTemplate(e.target.value)}
-            >
-              <option value="awesomecv">AwesomeCV</option>
-            </select>
-          </div>
-          <div>
-            <label htmlFor="docType" className="label">Document type</label>
-            <select
-              id="docType"
-              value={selectedDocType}
-              onChange={(e) => setSelectedDocType(e.target.value)}
-            >
-              <option value="resume">Resume</option>
-              <option value="cv">CV</option>
-            </select>
-          </div>
-          <div>
-            <label htmlFor="outputLanguage" className="label">Output language</label>
-            <select
-              id="outputLanguage"
-              value={outputLanguage}
-              onChange={(e) => setOutputLanguage(e.target.value)}
-            >
-              <option value="english">English</option>
-              <option value="german">German</option>
-            </select>
-          </div>
-        </div>
-        {isGeneratingCv && (
-          <p className="progress">Extracting canonical CV data...</p>
-        )}
-        {cvError && <p className="error">{cvError}</p>}
-      </div>
+      ) : null}
     </div>
   );
 }
