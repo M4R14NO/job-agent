@@ -59,6 +59,13 @@ body {
   font-size: 18px;
 }
 
+.app-sidebar-wrap {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: 3;
+}
+
 .app-sidebar {
   background: rgba(255, 255, 255, 0.94);
   border-right: 1px solid #e6e6e6;
@@ -66,9 +73,8 @@ body {
   display: grid;
   gap: 18px;
   overflow-y: auto;
-  height: 100vh;
-  position: sticky;
-  top: 0;
+  height: 100%;
+  position: relative;
 }
 
 .app-sidebar .chakra-form__label {
@@ -134,6 +140,21 @@ body {
 
 .profile-actions {
   flex-wrap: wrap;
+}
+
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 6;
+}
+
+.sidebar-resizer:hover {
+  background: rgba(37, 99, 235, 0.15);
 }
 
 .app-main {
@@ -681,7 +702,11 @@ select {
 
 .sidebar-primary {
   width: auto;
+  height: auto;
+  align-self: start;
   justify-self: start;
+  display: inline-flex;
+  align-items: center;
 }
 
 .secondary {
@@ -1179,6 +1204,12 @@ select {
     top: 0;
   }
 
+  .app-sidebar-wrap {
+    position: static;
+    height: auto;
+    width: auto !important;
+  }
+
   .app-sidebar {
     position: fixed;
     top: 0;
@@ -1189,6 +1220,10 @@ select {
     transition: transform 0.2s ease;
     z-index: 20;
     height: auto;
+  }
+
+  .sidebar-resizer {
+    display: none;
   }
 
   .app-shell.is-sidebar-open .app-sidebar {

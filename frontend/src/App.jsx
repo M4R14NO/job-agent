@@ -11,6 +11,9 @@ import { Box, Grid, GridItem } from "@chakra-ui/react";
 
 const CACHE_KEY = "job-agent:search-response";
 const LLM_PROFILE_KEY = "job-agent:llm-profiles";
+const SIDEBAR_WIDTH_KEY = "job-agent:sidebar-width";
+const SIDEBAR_MIN_WIDTH = 360;
+const SIDEBAR_MAX_WIDTH = 720;
 
 export default function App() {
   const [resumeText, setResumeText] = useState("");
@@ -55,8 +58,13 @@ export default function App() {
   const [llmProfileName, setLlmProfileName] = useState("");
   const [llmProfileError, setLlmProfileError] = useState("");
   const [searchElapsedMs, setSearchElapsedMs] = useState(0);
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MIN_WIDTH);
 
   const searchTimerRef = useRef(null);
+  const isResizingSidebarRef = useRef(false);
+  const resizeStartXRef = useRef(0);
+  const resizeStartWidthRef = useRef(SIDEBAR_MIN_WIDTH);
+  const sidebarWidthRef = useRef(SIDEBAR_MIN_WIDTH);
 
   const jobs = response?.jobs ?? [];
   const descriptionHtml = useJobDescription(selectedJob);
@@ -109,6 +117,20 @@ export default function App() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+    if (!stored) return;
+    const parsed = Number(stored);
+    if (Number.isFinite(parsed)) {
+      const clamped = Math.min(Math.max(parsed, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH);
+      setSidebarWidth(clamped);
+    }
+  }, []);
+
+  useEffect(() => {
+    sidebarWidthRef.current = sidebarWidth;
+  }, [sidebarWidth]);
 
   useEffect(() => {
     const stored = localStorage.getItem(LLM_PROFILE_KEY);
@@ -183,6 +205,33 @@ export default function App() {
       }
     };
   }, [isLoading]);
+
+  useEffect(() => {
+    const handleMouseMove = (event) => {
+      if (!isResizingSidebarRef.current) return;
+      const delta = event.clientX - resizeStartXRef.current;
+      const nextWidth = Math.min(
+        Math.max(resizeStartWidthRef.current + delta, SIDEBAR_MIN_WIDTH),
+        SIDEBAR_MAX_WIDTH
+      );
+      setSidebarWidth(nextWidth);
+    };
+
+    const handleMouseUp = () => {
+      if (!isResizingSidebarRef.current) return;
+      isResizingSidebarRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidthRef.current));
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
 
   useEffect(() => {
     const cached = sessionStorage.getItem(CACHE_KEY);
@@ -427,6 +476,15 @@ export default function App() {
     setIsSidebarOpen(false);
   };
 
+  const handleSidebarResizeStart = (event) => {
+    if (!isFindView) return;
+    isResizingSidebarRef.current = true;
+    resizeStartXRef.current = event.clientX;
+    resizeStartWidthRef.current = sidebarWidthRef.current;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
   useEffect(() => {
     if (!isFindView) setIsSidebarOpen(false);
   }, [isFindView]);
@@ -522,7 +580,7 @@ export default function App() {
   return (
     <Box className={`app-shell ${isSidebarOpen ? "is-sidebar-open" : ""}`}>
       <Grid
-        templateColumns={isFindView ? "72px minmax(360px, 420px) 1fr" : "72px 1fr"}
+        templateColumns={isFindView ? `72px ${sidebarWidth}px 1fr` : "72px 1fr"}
         minHeight="100vh"
       >
         <GridItem className="app-rail">
@@ -555,45 +613,53 @@ export default function App() {
         </GridItem>
 
         {isFindView && (
-          <GridItem className="app-sidebar">
-            <SearchFilters
-              searchTerm={searchTerm} onSearchTermChange={setSearchTerm}
-              location={location} onLocationChange={setLocation}
-              resultsWanted={resultsWanted} onResultsWantedChange={setResultsWanted}
-              hoursOld={hoursOld} onHoursOldChange={setHoursOld}
-              isRemote={isRemote} onIsRemoteChange={setIsRemote}
-              sites={sites} onSitesChange={setSites}
-              fetchFullDescriptions={fetchFullDescriptions} onFetchFullDescriptionsChange={setFetchFullDescriptions}
-              resumeText={resumeText} onResumeTextChange={setResumeText}
-              wishes={wishes} onWishesChange={setWishes}
-              models={models}
-              selectedModel={selectedModel}
-              onSelectedModelChange={setSelectedModel}
-              lmTimeout={lmTimeout}
-              lmTimeoutMinutes={lmTimeoutMinutes}
-              onLmTimeoutChange={setLmTimeout}
-              modelError={modelError}
-              enableRerank={enableRerank}
-              onEnableRerankChange={setEnableRerank}
-              rerankTopN={rerankTopN}
-              onRerankTopNChange={setRerankTopN}
-              defaultRerankTopN={defaultRerankTopN}
-              llmProfiles={llmProfiles}
-              selectedLlmProfileId={selectedLlmProfileId}
-              onSelectedLlmProfileIdChange={setSelectedLlmProfileId}
-              llmProfileName={llmProfileName}
-              onLlmProfileNameChange={setLlmProfileName}
-              onSaveLlmProfile={handleSaveLlmProfile}
-              onLoadLlmProfile={handleLoadLlmProfile}
-              onDeleteLlmProfile={handleDeleteLlmProfile}
-              llmProfileError={llmProfileError}
-              cachedAvailable={Boolean(cachedResponse)}
-              cachedAt={cachedAt}
-              onLoadCache={handleLoadCache}
-              onClearCache={handleClearCache}
-              isLoading={isLoading}
-              error={error}
-              onSearch={handleSearch}
+          <GridItem className="app-sidebar-wrap" style={{ width: sidebarWidth }}>
+            <div className="app-sidebar">
+              <SearchFilters
+                searchTerm={searchTerm} onSearchTermChange={setSearchTerm}
+                location={location} onLocationChange={setLocation}
+                resultsWanted={resultsWanted} onResultsWantedChange={setResultsWanted}
+                hoursOld={hoursOld} onHoursOldChange={setHoursOld}
+                isRemote={isRemote} onIsRemoteChange={setIsRemote}
+                sites={sites} onSitesChange={setSites}
+                fetchFullDescriptions={fetchFullDescriptions} onFetchFullDescriptionsChange={setFetchFullDescriptions}
+                resumeText={resumeText} onResumeTextChange={setResumeText}
+                wishes={wishes} onWishesChange={setWishes}
+                models={models}
+                selectedModel={selectedModel}
+                onSelectedModelChange={setSelectedModel}
+                lmTimeout={lmTimeout}
+                lmTimeoutMinutes={lmTimeoutMinutes}
+                onLmTimeoutChange={setLmTimeout}
+                modelError={modelError}
+                enableRerank={enableRerank}
+                onEnableRerankChange={setEnableRerank}
+                rerankTopN={rerankTopN}
+                onRerankTopNChange={setRerankTopN}
+                defaultRerankTopN={defaultRerankTopN}
+                llmProfiles={llmProfiles}
+                selectedLlmProfileId={selectedLlmProfileId}
+                onSelectedLlmProfileIdChange={setSelectedLlmProfileId}
+                llmProfileName={llmProfileName}
+                onLlmProfileNameChange={setLlmProfileName}
+                onSaveLlmProfile={handleSaveLlmProfile}
+                onLoadLlmProfile={handleLoadLlmProfile}
+                onDeleteLlmProfile={handleDeleteLlmProfile}
+                llmProfileError={llmProfileError}
+                cachedAvailable={Boolean(cachedResponse)}
+                cachedAt={cachedAt}
+                onLoadCache={handleLoadCache}
+                onClearCache={handleClearCache}
+                isLoading={isLoading}
+                error={error}
+                onSearch={handleSearch}
+              />
+            </div>
+            <div
+              className="sidebar-resizer"
+              role="separator"
+              aria-orientation="vertical"
+              onMouseDown={handleSidebarResizeStart}
             />
           </GridItem>
         )}
