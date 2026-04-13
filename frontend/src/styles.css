@@ -71,6 +71,71 @@ body {
   top: 0;
 }
 
+.app-sidebar .chakra-form__label {
+  font-weight: 600;
+  color: #2b2b2b;
+}
+
+.app-sidebar .chakra-form__helper-text {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.sidebar-section {
+  border-bottom: 1px solid #ececec;
+  padding-bottom: 12px;
+}
+
+.filters-accordion {
+  display: grid;
+  gap: 8px;
+}
+
+.accordion-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.accordion-button {
+  padding: 12px 16px;
+  font-weight: 700;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.accordion-chevron {
+  font-size: 14px;
+  color: #64748b;
+}
+
+.accordion-panel {
+  padding: 16px;
+}
+
+.example-box {
+  background: #f8fafc;
+  border: 1px dashed #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.profile-block {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: #fdfdfd;
+}
+
+.profile-actions {
+  flex-wrap: wrap;
+}
+
 .app-main {
   padding: 40px 32px 64px;
   display: grid;
@@ -169,7 +234,8 @@ body {
 }
 
 .cv-entry-header {
-  display: flex;
+  width: 100%;
+  min-height: 240px;
   justify-content: space-between;
   gap: 16px;
   align-items: center;
@@ -418,16 +484,18 @@ body {
   cursor: pointer;
 }
 
-.cta-cover {
+
+.cta-cover,
+.cta-cv {
   background: #2563eb;
   color: #ffffff;
   box-shadow: 0 10px 20px rgba(37, 99, 235, 0.22);
 }
 
-.cta-cv {
-  background: #ff9f1c;
-  color: #1a1a1a;
-  box-shadow: 0 10px 20px rgba(255, 159, 28, 0.25);
+.cta-switch {
+  background: #111827;
+  color: #ffffff;
+  box-shadow: 0 10px 20px rgba(17, 24, 39, 0.2);
 }
 
 .cta:disabled {
@@ -611,6 +679,11 @@ select {
   cursor: pointer;
 }
 
+.sidebar-primary {
+  width: auto;
+  justify-self: start;
+}
+
 .secondary {
   background: transparent;
   border: 1px solid #d0d0d0;
@@ -619,6 +692,14 @@ select {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.primary.chakra-button,
+.secondary.chakra-button,
+.ghost.chakra-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .primary:disabled {
@@ -651,6 +732,32 @@ select {
   display: grid;
   gap: 12px;
   margin-top: 16px;
+}
+
+.results-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #3b3b3b;
+}
+
+.refinement-progress {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #e0e7ff;
+  background: #f8faff;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
 }
 
 .results-header {
@@ -1016,13 +1123,21 @@ select {
   justify-content: flex-end;
 }
 
-.cover-letter {
-  background: #f6f7fb;
+.action-panel {
+  width: 100%;
+}
+
+.action-panel-cover,
+.action-panel-cv {
   border-radius: 16px;
   padding: 16px;
   display: grid;
   gap: 12px;
+  border: 1px solid #ececec;
+  background: #ffffff;
 }
+
+
 
 .action-footer {
   display: flex;
@@ -1030,7 +1145,18 @@ select {
 }
 
 .cover-letter textarea {
-  min-height: 160px;
+  width: 100%;
+  min-height: 240px;
+}
+
+.cv-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.cv-options > div {
+  flex: 1 1 180px;
 }
 
 @media (max-width: 720px) {

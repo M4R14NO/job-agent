@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { searchJobs } from "./api/search";
 import { fetchModels, getCvProfile, listCvProfiles, parseCvCanonical } from "./api/llm";
 import { useJobDescription } from "./hooks/useJobDescription";
@@ -10,6 +10,7 @@ import CvEntry from "./components/CvEntry";
 import { Box, Grid, GridItem } from "@chakra-ui/react";
 
 const CACHE_KEY = "job-agent:search-response";
+const LLM_PROFILE_KEY = "job-agent:llm-profiles";
 
 export default function App() {
   const [resumeText, setResumeText] = useState("");
@@ -30,7 +31,7 @@ export default function App() {
   const [modelError, setModelError] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const [lmTimeout, setLmTimeout] = useState(120);
-  const [enableRerank, setEnableRerank] = useState(true);
+  const [enableRerank, setEnableRerank] = useState(false);
   const [rerankTopN, setRerankTopN] = useState(null);
   const [weightEmbedding, setWeightEmbedding] = useState(0.8);
   const [weightKeyword, setWeightKeyword] = useState(0.2);
@@ -49,6 +50,13 @@ export default function App() {
   const [activeView, setActiveView] = useState("find");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeJobAction, setActiveJobAction] = useState("none");
+  const [llmProfiles, setLlmProfiles] = useState([]);
+  const [selectedLlmProfileId, setSelectedLlmProfileId] = useState("");
+  const [llmProfileName, setLlmProfileName] = useState("");
+  const [llmProfileError, setLlmProfileError] = useState("");
+  const [searchElapsedMs, setSearchElapsedMs] = useState(0);
+
+  const searchTimerRef = useRef(null);
 
   const jobs = response?.jobs ?? [];
   const descriptionHtml = useJobDescription(selectedJob);
@@ -59,6 +67,28 @@ export default function App() {
     if (!total) return null;
     const cap = Math.min(total, resultsWanted);
     return Math.max(3, Math.ceil(0.4 * cap));
+  })();
+
+  const lmTimeoutMinutes = Math.max(0.5, Math.round((lmTimeout / 60) * 10) / 10);
+  const rerankTarget = rerankTopN ?? defaultRerankTopN ?? 0;
+  const refinementIsActive = isLoading && enableRerank;
+  const baseTokenEstimate = (() => {
+    const text = `${resumeText} ${wishes}`.trim();
+    if (!text) return 0;
+    return Math.max(1, Math.ceil(text.length / 4));
+  })();
+  const estimatedRefinementTokens = baseTokenEstimate + (rerankTarget * 280);
+  const refinementProgress = (() => {
+    if (!refinementIsActive || !lmTimeout || estimatedRefinementTokens <= 0) return null;
+    const timeoutMs = Math.max(1, lmTimeout * 1000);
+    const ratio = Math.min(searchElapsedMs / timeoutMs, 1);
+    return {
+      percent: Math.round(ratio * 100),
+      currentTokens: Math.min(estimatedRefinementTokens, Math.round(estimatedRefinementTokens * ratio)),
+      totalTokens: estimatedRefinementTokens,
+      elapsedSeconds: Math.round(searchElapsedMs / 1000),
+      timeoutSeconds: lmTimeout
+    };
   })();
 
   useEffect(() => {
@@ -79,6 +109,35 @@ export default function App() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(LLM_PROFILE_KEY);
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored);
+      const profiles = Array.isArray(parsed?.profiles) ? parsed.profiles : [];
+      setLlmProfiles(profiles);
+      if (typeof parsed?.lastSelectedId === "string") {
+        setSelectedLlmProfileId(parsed.lastSelectedId);
+      }
+      if (typeof parsed?.lastSelectedName === "string") {
+        setLlmProfileName(parsed.lastSelectedName);
+      }
+    } catch (err) {
+      localStorage.removeItem(LLM_PROFILE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(
+      LLM_PROFILE_KEY,
+      JSON.stringify({
+        profiles: llmProfiles,
+        lastSelectedId: selectedLlmProfileId,
+        lastSelectedName: llmProfileName
+      })
+    );
+  }, [llmProfiles, selectedLlmProfileId, llmProfileName]);
 
   const loadProfiles = async () => {
     setProfilesLoading(true);
@@ -102,6 +161,28 @@ export default function App() {
   useEffect(() => {
     loadProfiles();
   }, []);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setSearchElapsedMs(0);
+      if (searchTimerRef.current) {
+        clearInterval(searchTimerRef.current);
+        searchTimerRef.current = null;
+      }
+      return undefined;
+    }
+    const start = Date.now();
+    setSearchElapsedMs(0);
+    searchTimerRef.current = setInterval(() => {
+      setSearchElapsedMs(Date.now() - start);
+    }, 500);
+    return () => {
+      if (searchTimerRef.current) {
+        clearInterval(searchTimerRef.current);
+        searchTimerRef.current = null;
+      }
+    };
+  }, [isLoading]);
 
   useEffect(() => {
     const cached = sessionStorage.getItem(CACHE_KEY);
@@ -177,6 +258,79 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSaveLlmProfile = () => {
+    const name = llmProfileName.trim();
+    if (!name) {
+      setLlmProfileError("Profile name is required.");
+      return;
+    }
+    const safeId = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+    const profileId = safeId || `profile-${Date.now()}`;
+    const nextProfile = {
+      id: profileId,
+      name,
+      updatedAt: new Date().toISOString(),
+      data: {
+        resumeText,
+        wishes,
+        selectedModel,
+        lmTimeout,
+        enableRerank,
+        rerankTopN
+      }
+    };
+    setLlmProfiles((prev) => {
+      const existingIndex = prev.findIndex((profile) => profile.id === profileId);
+      if (existingIndex === -1) {
+        return [...prev, nextProfile];
+      }
+      const updated = [...prev];
+      updated[existingIndex] = nextProfile;
+      return updated;
+    });
+    setSelectedLlmProfileId(profileId);
+    setLlmProfileError("");
+  };
+
+  const handleLoadLlmProfile = (profileId) => {
+    const targetId = profileId || selectedLlmProfileId;
+    if (!targetId) {
+      setLlmProfileError("Select a profile to load.");
+      return;
+    }
+    const profile = llmProfiles.find((item) => item.id === targetId);
+    if (!profile) {
+      setLlmProfileError("Selected profile was not found.");
+      return;
+    }
+    const data = profile.data || {};
+    if (typeof data.resumeText === "string") setResumeText(data.resumeText);
+    if (typeof data.wishes === "string") setWishes(data.wishes);
+    if (typeof data.selectedModel === "string") setSelectedModel(data.selectedModel);
+    if (typeof data.lmTimeout === "number") setLmTimeout(data.lmTimeout);
+    if (typeof data.enableRerank === "boolean") setEnableRerank(data.enableRerank);
+    if (typeof data.rerankTopN === "number" || data.rerankTopN === null) {
+      setRerankTopN(data.rerankTopN ?? null);
+    }
+    setLlmProfileName(profile.name || "");
+    setSelectedLlmProfileId(profile.id);
+    setLlmProfileError("");
+  };
+
+  const handleDeleteLlmProfile = () => {
+    if (!selectedLlmProfileId) {
+      setLlmProfileError("Select a profile to delete.");
+      return;
+    }
+    setLlmProfiles((prev) => prev.filter((profile) => profile.id !== selectedLlmProfileId));
+    setSelectedLlmProfileId("");
+    setLlmProfileName("");
+    setLlmProfileError("");
   };
 
   const handleLoadCache = () => {
@@ -318,7 +472,7 @@ export default function App() {
                 <span className="action-pill">{actionLabel}</span>
                 {showActionSwitcher && (
                   <button
-                    className="ghost"
+                    className="cta cta-switch"
                     onClick={() => setActiveJobAction(activeJobAction === "cover" ? "cv" : "cover")}
                   >
                     {switchActionLabel}
@@ -368,7 +522,7 @@ export default function App() {
   return (
     <Box className={`app-shell ${isSidebarOpen ? "is-sidebar-open" : ""}`}>
       <Grid
-        templateColumns={isFindView ? "72px minmax(260px, 320px) 1fr" : "72px 1fr"}
+        templateColumns={isFindView ? "72px minmax(360px, 420px) 1fr" : "72px 1fr"}
         minHeight="100vh"
       >
         <GridItem className="app-rail">
@@ -416,6 +570,7 @@ export default function App() {
               selectedModel={selectedModel}
               onSelectedModelChange={setSelectedModel}
               lmTimeout={lmTimeout}
+              lmTimeoutMinutes={lmTimeoutMinutes}
               onLmTimeoutChange={setLmTimeout}
               modelError={modelError}
               enableRerank={enableRerank}
@@ -423,6 +578,15 @@ export default function App() {
               rerankTopN={rerankTopN}
               onRerankTopNChange={setRerankTopN}
               defaultRerankTopN={defaultRerankTopN}
+              llmProfiles={llmProfiles}
+              selectedLlmProfileId={selectedLlmProfileId}
+              onSelectedLlmProfileIdChange={setSelectedLlmProfileId}
+              llmProfileName={llmProfileName}
+              onLlmProfileNameChange={setLlmProfileName}
+              onSaveLlmProfile={handleSaveLlmProfile}
+              onLoadLlmProfile={handleLoadLlmProfile}
+              onDeleteLlmProfile={handleDeleteLlmProfile}
+              llmProfileError={llmProfileError}
               cachedAvailable={Boolean(cachedResponse)}
               cachedAt={cachedAt}
               onLoadCache={handleLoadCache}
@@ -445,15 +609,15 @@ export default function App() {
                 </p>
               </header>
               <section className="card">
-                {response && (
-                  <ResultsList
-                    jobs={jobs}
-                    rerankApplied={response?.rerank_applied}
-                    rerankTopN={response?.rerank_top_n}
-                    onSelectJob={handleSelectJob}
-                  />
-                )}
-                {!response && <p className="helper">Run a search to see results.</p>}
+                <ResultsList
+                  jobs={jobs}
+                  rerankApplied={response?.rerank_applied}
+                  rerankTopN={response?.rerank_top_n}
+                  onSelectJob={handleSelectJob}
+                  isLoading={isLoading}
+                  hasResponse={Boolean(response)}
+                  refinementProgress={refinementProgress}
+                />
               </section>
             </>
           ) : (
