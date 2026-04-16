@@ -32,7 +32,11 @@ export default function ResultsList({
               Tokens {refinementProgress.currentTokens} / {refinementProgress.totalTokens} (est.)
             </span>
           </div>
-          <Progress value={refinementProgress.percent} size="sm" colorScheme="blue" />
+          <Progress.Root value={refinementProgress.percent} size="sm" colorPalette="blue">
+            <Progress.Track>
+              <Progress.Range />
+            </Progress.Track>
+          </Progress.Root>
           <p className="helper">
             {refinementProgress.elapsedSeconds}s / {refinementProgress.timeoutSeconds}s elapsed
           </p>
