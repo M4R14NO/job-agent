@@ -1185,6 +1185,21 @@ select {
   background: #ffffff;
 }
 
+.cover-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.cover-language {
+  display: grid;
+  gap: 6px;
+}
+
+.cover-language select {
+  min-width: 160px;
+}
+
 
 
 .action-footer {

@@ -89,6 +89,7 @@ export function JobActionsCard({
   const [selectedTemplate, setSelectedTemplate] = useState("awesomecv");
   const [selectedDocType, setSelectedDocType] = useState("resume");
   const [outputLanguage, setOutputLanguage] = useState("english");
+  const [coverOutputLanguage, setCoverOutputLanguage] = useState(outputLanguage);
 
   useEffect(() => {
     setCoverLetter("");
@@ -96,6 +97,7 @@ export function JobActionsCard({
     setIsGenerating(false);
     setCvError("");
     setIsGeneratingCv(false);
+    setCoverOutputLanguage(outputLanguage);
   }, [job]);
 
   const handleGenerate = async () => {
@@ -114,7 +116,7 @@ export function JobActionsCard({
         job_url: job.job_url,
         model: selectedModel,
         lm_timeout: lmTimeout,
-        output_language: outputLanguage
+        output_language: coverOutputLanguage
       });
       setCoverLetter(draft);
     } catch (err) {
@@ -164,9 +166,22 @@ export function JobActionsCard({
         <div className="action-panel action-panel-cover">
           <div className="rank-header">
             <h3>Cover letter</h3>
-            <button className="secondary" onClick={handleGenerate} disabled={isGenerating}>
-              {isGenerating ? "Drafting..." : "Generate"}
-            </button>
+            <div className="cover-controls">
+              <div className="cover-language">
+                <label htmlFor="coverLanguage" className="label">Language</label>
+                <select
+                  id="coverLanguage"
+                  value={coverOutputLanguage}
+                  onChange={(e) => setCoverOutputLanguage(e.target.value)}
+                >
+                  <option value="english">English</option>
+                  <option value="german">German</option>
+                </select>
+              </div>
+              <button className="secondary" onClick={handleGenerate} disabled={isGenerating}>
+                {isGenerating ? "Drafting..." : "Generate"}
+              </button>
+            </div>
           </div>
           <p className="helper">
             Uses the same LLM settings as the refinement flow for a tailored draft.
