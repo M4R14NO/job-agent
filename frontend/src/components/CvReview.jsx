@@ -180,7 +180,6 @@ export default function CvReview({
   const [dragOverKey, setDragOverKey] = useState(null);
   const [activeStep, setActiveStep] = useState(0);
   const [openPreviewEditors, setOpenPreviewEditors] = useState({});
-  const [showChangeSummary, setShowChangeSummary] = useState(false);
   const [hiddenSectionsOpen, setHiddenSectionsOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState(() => ({
     basics: true,
@@ -1171,75 +1170,6 @@ export default function CvReview({
     }
   };
 
-  const mappingSummary = useMemo(() => {
-    if (!previewPayload) return [];
-    return SECTION_KEYS.map((key) => {
-      const before = collectCanonicalText(key).filter(Boolean);
-      const after = collectPreviewText(key).filter(Boolean);
-      const beforeNormalized = before.map(normalizeText).filter(Boolean);
-      const afterNormalized = after.map(normalizeText).filter(Boolean);
-      const beforeSet = new Set(beforeNormalized);
-      const afterSet = new Set(afterNormalized);
-      const removed = beforeNormalized.filter((item) => !afterSet.has(item));
-      const added = afterNormalized.filter((item) => !beforeSet.has(item));
-      const rephrased =
-        key === "summary" && beforeNormalized[0] && afterNormalized[0] && beforeNormalized[0] !== afterNormalized[0]
-          ? [afterNormalized[0]]
-          : [];
-      return {
-        key,
-        label: SECTION_LABELS[key],
-        added,
-        removed,
-        rephrased
-      };
-    }).filter((item) => item.added.length || item.removed.length || item.rephrased.length);
-  }, [formData, previewPayload]);
-
-  const renderMappingSummary = () => {
-    if (!previewPayload) return null;
-    if (!mappingSummary.length) {
-      return <p className="helper">No noticeable changes detected.</p>;
-    }
-
-    return (
-      <div className="mapping-summary">
-        <div className="mapping-summary-header">
-          <div>
-            <h4>Mapping changes</h4>
-            <p className="helper">Quick overview of what the LLM adjusted or removed.</p>
-          </div>
-          <button type="button" className="ghost" onClick={() => setShowChangeSummary((prev) => !prev)}>
-            {showChangeSummary ? "Hide details" : "Show details"}
-          </button>
-        </div>
-        <div className="mapping-summary-list">
-          {mappingSummary.map((item) => (
-            <div key={`summary-${item.key}`} className="mapping-summary-row">
-              <strong>{item.label}</strong>
-              <span>Added: {item.added.length}</span>
-              <span>Removed: {item.removed.length}</span>
-              <span>Rephrased: {item.rephrased.length}</span>
-              {showChangeSummary && (
-                <div className="mapping-summary-details">
-                  {item.added.slice(0, 2).map((entry) => (
-                    <p key={`add-${item.key}-${entry}`} className="helper">Added: {entry}</p>
-                  ))}
-                  {item.removed.slice(0, 2).map((entry) => (
-                    <p key={`remove-${item.key}-${entry}`} className="helper">Removed: {entry}</p>
-                  ))}
-                  {item.rephrased.slice(0, 1).map((entry) => (
-                    <p key={`rephrase-${item.key}-${entry}`} className="helper">Rephrased: {entry}</p>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
   const renderBasics = () =>
     renderCollapsibleSection({
       key: "basics",
@@ -1989,7 +1919,9 @@ export default function CvReview({
               </button>
               {isPreviewing && <p className="helper">Mapping your CV to the template...</p>}
             </div>
-            {previewPayload ? renderMappingSummary() : (
+            {previewPayload ? (
+              <p className="helper">Mapping ready. Continue to review and edit the preview.</p>
+            ) : (
               <p className="helper">Mapping will run automatically and is required before review.</p>
             )}
             <div className="step-cta">
