@@ -208,6 +208,10 @@ class CvParseRequest(BaseModel):
     model: str | None = None
     lm_timeout: float | None = None
     output_language: str | None = None
+    job_title: str | None = None
+    company: str | None = None
+    job_description: str | None = None
+    job_url: str | None = None
 
 
 class CvParseResponse(BaseModel):
@@ -232,6 +236,7 @@ class CvRenderRequest(BaseModel):
     lm_timeout: float | None = None
     output_language: str | None = None
     section_order: list[str] | None = None
+    mapping_mode: str | None = None
 
 
 class CvRenderTemplateRequest(BaseModel):
@@ -251,10 +256,28 @@ class CvPreviewRequest(BaseModel):
     lm_timeout: float | None = None
     output_language: str | None = None
     section_order: list[str] | None = None
+    mapping_mode: str | None = None
 
 
 class CvPreviewResponse(BaseModel):
     payload: dict
+
+
+class CvRewriteRequest(BaseModel):
+    data: CvCanonicalData
+    prompt: str
+    job_title: str | None = None
+    company: str | None = None
+    job_description: str | None = None
+    job_url: str | None = None
+    model: str | None = None
+    lm_timeout: float | None = None
+    output_language: str | None = None
+
+
+class CvRewriteResponse(BaseModel):
+    schema_version: str
+    data: CvCanonicalData
 
 
 class CvProfileListResponse(BaseModel):

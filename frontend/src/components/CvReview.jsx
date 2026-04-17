@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   deleteCvProfile,
   previewCvMapping,
+  rewriteCvCanonical,
   renderCvFromTemplate,
   saveCvProfile,
   validateCvCanonical
@@ -176,6 +177,9 @@ export default function CvReview({
   const [isRendering, setIsRendering] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewPayload, setPreviewPayload] = useState(null);
+  const [previewHash, setPreviewHash] = useState("");
+  const [rewritePrompt, setRewritePrompt] = useState("");
+  const [isRewriting, setIsRewriting] = useState(false);
   const [draggedSection, setDraggedSection] = useState(null);
   const [dragOverKey, setDragOverKey] = useState(null);
   const [activeStep, setActiveStep] = useState(0);
@@ -202,6 +206,29 @@ export default function CvReview({
   const jobUrl = job?.job_url || "";
   const hasJobContext = Boolean(jobTitle || jobCompany || jobDescription);
 
+  const hashString = (value) => {
+    let hash = 5381;
+    for (let i = 0; i < value.length; i += 1) {
+      hash = (hash * 33) ^ value.charCodeAt(i);
+    }
+    return (hash >>> 0).toString(16);
+  };
+
+  const buildPreviewHash = () =>
+    hashString(
+      JSON.stringify({
+        data: formData,
+        section_order: sectionOrder,
+        job_title: jobTitle,
+        company: jobCompany,
+        job_description: jobDescription,
+        job_url: jobUrl,
+        output_language: outputLanguage,
+        template_id: templateId,
+        doc_type: docType
+      })
+    );
+
   const steps = [
     {
       id: "inspect",
@@ -223,15 +250,34 @@ export default function CvReview({
     setProfileId(canonical?.profile_id || "default");
     setRevision(canonical?.revision ?? 0);
     setPreviewPayload(null);
+    setPreviewHash("");
+    setRewritePrompt("");
+    setIsRewriting(false);
     setOpenPreviewEditors({});
     setActiveStep(0);
   }, [canonical]);
 
   useEffect(() => {
     if (activeStep !== 1) return;
-    if (isPreviewing || previewPayload) return;
+    if (isPreviewing) return;
+    const nextHash = buildPreviewHash();
+    if (previewPayload && previewHash === nextHash) return;
     handlePreview();
-  }, [activeStep, isPreviewing, previewPayload]);
+  }, [
+    activeStep,
+    isPreviewing,
+    previewPayload,
+    previewHash,
+    formData,
+    sectionOrder,
+    jobTitle,
+    jobCompany,
+    jobDescription,
+    jobUrl,
+    outputLanguage,
+    templateId,
+    docType
+  ]);
 
   const enabledSections = useMemo(() => new Set(sectionOrder), [sectionOrder]);
   const hiddenSectionKeys = useMemo(
@@ -239,8 +285,13 @@ export default function CvReview({
     [enabledSections]
   );
 
-  const toggleSection = (key) => {
+  const clearPreview = () => {
     setPreviewPayload(null);
+    setPreviewHash("");
+  };
+
+  const toggleSection = (key) => {
+    clearPreview();
     setSectionOrder((current) => {
       if (current.includes(key)) {
         return current.filter((section) => section !== key);
@@ -259,7 +310,7 @@ export default function CvReview({
   };
 
   const moveSection = (key, direction) => {
-    setPreviewPayload(null);
+    clearPreview();
     setSectionOrder((current) => {
       const index = current.indexOf(key);
       if (index < 0) return current;
@@ -291,11 +342,11 @@ export default function CvReview({
     });
     setDraggedSection(null);
     setDragOverKey(null);
-    setPreviewPayload(null);
+    clearPreview();
   };
 
   const updateField = (field, value) => {
-    setPreviewPayload(null);
+    clearPreview();
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -350,7 +401,7 @@ export default function CvReview({
   };
 
   const updateListItem = (section, index, patch) => {
-    setPreviewPayload(null);
+    clearPreview();
     setFormData((prev) => {
       const updated = [...prev[section]];
       updated[index] = { ...updated[index], ...patch };
@@ -359,17 +410,17 @@ export default function CvReview({
   };
 
   const addListItem = (section, item) => {
-    setPreviewPayload(null);
+    clearPreview();
     setFormData((prev) => ({ ...prev, [section]: [...prev[section], item] }));
   };
 
   const removeListItem = (section, index) => {
-    setPreviewPayload(null);
+    clearPreview();
     setFormData((prev) => ({ ...prev, [section]: prev[section].filter((_, idx) => idx !== index) }));
   };
 
   const moveListItem = (section, index, direction) => {
-    setPreviewPayload(null);
+    clearPreview();
     setFormData((prev) => {
       const updated = [...prev[section]];
       const nextIndex = direction === "up" ? index - 1 : index + 1;
@@ -449,12 +500,10 @@ export default function CvReview({
     }
   };
 
-  const handlePreview = async () => {
+  const handlePreview = async ({ force = false } = {}) => {
     setError("");
-    if (!model) {
-      setError("Select a model to preview the CV mapping.");
-      return;
-    }
+    const nextHash = buildPreviewHash();
+    if (!force && previewPayload && previewHash === nextHash) return;
     setIsPreviewing(true);
     try {
       const result = await previewCvMapping({
@@ -468,13 +517,50 @@ export default function CvReview({
         doc_type: docType,
         lm_timeout: lmTimeout,
         output_language: outputLanguage,
-        section_order: sectionOrder
+        section_order: sectionOrder,
+        mapping_mode: "deterministic"
       });
       setPreviewPayload(result.payload || null);
+      setPreviewHash(nextHash);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Preview failed");
     } finally {
       setIsPreviewing(false);
+    }
+  };
+
+  const handleRewrite = async () => {
+    setError("");
+    if (!model) {
+      setError("Select a model to rewrite the canonical CV.");
+      return;
+    }
+    const instructions = rewritePrompt.trim();
+    if (!instructions) {
+      setError("Add rewrite instructions before running the AI rewrite.");
+      return;
+    }
+    setIsRewriting(true);
+    try {
+      const result = await rewriteCvCanonical({
+        data: formData,
+        prompt: instructions,
+        job_title: jobTitle,
+        company: jobCompany,
+        job_description: jobDescription,
+        job_url: jobUrl,
+        model,
+        lm_timeout: lmTimeout,
+        output_language: outputLanguage
+      });
+      setFormData(normalizeCanonical(result.data));
+      clearPreview();
+      setOpenPreviewEditors({});
+      setRewritePrompt("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Rewrite failed");
+    } finally {
+      setIsRewriting(false);
     }
   };
 
@@ -1916,10 +2002,35 @@ export default function CvReview({
             {!hasJobContext && (
               <p className="helper">No job context provided. Preview will be generic.</p>
             )}
+            <div className="sub-card">
+              <div className="sub-card-header">
+                <strong>Rewrite with AI (optional)</strong>
+              </div>
+              <p className="helper">
+                Deterministic preview uses your canonical data. Add guidance to adjust wording, then rewrite.
+              </p>
+              <textarea
+                rows={4}
+                placeholder="Example: Emphasize impact metrics and leadership. Keep bullets concise."
+                value={rewritePrompt}
+                onChange={(event) => setRewritePrompt(event.target.value)}
+              />
+              <div className="inline-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={handleRewrite}
+                  disabled={isRewriting}
+                >
+                  {isRewriting ? "Rewriting..." : "Rewrite with AI"}
+                </button>
+                <span className="helper">This updates the canonical data and refreshes preview.</span>
+              </div>
+            </div>
             {previewPayload ? (
               <>
                 <div className="panel-actions">
-                  <button type="button" className="ghost" onClick={handlePreview} disabled={isPreviewing}>
+                  <button type="button" className="ghost" onClick={() => handlePreview({ force: true })} disabled={isPreviewing}>
                     {isPreviewing ? "Updating preview..." : "Run preview again"}
                   </button>
                 </div>

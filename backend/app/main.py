@@ -18,19 +18,22 @@ from .schemas.search import (
     CvRenderRequest,
     CvRenderTemplateRequest,
     CvRequest,
+    CvRewriteRequest,
+    CvRewriteResponse,
     CvValidateRequest,
     ModelsResponse,
     SearchRequest,
     SearchResponse,
 )
+from .services.cv_mappers import get_deterministic_mapper, get_llm_mapper
 from .services.cv_service import (
     ALLOWED_DOC_TYPES,
     CANONICAL_SCHEMA_VERSION,
     DEFAULT_TEMPLATE_ID,
     generate_cv_pdf,
-    map_canonical_to_template,
     parse_resume_to_canonical,
     render_cv_pdf_from_payload,
+    rewrite_canonical_with_prompt,
 )
 from .services.cv_mappers.awesomecv import CvAwesomePayload
 from .services.cv_storage import RevisionMismatchError, get_profile_store
@@ -72,6 +75,15 @@ def _normalize_output_language(value: str | None) -> str | None:
             status_code=400,
             detail="Unsupported output_language. Use 'english' or 'german'.",
         )
+    return normalized
+
+
+def _normalize_mapping_mode(value: str | None) -> str:
+    if value is None:
+        return "deterministic"
+    normalized = value.strip().lower()
+    if normalized not in {"deterministic", "llm"}:
+        raise HTTPException(status_code=400, detail="Unsupported mapping_mode. Use 'deterministic' or 'llm'.")
     return normalized
 
 
@@ -223,6 +235,10 @@ def parse_cv(payload: CvParseRequest) -> CvParseResponse:
             model=payload.model,
             lm_timeout=payload.lm_timeout,
             output_language=output_language,
+            job_title=payload.job_title,
+            company=payload.company,
+            job_description=payload.job_description,
+            job_url=payload.job_url,
         )
     except RuntimeError as exc:
         message = str(exc)
@@ -293,25 +309,38 @@ def delete_cv_profile(profile_id: str) -> dict:
 
 @app.post("/cv/render")
 def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
-    if not payload.model:
-        raise HTTPException(status_code=400, detail="Model is required")
-    if payload.template_id != DEFAULT_TEMPLATE_ID:
+    deterministic_mapper = get_deterministic_mapper(payload.template_id)
+    llm_mapper = get_llm_mapper(payload.template_id)
+    if not deterministic_mapper and not llm_mapper:
         raise HTTPException(status_code=400, detail="Unsupported template_id")
     if payload.doc_type not in ALLOWED_DOC_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported doc_type")
     output_language = _normalize_output_language(payload.output_language)
+    mapping_mode = _normalize_mapping_mode(payload.mapping_mode)
+    if mapping_mode == "llm" and not payload.model:
+        raise HTTPException(status_code=400, detail="Model is required for LLM mapping")
 
     try:
-        template_payload, _ = map_canonical_to_template(
-            canonical=payload.data,
-            job_title=payload.job_title,
-            company=payload.company,
-            job_description=payload.job_description,
-            model=payload.model,
-            lm_timeout=payload.lm_timeout,
-            output_language=output_language,
-            section_order=payload.section_order,
-        )
+        if mapping_mode == "llm":
+            if not llm_mapper:
+                raise HTTPException(status_code=400, detail="Template does not support LLM mapping")
+            template_payload, _ = llm_mapper(
+                canonical=payload.data,
+                job_title=payload.job_title,
+                company=payload.company,
+                job_description=payload.job_description,
+                model=payload.model,
+                lm_timeout=payload.lm_timeout,
+                output_language=output_language,
+                section_order=payload.section_order,
+            )
+        else:
+            if not deterministic_mapper:
+                raise HTTPException(status_code=400, detail="Template does not support deterministic mapping")
+            template_payload, _ = deterministic_mapper(
+                canonical=payload.data,
+                section_order=payload.section_order,
+            )
         pdf_bytes = render_cv_pdf_from_payload(payload=template_payload.model_dump(), doc_type=payload.doc_type)
     except RuntimeError as exc:
         message = str(exc)
@@ -329,25 +358,38 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
 
 @app.post("/cv/preview", response_model=CvPreviewResponse)
 def preview_cv_mapping(payload: CvPreviewRequest) -> CvPreviewResponse:
-    if not payload.model:
-        raise HTTPException(status_code=400, detail="Model is required")
-    if payload.template_id != DEFAULT_TEMPLATE_ID:
+    deterministic_mapper = get_deterministic_mapper(payload.template_id)
+    llm_mapper = get_llm_mapper(payload.template_id)
+    if not deterministic_mapper and not llm_mapper:
         raise HTTPException(status_code=400, detail="Unsupported template_id")
     if payload.doc_type not in ALLOWED_DOC_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported doc_type")
     output_language = _normalize_output_language(payload.output_language)
+    mapping_mode = _normalize_mapping_mode(payload.mapping_mode)
+    if mapping_mode == "llm" and not payload.model:
+        raise HTTPException(status_code=400, detail="Model is required for LLM mapping")
 
     try:
-        template_payload, _ = map_canonical_to_template(
-            canonical=payload.data,
-            job_title=payload.job_title,
-            company=payload.company,
-            job_description=payload.job_description,
-            model=payload.model,
-            lm_timeout=payload.lm_timeout,
-            output_language=output_language,
-            section_order=payload.section_order,
-        )
+        if mapping_mode == "llm":
+            if not llm_mapper:
+                raise HTTPException(status_code=400, detail="Template does not support LLM mapping")
+            template_payload, _ = llm_mapper(
+                canonical=payload.data,
+                job_title=payload.job_title,
+                company=payload.company,
+                job_description=payload.job_description,
+                model=payload.model,
+                lm_timeout=payload.lm_timeout,
+                output_language=output_language,
+                section_order=payload.section_order,
+            )
+        else:
+            if not deterministic_mapper:
+                raise HTTPException(status_code=400, detail="Template does not support deterministic mapping")
+            template_payload, _ = deterministic_mapper(
+                canonical=payload.data,
+                section_order=payload.section_order,
+            )
     except RuntimeError as exc:
         message = str(exc)
         if "timed out" in message:
@@ -355,6 +397,35 @@ def preview_cv_mapping(payload: CvPreviewRequest) -> CvPreviewResponse:
         raise HTTPException(status_code=502, detail=message) from exc
 
     return CvPreviewResponse(payload=template_payload.model_dump())
+
+
+@app.post("/cv/rewrite", response_model=CvRewriteResponse)
+def rewrite_cv(payload: CvRewriteRequest) -> CvRewriteResponse:
+    if not payload.model:
+        raise HTTPException(status_code=400, detail="Model is required")
+    output_language = _normalize_output_language(payload.output_language)
+    if not payload.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt is required")
+
+    try:
+        data = rewrite_canonical_with_prompt(
+            canonical=payload.data,
+            prompt=payload.prompt,
+            model=payload.model,
+            lm_timeout=payload.lm_timeout,
+            output_language=output_language,
+            job_title=payload.job_title,
+            company=payload.company,
+            job_description=payload.job_description,
+            job_url=payload.job_url,
+        )
+    except RuntimeError as exc:
+        message = str(exc)
+        if "timed out" in message:
+            raise HTTPException(status_code=504, detail=message) from exc
+        raise HTTPException(status_code=502, detail=message) from exc
+
+    return CvRewriteResponse(schema_version=CANONICAL_SCHEMA_VERSION, data=data)
 
 
 @app.post("/cv/render-template")

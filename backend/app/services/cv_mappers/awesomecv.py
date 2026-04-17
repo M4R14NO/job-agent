@@ -23,6 +23,26 @@ MAX_SUMMARY_CHARS = 600
 MAX_SKILL_ITEM_CHARS = 120
 
 
+def _derive_link_fields(links: list[str]) -> tuple[str | None, str | None, str | None]:
+    homepage = None
+    github = None
+    linkedin = None
+    for link in links:
+        if not isinstance(link, str) or not link.strip():
+            continue
+        normalized = link.strip()
+        lower = normalized.lower()
+        if "github.com" in lower and not github:
+            github = normalized
+            continue
+        if "linkedin.com" in lower and not linkedin:
+            linkedin = normalized
+            continue
+        if not homepage:
+            homepage = normalized
+    return homepage, github, linkedin
+
+
 class CvSections(BaseModel):
     summary: bool = True
     experience: bool = True
@@ -409,6 +429,57 @@ def _fallback_payload_from_canonical(canonical: CvCanonicalData) -> dict:
         "certificates": certificates,
         "writings": writing,
     }
+
+
+def map_canonical_to_template_deterministic(
+    *,
+    canonical: CvCanonicalData,
+    section_order: list[str] | None = None,
+) -> tuple[CvAwesomePayload, list[CvTemplateProvenance]]:
+    fallback = _fallback_payload_from_canonical(canonical)
+    homepage, github, linkedin = _derive_link_fields(canonical.links)
+    summary = canonical.summary.strip() if isinstance(canonical.summary, str) else ""
+    data = {
+        "first_name": canonical.first_name or "",
+        "last_name": canonical.last_name or "",
+        "position": canonical.headline or "",
+        "address": canonical.location or "",
+        "mobile": canonical.phone or "",
+        "email": canonical.email or "",
+        "homepage": homepage,
+        "github": github,
+        "linkedin": linkedin,
+        "summary": truncate_text(summary, MAX_SUMMARY_CHARS) if summary else None,
+        "experience": fallback["experience"],
+        "education": fallback["education"],
+        "skills": fallback["skills"],
+        "volunteer": fallback["volunteer"],
+        "languages": fallback["languages"],
+        "interests": fallback["interests"],
+        "honors": fallback["honors"],
+        "certificates": fallback["certificates"],
+        "writings": fallback["writings"],
+        "sections": {
+            "summary": bool(summary),
+            "experience": bool(fallback["experience"]),
+            "education": bool(fallback["education"]),
+            "skills": bool(fallback["skills"]),
+            "volunteer": bool(fallback["volunteer"]),
+            "languages": bool(fallback["languages"]),
+            "interests": bool(fallback["interests"]),
+            "honors": bool(fallback["honors"]),
+            "certificates": bool(fallback["certificates"]),
+            "presentation": False,
+            "writing": bool(fallback["writings"]),
+            "committees": False,
+            "extracurricular": False,
+        },
+    }
+    if section_order:
+        data["section_order"] = section_order
+    data = _enforce_template_limits(data)
+    validated_payload = CvAwesomePayload.model_validate(data)
+    return validated_payload, []
 
 
 def _has_nonempty_items(items: list[str] | None) -> bool:

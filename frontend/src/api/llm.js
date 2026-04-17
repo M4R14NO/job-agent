@@ -88,6 +88,27 @@ export async function parseCvCanonical(payload) {
   return response.json();
 }
 
+export async function rewriteCvCanonical(payload) {
+  const response = await fetch(`${BASE_URL}/cv/rewrite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = await response.json();
+      detail = data?.detail ? `: ${data.detail}` : "";
+    } catch (err) {
+      detail = "";
+    }
+    throw new Error(`CV rewrite failed with status ${response.status}${detail}`);
+  }
+
+  return response.json();
+}
+
 export async function validateCvCanonical(payload) {
   const response = await fetch(`${BASE_URL}/cv/validate`, {
     method: "POST",

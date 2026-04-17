@@ -138,7 +138,11 @@ export function JobActionsCard({
         resume_text: resumeText,
         model: selectedModel,
         lm_timeout: lmTimeout,
-        output_language: outputLanguage
+        output_language: outputLanguage,
+        job_title: job.title,
+        company: job.company,
+        job_description: job.description,
+        job_url: job.job_url
       });
       onStartCvReview({
         canonical,

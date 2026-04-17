@@ -11,6 +11,7 @@ from .cv_mappers.awesomecv import (
     ALLOWED_DOC_TYPES,
     DEFAULT_TEMPLATE_ID,
     map_canonical_to_template,
+    map_canonical_to_template_deterministic,
 )
 from .cv_utils import extract_json
 from .lmstudio_client import chat_completion, safe_request
@@ -30,15 +31,34 @@ logger = logging.getLogger(__name__)
 CUSTOM_TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates" / "awesome_cv"
 
 
-def _build_canonical_prompt(resume_text: str, output_language: str | None = None) -> str:
+def _build_canonical_prompt(
+    resume_text: str,
+    output_language: str | None = None,
+    job_title: str | None = None,
+    company: str | None = None,
+    job_description: str | None = None,
+    job_url: str | None = None,
+) -> str:
     language_line = ""
     if output_language == "english":
         language_line = "Write all free-text fields in English. Translate if needed. "
     elif output_language == "german":
         language_line = "Write all free-text fields in German. Translate if needed. "
+    job_context = ""
+    if job_title or company or job_description or job_url:
+        job_context = (
+            "\nJob context (for light tailoring only):\n"
+            f"Title: {job_title or ''}\n"
+            f"Company: {company or ''}\n"
+            f"Description: {job_description or ''}\n"
+            f"URL: {job_url or ''}\n"
+        )
     return (
         "Extract resume data into a canonical CV JSON object. "
         f"{language_line}"
+        "If summary is missing, infer a concise summary from the resume without inventing facts. "
+        "If job context is provided, lightly tailor wording in summary/headline/bullets to match the role "
+        "while staying faithful to the resume. "
         "Return JSON only with the exact keys listed below. "
         "Do not include markdown or comments. "
         "Use stable IDs like exp_1, exp_1_bullet_1, edu_1, skill_1, etc. "
@@ -89,6 +109,7 @@ def _build_canonical_prompt(resume_text: str, output_language: str | None = None
         "}\n\n"
         "Resume text:\n"
         f"{resume_text}\n"
+        f"{job_context}"
     )
 
 
@@ -98,9 +119,20 @@ def parse_resume_to_canonical(
     model: str,
     lm_timeout: float | None = None,
     output_language: str | None = None,
+    job_title: str | None = None,
+    company: str | None = None,
+    job_description: str | None = None,
+    job_url: str | None = None,
 ) -> CvCanonicalData:
     effective_timeout = lm_timeout if lm_timeout is not None else DEFAULT_LM_TIMEOUT
-    prompt = _build_canonical_prompt(resume_text, output_language=output_language)
+    prompt = _build_canonical_prompt(
+        resume_text,
+        output_language=output_language,
+        job_title=job_title,
+        company=company,
+        job_description=job_description,
+        job_url=job_url,
+    )
     json_schema = {
         "type": "object",
         "properties": {
@@ -242,6 +274,91 @@ def parse_resume_to_canonical(
     except Exception:
         logger.exception("CV canonical validation failed", extra={"canonical_payload": data})
         raise
+
+
+def rewrite_canonical_with_prompt(
+    *,
+    canonical: CvCanonicalData,
+    prompt: str,
+    model: str,
+    lm_timeout: float | None = None,
+    output_language: str | None = None,
+    job_title: str | None = None,
+    company: str | None = None,
+    job_description: str | None = None,
+    job_url: str | None = None,
+) -> CvCanonicalData:
+    language_line = ""
+    if output_language == "english":
+        language_line = "Write all free-text fields in English. Translate if needed. "
+    elif output_language == "german":
+        language_line = "Write all free-text fields in German. Translate if needed. "
+
+    job_context = ""
+    if job_title or company or job_description or job_url:
+        job_context = (
+            "\nJob context:\n"
+            f"Title: {job_title or ''}\n"
+            f"Company: {company or ''}\n"
+            f"Description: {job_description or ''}\n"
+            f"URL: {job_url or ''}\n"
+        )
+
+    system = (
+        "You are a resume editor. Rewrite canonical CV data to better match the job context and user prompt "
+        "without inventing experience or changing meaning. "
+        "Preserve IDs and list ordering. Only edit text fields. "
+        f"{language_line}"
+        "Return JSON only with the exact keys listed below."
+    )
+    user = (
+        "User instructions:\n"
+        f"{prompt}\n\n"
+        "Canonical JSON:\n"
+        f"{json.dumps(canonical.model_dump(), ensure_ascii=True)}\n"
+        f"{job_context}"
+    )
+    json_schema = CvCanonicalData.model_json_schema()
+    response_format = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "canonical_rewrite",
+            "schema": json_schema,
+            "strict": True,
+        },
+    }
+    content, error = safe_request(
+        chat_completion,
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        temperature=0.3,
+        max_tokens=4000,
+        response_format=response_format,
+        timeout=lm_timeout,
+    )
+    if error:
+        content, error = safe_request(
+            chat_completion,
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.3,
+            max_tokens=4000,
+            timeout=lm_timeout,
+        )
+    if error:
+        raise RuntimeError(f"LMStudio error: {error}")
+    if not content:
+        raise RuntimeError("LMStudio returned empty content")
+
+    json_text = extract_json(content)
+    payload = json.loads(json_text)
+    return CvCanonicalData.model_validate(payload)
 
 
 def generate_cv_pdf(
