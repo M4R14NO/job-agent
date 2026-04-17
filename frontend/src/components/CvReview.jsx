@@ -205,21 +205,15 @@ export default function CvReview({
   const steps = [
     {
       id: "inspect",
-      title: "Inspect data & set section order",
+      title: "Review parsed CV data",
       shortTitle: "Inspect",
-      helper: "Review your canonical data and arrange the sections."
-    },
-    {
-      id: "map",
-      title: "Map CV data to template",
-      shortTitle: "Map",
-      helper: "Mapping is required and runs automatically."
+      helper: "Review your parsed CV data and arrange the sections."
     },
     {
       id: "review",
-      title: "Review mapped values",
-      shortTitle: "Review",
-      helper: "Inspect the mapped output and edit per section."
+      title: "Preview and edit",
+      shortTitle: "Preview",
+      helper: "Review the preview and edit each section."
     }
   ];
 
@@ -247,6 +241,15 @@ export default function CvReview({
 
   const toggleSection = (key) => {
     setPreviewPayload(null);
+    setSectionOrder((current) => {
+      if (current.includes(key)) {
+        return current.filter((section) => section !== key);
+      }
+      return [...current, key];
+    });
+  };
+
+  const toggleSectionInReview = (key) => {
     setSectionOrder((current) => {
       if (current.includes(key)) {
         return current.filter((section) => section !== key);
@@ -1901,9 +1904,9 @@ export default function CvReview({
                 className="primary"
                 onClick={() => setActiveStep(1)}
               >
-                Next: Map CV data
+                Next: Preview
               </button>
-              <p className="helper">Continue to the mapping step before rendering a PDF.</p>
+              <p className="helper">Continue to the preview and editing step.</p>
             </div>
           </div>
         )}
@@ -1911,58 +1914,66 @@ export default function CvReview({
         {activeStep === 1 && (
           <div className="cv-step-content">
             {!hasJobContext && (
-              <p className="helper">No job context provided. Mapping will be generic.</p>
+              <p className="helper">No job context provided. Preview will be generic.</p>
             )}
-            <div className="panel-actions">
-              <button type="button" className="ghost" onClick={handlePreview} disabled={isPreviewing}>
-                {isPreviewing ? "Mapping..." : "Run mapping again"}
-              </button>
-              {isPreviewing && <p className="helper">Mapping your CV to the template...</p>}
-            </div>
             {previewPayload ? (
-              <p className="helper">Mapping ready. Continue to review and edit the preview.</p>
-            ) : (
-              <p className="helper">Mapping will run automatically and is required before review.</p>
-            )}
-            <div className="step-cta">
-              <button
-                type="button"
-                className="primary"
-                onClick={() => setActiveStep(2)}
-                disabled={!previewPayload || isPreviewing}
-              >
-                Next: Review mapped values
-              </button>
-              <p className="helper">Continue to review and edit the mapped sections.</p>
-            </div>
-          </div>
-        )}
-
-        {activeStep === 2 && (
-          <div className="cv-step-content">
-            {previewPayload ? (
-              <div className="preview-grid">
-                {sectionOrder
-                  .filter((key) => enabledSections.has(key))
-                  .map((key) => (
-                    <div key={`preview-${key}`} className="preview-card">
-                      <div className="preview-card-header">
-                        <h4>{SECTION_LABELS[key]}</h4>
-                        <button type="button" className="ghost" onClick={() => togglePreviewEditor(key)}>
-                          {openPreviewEditors[key] ? "Hide edit" : "Edit"}
-                        </button>
-                      </div>
-                      {renderPreviewSection(key) || <p className="helper">No entries.</p>}
-                      {openPreviewEditors[key] && (
-                        <div className="preview-editor">
-                          {renderPreviewEditorSection(key)}
+              <>
+                <div className="panel-actions">
+                  <button type="button" className="ghost" onClick={handlePreview} disabled={isPreviewing}>
+                    {isPreviewing ? "Updating preview..." : "Run preview again"}
+                  </button>
+                </div>
+                <div className="preview-grid">
+                  {sectionOrder
+                    .filter((key) => enabledSections.has(key))
+                    .map((key) => (
+                      <div key={`preview-${key}`} id={`preview-card-${key}`} className="preview-card">
+                        <div className="preview-card-header">
+                          <h4>{SECTION_LABELS[key]}</h4>
+                          <div className="inline-actions">
+                            <button type="button" className="ghost" onClick={() => toggleSectionInReview(key)}>
+                              Remove
+                            </button>
+                            <button type="button" className="ghost" onClick={() => togglePreviewEditor(key)}>
+                              {openPreviewEditors[key] ? "Hide edit" : "Edit"}
+                            </button>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  ))}
-              </div>
+                        {renderPreviewSection(key) || <p className="helper">No entries.</p>}
+                        {openPreviewEditors[key] && (
+                          <div className="preview-editor">
+                            {renderPreviewEditorSection(key)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+                {hiddenSectionKeys.length > 0 && (
+                  <div className="hidden-sections">
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => setHiddenSectionsOpen((prev) => !prev)}
+                    >
+                      {hiddenSectionsOpen ? "Hide" : "Show"} available sections ({hiddenSectionKeys.length})
+                    </button>
+                    {hiddenSectionsOpen && (
+                      <div className="hidden-sections-list">
+                        {hiddenSectionKeys.map((key) => (
+                          <div key={`review-hidden-${key}`} className="hidden-section-item">
+                            <span>{SECTION_LABELS[key]}</span>
+                            <button type="button" className="ghost" onClick={() => toggleSectionInReview(key)}>
+                              Add
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             ) : (
-              <p className="helper">Run the mapping before reviewing mapped values.</p>
+              <p className="helper">Generating the preview. This can take a moment.</p>
             )}
           </div>
         )}
