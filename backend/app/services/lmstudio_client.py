@@ -9,8 +9,8 @@ LMSTUDIO_TIMEOUT = float(os.getenv("LMSTUDIO_TIMEOUT", "30"))
 LMSTUDIO_EMBEDDING_MODEL = os.getenv("LMSTUDIO_EMBEDDING_MODEL", "text-embedding-3-small")
 
 
-def _get_client() -> httpx.Client:
-    return httpx.Client(base_url=LMSTUDIO_BASE_URL, timeout=LMSTUDIO_TIMEOUT)
+def _get_client(timeout: float | None = None) -> httpx.Client:
+    return httpx.Client(base_url=LMSTUDIO_BASE_URL, timeout=timeout or LMSTUDIO_TIMEOUT)
 
 
 def list_models() -> list[str]:
@@ -52,16 +52,21 @@ def chat_completion(
     messages: list[dict[str, str]],
     temperature: float = 0.2,
     max_tokens: int = 600,
+    response_format: dict | None = None,
+    timeout: float | None = None,
 ) -> str:
-    with _get_client() as client:
+    with _get_client(timeout=timeout) as client:
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        if response_format:
+            payload["response_format"] = response_format
         response = client.post(
             "/v1/chat/completions",
-            json={
-                "model": model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            },
+            json=payload,
         )
         response.raise_for_status()
         payload = response.json()

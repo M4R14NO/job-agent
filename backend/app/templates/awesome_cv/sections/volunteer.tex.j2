@@ -1,0 +1,24 @@
+%-------------------------------------------------------------------------------
+%\tSECTION TITLE
+%-------------------------------------------------------------------------------
+\cvsection{Volunteer Experience}
+
+
+%-------------------------------------------------------------------------------
+%\tCONTENT
+%-------------------------------------------------------------------------------
+\begin{cventries}
+
+%---------------------------------------------------------
+((* for entry in volunteer -*))
+  \cventry
+    {((( entry.role | latex_escape )))} % Role
+    {((( entry.organization | latex_escape )))} % Organization
+    {((( entry.location | latex_escape )))} % Location
+    {((( entry.period | latex_escape )))} % Date(s)
+        {((* if entry.details -*))\begin{cvitems} % Description(s) of tasks/responsibilities
+                ((* for item in entry.details -*))\item {((( item | latex_escape )))}
+                ((* endfor -*))\end{cvitems}((* endif -*))}
+%---------------------------------------------------------
+((* endfor -*))
+\end{cventries}

@@ -1,0 +1,56 @@
+((# Auto-generated from Awesome-CV #))
+((# License: CC BY-SA 4.0 #))
+((# Source: https://github.com/posquit0/Awesome-CV #))
+%-------------------------------------------------------------------------------
+%\tSECTION TITLE
+%-------------------------------------------------------------------------------
+\cvsection{Honors \& Awards}
+
+
+((* if honor_subsections *))
+((* for subsection in honor_subsections *))
+%-------------------------------------------------------------------------------
+%\tSUBSECTION TITLE
+%-------------------------------------------------------------------------------
+\cvsubsection{((( subsection.title | latex_escape )))}
+
+
+%-------------------------------------------------------------------------------
+%\tCONTENT
+%-------------------------------------------------------------------------------
+\begin{cventries}
+
+%---------------------------------------------------------
+((* for honor in subsection.honors *))
+  \cventry
+    {((* if honor.event and honor.location *))((( honor.event | latex_escape ))) \textbar{} ((( honor.location | latex_escape )))((* elif honor.event *))((( honor.event | latex_escape )))((* elif honor.location *))((( honor.location | latex_escape )))((* endif *))} % Issuer/Location
+    {((( honor.award | latex_escape )))} % Award
+    {} % Location
+    {((( honor.date | latex_escape )))} % Date(s)
+    {}
+
+%---------------------------------------------------------
+((* endfor *))
+\end{cventries}
+
+
+((* endfor *))
+((* else *))
+%-------------------------------------------------------------------------------
+%\tCONTENT
+%-------------------------------------------------------------------------------
+\begin{cventries}
+
+%---------------------------------------------------------
+((* for honor in honors *))
+  \cventry
+    {((* if honor.event and honor.location *))((( honor.event | latex_escape ))) \textbar{} ((( honor.location | latex_escape )))((* elif honor.event *))((( honor.event | latex_escape )))((* elif honor.location *))((( honor.location | latex_escape )))((* endif *))} % Issuer/Location
+    {((( honor.award | latex_escape )))} % Award
+    {} % Location
+    {((( honor.date | latex_escape )))} % Date(s)
+    {}
+
+%---------------------------------------------------------
+((* endfor *))
+\end{cventries}
+((* endif *))
