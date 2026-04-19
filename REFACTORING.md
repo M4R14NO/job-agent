@@ -1,51 +1,38 @@
-# Future Refactoring Checklist
+## Summary
+Maximize end-user value by first removing confusing steps and smoothing the CV flow, then improving search discovery controls, followed by result sorting/filtering and loading feedback. Verify backend search capabilities (date, distance) before wiring UI filters to avoid broken affordances.
 
-These are non-blocking improvements worth tackling as the prototype grows.
+## Steps
+1. Validate backend search capabilities for distance and date filtering; identify what fields are returned for job posting date and whether JobSpy supports distance in this project. If unsupported, define UI fallback copy or hide controls. blocks step 6 (State: DONE)
+2. Simplify CV review flow by removing the diff view and showing editable preview directly; preserve mapping results for rendering. blocks step 3 (State: DONE)
+3. Add section add/remove controls in the final step before rendering so users can iterate without going back; ensure the mapping state can be re-run without losing edits. (State: DONE)
+4. Add consistent loading states for all LLM-triggering actions (search refinement, CV parse, mapping, cover letter generation, PDF render), including disabled buttons and spinner placement. (State: OPEN)
+5. Redesign the search bar to an Airbnb-style layout (title, location, distance) with a CV upload option under the bar; treat CV upload as optional and clarify the benefit. parallel with step 4 (State: OPEN)
+6. Implement client-side date filters (last week/month/etc.) and sorting by date in the results list, operating on the fetched results set, with UI controls near the list header. depends on step 1 (State: OPEN)
+7. UX consistency pass: align button styles, empty states, error messaging, spacing, and labels across search, results, and CV flow. parallel with step 6 (State: OPEN)
 
-## Priority order
+## Relevant files
 
-### 1. Centralize request and response shapes
+[SearchFilters.jsx](vscode-file://vscode-app/Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/code/electron-browser/workbench/workbench.html) — search inputs, CV text input, search button and loading state
+[App.jsx](vscode-file://vscode-app/Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/code/electron-browser/workbench/workbench.html) — search state, progress tracking, request/response flow
+[ResultsList.jsx](vscode-file://vscode-app/Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/code/electron-browser/workbench/workbench.html) — list header, result rendering, placement for sort/filter UI
+[CvReview.jsx](vscode-file://vscode-app/Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/code/electron-browser/workbench/workbench.html) — diff view removal, preview rendering, mapping controls
+[CvEntry.jsx](vscode-file://vscode-app/Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/code/electron-browser/workbench/workbench.html) — resume parsing action and loading state
+[JobModal.jsx](vscode-file://vscode-app/Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/code/electron-browser/workbench/workbench.html) — cover letter generation action and loading state
+[search.py](vscode-file://vscode-app/Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/code/electron-browser/workbench/workbench.html) — search request schema, potential additions
+[search_service.py](vscode-file://vscode-app/Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/code/electron-browser/workbench/workbench.html) — JobSpy query options and fields
+[main.py](vscode-file://vscode-app/Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/code/electron-browser/workbench/workbench.html) — API endpoints for search and LLM calls
 
-- [x] Extract the `SearchRequest` model from `backend/app/main.py` into a dedicated schema module such as `backend/app/schemas/search.py`.
-- [x] Add a matching response schema for the `/search` endpoint in the same backend schema module, including the `jobs` payload contract.
-- [x] Create a frontend contract file such as `frontend/src/api/searchSchema.js` or `frontend/src/types/search.js` that mirrors the request and response fields used by the UI.
-- [x] Replace ad hoc field fallbacks in `frontend/src/App.jsx`, such as `job.company ?? job.company_name`, with one normalization path defined in the schema or mapper layer.
-- [x] Document the canonical job object shape in this file or in `README.md` once the contract is stabilized.
+## Verification
 
-Why first: this establishes a stable contract and reduces the risk of spreading backend assumptions across later refactors.
+- Manual UX walkthrough: search with and without CV upload, apply date filter, sort by date, open job details, generate cover letter, parse CV, run mapping, and render PDF; confirm spinners appear for every LLM action.
+- API check: verify search response includes posting date and distance data when available; ensure date filter and sort logic behaves on missing dates.
+- Regression check: confirm existing ranking still applies when no date sorting is selected.
 
-### 2. Extract API calls into a client module
-
-- [x] Create `frontend/src/api/search.js` to own the `POST /search` request currently embedded in `frontend/src/App.jsx`.
-- [x] Move the `fetch("http://localhost:8000/search", ...)` call and `JSON.stringify(...)` payload creation out of `frontend/src/App.jsx` and into the API client.
-- [x] Move response parsing and HTTP error handling into `frontend/src/api/search.js` so `frontend/src/App.jsx` only handles UI state transitions.
-- [x] Introduce a small mapper in `frontend/src/api/search.js` or `frontend/src/api/mappers.js` to normalize backend job fields before they reach the UI.
-- [ ] Keep the backend route definition in `backend/app/main.py` unchanged unless the new schema extraction requires updated imports.
-
-Why second: once data shapes are centralized, the API client can become the single entry point for server communication.
-
-### 3. Move derived data and formatting into utilities or hooks
-
-- [x] Extract the `descriptionHtml` logic from `frontend/src/App.jsx` into a utility such as `frontend/src/utils/jobDescription.js` or a hook such as `frontend/src/hooks/useJobDescription.js`.
-- [x] Move Markdown rendering with `marked` and sanitization with `DOMPurify` out of `frontend/src/App.jsx` so the modal rendering only consumes prepared HTML.
-- [ ] Move any future display formatting, such as job meta labels or match reason formatting, into `frontend/src/utils/` instead of adding more `useMemo` blocks to `frontend/src/App.jsx`.
-- [ ] If tests are added later, target the extracted formatter module directly rather than testing formatting behavior only through `frontend/src/App.jsx`.
-
-Why third: this reduces rendering complexity and makes the later component split cleaner.
-
-### 4. Split the UI into focused components
-
-- [x] Keep `frontend/src/App.jsx` as the screen-level container for state and orchestration.
-- [x] Extract the search form and filter controls from `frontend/src/App.jsx` into a component such as `frontend/src/components/SearchFilters.jsx`.
-- [x] Extract the results list markup from `frontend/src/App.jsx` into `frontend/src/components/ResultsList.jsx`.
-- [x] Extract the selected job modal from `frontend/src/App.jsx` into `frontend/src/components/JobModal.jsx`.
-- [ ] Move any repeated job summary UI from `frontend/src/App.jsx` into a small reusable component such as `frontend/src/components/JobCard.jsx` if duplication appears during the split.
-- [ ] Leave `frontend/src/main.jsx` unchanged unless component exports or app bootstrapping requirements change.
-
-Why fourth: after data flow, API access, and formatting logic are separated, component extraction becomes lower-risk and easier to review.
-
-## Expected outcome
-
-- Cleaner separation between data access, view logic, and presentation.
-- Easier backend and frontend changes without broad UI edits.
-- Better testability for formatting and request-mapping logic.
+## Decisions
+- Prioritize removing the diff view and enabling section add/remove in the final step to reduce user confusion and backtracking.
+Apply date filters client-side on fetched results to avoid losing recall, unless backend constraints require server-side filtering.
+Show distance control only if JobSpy provides a reliable distance filter in this project configuration.
+Further Considerations
+- Distance UX: Option A show control but disable with tooltip when unsupported; Option B hide entirely; Option C allow entry and filter locally if distance data exists in results.
+CV upload: Option A support file upload and parse client-side to text; Option B accept paste only with clearer copy and call-to-action.
+Sorting: Option A date-only sort; Option B add relevance/date toggle with persisted selection.
