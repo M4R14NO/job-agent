@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Switch, Tooltip } from "@chakra-ui/react";
 
 const SITES = [
   { id: "indeed", label: "Indeed" },
@@ -15,6 +16,22 @@ const TIME_FILTERS = [
 ];
 
 const RECENT_LOCATIONS_KEY = "job-agent:recent-locations";
+const RECENT_ROLES_KEY = "job-agent:recent-roles";
+
+const ROLE_SUGGESTIONS = [
+  "Software Engineer",
+  "Backend Engineer",
+  "Frontend Engineer",
+  "Full Stack Engineer",
+  "Data Scientist",
+  "ML Engineer",
+  "Product Manager",
+  "UX Designer",
+  "DevOps Engineer",
+  "Security Engineer",
+  "QA Engineer",
+  "Solutions Architect"
+];
 
 const LOCATION_GROUPS = [
   {
@@ -72,6 +89,7 @@ export default function SearchFilters({
   const [showExample, setShowExample] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [recentLocations, setRecentLocations] = useState([]);
+  const [recentRoles, setRecentRoles] = useState([]);
   const [isLlmOpen, setIsLlmOpen] = useState(false);
   const barRef = useRef(null);
 
@@ -97,6 +115,15 @@ export default function SearchFilters({
     return [...groups, ...LOCATION_GROUPS];
   }, [recentLocations]);
 
+  const roleGroups = useMemo(() => {
+    const groups = [];
+    if (recentRoles.length) {
+      groups.push({ label: "Recent", items: recentRoles });
+    }
+    groups.push({ label: "Suggested roles", items: ROLE_SUGGESTIONS });
+    return groups;
+  }, [recentRoles]);
+
   useEffect(() => {
     const stored = localStorage.getItem(RECENT_LOCATIONS_KEY);
     if (!stored) return;
@@ -107,6 +134,19 @@ export default function SearchFilters({
       }
     } catch (err) {
       localStorage.removeItem(RECENT_LOCATIONS_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(RECENT_ROLES_KEY);
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        setRecentRoles(parsed.filter((item) => typeof item === "string"));
+      }
+    } catch (err) {
+      localStorage.removeItem(RECENT_ROLES_KEY);
     }
   }, []);
 
@@ -153,6 +193,18 @@ SKILLS
     });
   };
 
+  const handleRoleSelect = (value) => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    onSearchTermChange(trimmed);
+    setActiveDropdown(null);
+    setRecentRoles((prev) => {
+      const next = [trimmed, ...prev.filter((item) => item !== trimmed)].slice(0, 6);
+      localStorage.setItem(RECENT_ROLES_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
   const handleDateSelect = (value) => {
     onHoursOldChange(value);
     setActiveDropdown(null);
@@ -173,15 +225,37 @@ SKILLS
   return (
     <>
       <div className="search-bar" ref={barRef}>
-        <div className="search-segment">
+        <div className={`search-segment has-dropdown ${activeDropdown === "role" ? "is-active" : ""}`}>
           <label className="search-label" htmlFor="searchTerm">Role</label>
           <input
             id="searchTerm"
             placeholder="Search roles, skills, or companies"
             value={searchTerm}
             onChange={(e) => onSearchTermChange(e.target.value)}
+            onFocus={() => setActiveDropdown("role")}
             onKeyDown={handleSearchKey}
           />
+          {activeDropdown === "role" && (
+            <div className="search-dropdown">
+              {roleGroups.map((group) => (
+                <div key={group.label} className="dropdown-group">
+                  <p className="dropdown-label">{group.label}</p>
+                  <div className="dropdown-list">
+                    {group.items.map((item) => (
+                      <button
+                        key={`${group.label}-${item}`}
+                        type="button"
+                        className="dropdown-item"
+                        onClick={() => handleRoleSelect(item)}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="search-divider" />
         <div className={`search-segment has-dropdown ${activeDropdown === "location" ? "is-active" : ""}`}>
@@ -227,6 +301,17 @@ SKILLS
           >
             {activeTimeLabel}
           </button>
+          <input
+            type="number"
+            min={1}
+            placeholder="Custom hours"
+            value={Number.isFinite(hoursOld) ? hoursOld : ""}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              if (!Number.isFinite(next)) return;
+              onHoursOldChange(next);
+            }}
+          />
           {activeDropdown === "date" && (
             <div className="search-dropdown">
               <div className="dropdown-list">
@@ -247,13 +332,25 @@ SKILLS
         <div className="search-divider" />
         <div className="search-segment search-toggle">
           <label className="search-label">Remote</label>
-          <button
-            type="button"
-            className={`toggle-pill ${isRemote ? "is-active" : ""}`}
-            onClick={() => onIsRemoteChange(!isRemote)}
-          >
-            {isRemote ? "Remote" : "Any"}
-          </button>
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+              <span>
+                <Switch.Root
+                  checked={isRemote}
+                  onCheckedChange={(details) => onIsRemoteChange(details.checked)}
+                  colorPalette="orange"
+                >
+                  <Switch.HiddenInput />
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                </Switch.Root>
+              </span>
+            </Tooltip.Trigger>
+            <Tooltip.Content>
+              {isRemote ? "Remote-only jobs enabled" : "Remote-only jobs disabled"}
+            </Tooltip.Content>
+          </Tooltip.Root>
         </div>
         <div className="search-actions">
           <button type="button" className="ghost" onClick={handleClearAllClick}>
