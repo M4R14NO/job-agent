@@ -843,6 +843,12 @@ h1 {
   background: #eef2ff;
 }
 
+.dropdown-custom {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .llm-panel {
   margin-top: 12px;
   display: grid;

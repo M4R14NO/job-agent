@@ -90,6 +90,7 @@ export default function SearchFilters({
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [recentLocations, setRecentLocations] = useState([]);
   const [recentRoles, setRecentRoles] = useState([]);
+  const [postedDays, setPostedDays] = useState(() => (hoursOld ? Math.round(hoursOld / 24) : ""));
   const [isLlmOpen, setIsLlmOpen] = useState(false);
   const barRef = useRef(null);
 
@@ -104,7 +105,12 @@ export default function SearchFilters({
 
   const activeTimeLabel = useMemo(() => {
     const match = TIME_FILTERS.find((option) => option.value === hoursOld);
-    return match ? match.label : "Any time";
+    if (match) return match.label;
+    if (hoursOld) {
+      const days = Math.max(1, Math.round(hoursOld / 24));
+      return `Last ${days} days`;
+    }
+    return "Any time";
   }, [hoursOld]);
 
   const locationGroups = useMemo(() => {
@@ -160,6 +166,13 @@ export default function SearchFilters({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (activeDropdown !== "date") return;
+    if (hoursOld) {
+      setPostedDays(Math.round(hoursOld / 24));
+    }
+  }, [activeDropdown, hoursOld]);
 
   const exampleText = `PROFILE
 Name: Ada Lovelace
@@ -301,17 +314,6 @@ SKILLS
           >
             {activeTimeLabel}
           </button>
-          <input
-            type="number"
-            min={1}
-            placeholder="Custom hours"
-            value={Number.isFinite(hoursOld) ? hoursOld : ""}
-            onChange={(e) => {
-              const next = Number(e.target.value);
-              if (!Number.isFinite(next)) return;
-              onHoursOldChange(next);
-            }}
-          />
           {activeDropdown === "date" && (
             <div className="search-dropdown">
               <div className="dropdown-list">
@@ -325,6 +327,29 @@ SKILLS
                     {option.label}
                   </button>
                 ))}
+              </div>
+              <div className="dropdown-custom">
+                <Tooltip.Root>
+                  <Tooltip.Trigger asChild>
+                    <label className="label" htmlFor="customDays">Custom days</label>
+                  </Tooltip.Trigger>
+                  <Tooltip.Content>
+                    Enter the number of days to look back.
+                  </Tooltip.Content>
+                </Tooltip.Root>
+                <input
+                  id="customDays"
+                  type="number"
+                  min={1}
+                  placeholder="e.g. 5"
+                  value={postedDays}
+                  onChange={(e) => {
+                    const next = e.target.value === "" ? "" : Number(e.target.value);
+                    setPostedDays(next);
+                    if (!Number.isFinite(next)) return;
+                    onHoursOldChange(next * 24);
+                  }}
+                />
               </div>
             </div>
           )}
