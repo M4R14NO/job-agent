@@ -105,14 +105,42 @@ export default function SearchFilters({
 Name: Ada Lovelace
 Headline: Backend engineer, distributed systems
 Summary: 6+ years building APIs in Go and Python.
+Email: ada@example.com
+Phone: +49 30 1234567
+Location: Berlin, Germany
+Links: github.com/adalove, linkedin.com/in/adalove
 
 EXPERIENCE
-2021-03 to Present | Staff Backend Engineer | ExampleCo
+2021-03 to Present | Staff Backend Engineer | ExampleCo | Berlin
 - Led migration to event-driven architecture
 - Reduced p95 latency from 900ms to 220ms
 
+EDUCATION
+2013-09 to 2017-07 | B.Sc. Computer Science | University of Example | Berlin
+- Thesis: Distributed systems scheduling
+
+PROJECTS
+2019-01 to 2020-06 | Open Source Contributor | Example Project
+- Built CI pipeline and improved test coverage
+
 SKILLS
-- Go, Python, Postgres, Kafka, AWS
+Languages: Go, Python, SQL
+Platforms: AWS, Kubernetes, Docker
+
+CERTIFICATES
+2022 | AWS Certified Solutions Architect | Amazon
+
+PUBLICATIONS
+2020 | "Efficient Task Scheduling" | ExampleConf Proceedings
+
+LANGUAGES
+English (Fluent), German (Professional)
+
+INTERESTS
+Distributed systems, teaching, hiking
+
+AWARDS
+2019 | Example Engineering Award | ExampleCo
 `;
 
   const resizeTextarea = (event) => {
@@ -381,23 +409,9 @@ SKILLS
               <Dialog.Content className="llm-dialog">
                 <Dialog.Header>
                   <Dialog.Title>Tailor results</Dialog.Title>
-                  <Dialog.Description>
-                    Add job wishes and your CV text so results can be tailored to your profile.
-                  </Dialog.Description>
                 </Dialog.Header>
                 <Dialog.Body>
-                  <div className="llm-dialog-section">
-                    <label htmlFor="wishes" className="label">Job wishes</label>
-                    <textarea
-                      id="wishes"
-                      rows={4}
-                      placeholder="e.g. mission-driven teams, no on-call, EU time zones, climate tech"
-                      value={wishes}
-                      onChange={(e) => onWishesChange(e.target.value)}
-                      onInput={resizeTextarea}
-                      className="auto-textarea"
-                    />
-                  </div>
+                  <p className="helper">Paste your CV so we can tailor results to your profile. Add job wishes if you have specific preferences.</p>
                   <div className="llm-dialog-section">
                     <label htmlFor="cvText" className="label">CV text</label>
                     <textarea
@@ -409,6 +423,10 @@ SKILLS
                       onInput={resizeTextarea}
                       className="auto-textarea"
                     />
+                    <p className="helper">
+                      Include as much as you can: profile, experience, education, projects, skills, certificates,
+                      publications, languages, interests, and awards.
+                    </p>
                     <button
                       type="button"
                       className="ghost"
@@ -419,6 +437,18 @@ SKILLS
                     {showExample && (
                       <pre className="example-box">{exampleText}</pre>
                     )}
+                  </div>
+                  <div className="llm-dialog-section">
+                    <label htmlFor="wishes" className="label">Job wishes (optional)</label>
+                    <textarea
+                      id="wishes"
+                      rows={4}
+                      placeholder="e.g. mission-driven teams, no on-call, EU time zones, climate tech"
+                      value={wishes}
+                      onChange={(e) => onWishesChange(e.target.value)}
+                      onInput={resizeTextarea}
+                      className="auto-textarea"
+                    />
                   </div>
 
                   <Accordion.Root collapsible defaultValue={[]}> 
