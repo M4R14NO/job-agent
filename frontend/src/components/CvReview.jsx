@@ -2022,7 +2022,10 @@ export default function CvReview({
                   onClick={handleRewrite}
                   disabled={isRewriting}
                 >
-                  {isRewriting ? "Rewriting..." : "Rewrite with AI"}
+                  <span className="button-content">
+                    {isRewriting ? <span className="spinner" aria-hidden="true" /> : null}
+                    {isRewriting ? "Rewriting..." : "Rewrite with AI"}
+                  </span>
                 </button>
                 <span className="helper">This updates the canonical data and refreshes preview.</span>
               </div>
@@ -2031,7 +2034,10 @@ export default function CvReview({
               <>
                 <div className="panel-actions">
                   <button type="button" className="ghost" onClick={() => handlePreview({ force: true })} disabled={isPreviewing}>
-                    {isPreviewing ? "Updating preview..." : "Run preview again"}
+                    <span className="button-content">
+                      {isPreviewing ? <span className="spinner" aria-hidden="true" /> : null}
+                      {isPreviewing ? "Updating preview..." : "Run preview again"}
+                    </span>
                   </button>
                 </div>
                 <div className="preview-grid">
@@ -2084,7 +2090,10 @@ export default function CvReview({
                 )}
               </>
             ) : (
-              <p className="helper">Generating the preview. This can take a moment.</p>
+              <p className="helper loading-inline">
+                <span className="spinner" aria-hidden="true" />
+                Generating the preview. This can take a moment.
+              </p>
             )}
           </div>
         )}
@@ -2095,11 +2104,17 @@ export default function CvReview({
       <div className="panel-actions">
         <button className="secondary" onClick={handleValidate}>Validate</button>
         <button className="secondary" onClick={handleSave} disabled={isSaving}>
-          {isSaving ? "Saving..." : "Save"}
+          <span className="button-content">
+            {isSaving ? <span className="spinner" aria-hidden="true" /> : null}
+            {isSaving ? "Saving..." : "Save"}
+          </span>
         </button>
         <button className="secondary" onClick={handleDelete}>Delete</button>
         <button className="primary" onClick={handleRender} disabled={!canRender || isRendering}>
-          {isRendering ? "Rendering..." : "Render PDF"}
+          <span className="button-content">
+            {isRendering ? <span className="spinner" aria-hidden="true" /> : null}
+            {isRendering ? "Rendering..." : "Render PDF"}
+          </span>
         </button>
         {!canRender ? <p className="helper">Run preview before rendering a PDF.</p> : null}
       </div>

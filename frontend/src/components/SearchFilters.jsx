@@ -178,7 +178,10 @@ SKILLS
                 disabled={isSearchDisabled}
                 onClick={onSearch}
               >
-                Apply search options
+                <span className="button-content">
+                  {isLoading ? <span className="spinner" aria-hidden="true" /> : null}
+                  {isLoading ? "Applying..." : "Apply search options"}
+                </span>
               </button>
             </div>
           </div>
@@ -338,7 +341,10 @@ SKILLS
                 disabled={isSearchDisabled || needsResume}
                 onClick={onSearch}
               >
-                Apply refinement
+                <span className="button-content">
+                  {isLoading ? <span className="spinner" aria-hidden="true" /> : null}
+                  {isLoading ? "Refining..." : "Apply refinement"}
+                </span>
               </button>
             </div>
           </div>
@@ -350,8 +356,15 @@ SKILLS
         disabled={isSearchDisabled || needsResume}
         onClick={onSearch}
       >
-        {isLoading ? "Running..." : "Run search"}
+        <span className="button-content">
+          {isLoading ? <span className="spinner" aria-hidden="true" /> : null}
+          {isLoading ? "Running..." : "Run search"}
+        </span>
       </button>
+
+      {isLoading && (
+        <p className="helper loading-inline">Searching job boards and refining matches...</p>
+      )}
 
       {cachedAvailable && (
         <div className="cache-actions">

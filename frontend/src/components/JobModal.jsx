@@ -183,7 +183,10 @@ export function JobActionsCard({
                 </select>
               </div>
               <button className="secondary" onClick={handleGenerate} disabled={isGenerating}>
-                {isGenerating ? "Drafting..." : "Generate"}
+                <span className="button-content">
+                  {isGenerating ? <span className="spinner" aria-hidden="true" /> : null}
+                  {isGenerating ? "Drafting..." : "Generate"}
+                </span>
               </button>
             </div>
           </div>
@@ -209,7 +212,10 @@ export function JobActionsCard({
           <div className="rank-header">
             <h3>CV generation</h3>
             <button className="secondary" onClick={handleGenerateCv} disabled={isGeneratingCv}>
-              {isGeneratingCv ? "Extracting..." : "Create CV"}
+              <span className="button-content">
+                {isGeneratingCv ? <span className="spinner" aria-hidden="true" /> : null}
+                {isGeneratingCv ? "Extracting..." : "Create CV"}
+              </span>
             </button>
           </div>
           <p className="helper">Uses the LLM to parse your resume text into editable CV data.</p>

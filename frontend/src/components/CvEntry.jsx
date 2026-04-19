@@ -99,7 +99,10 @@ export default function CvEntry({
           onClick={onLoadProfile}
           disabled={isLoadingProfile || profilesLoading || !selectedProfileId}
         >
-          {isLoadingProfile ? "Loading profile..." : "Load profile"}
+          <span className="button-content">
+            {isLoadingProfile ? <span className="spinner" aria-hidden="true" /> : null}
+            {isLoadingProfile ? "Loading profile..." : "Load profile"}
+          </span>
         </button>
         <button
           type="button"
@@ -107,7 +110,10 @@ export default function CvEntry({
           onClick={onCreateCvFromResume}
           disabled={isCreatingCv || !resumeText.trim()}
         >
-          {isCreatingCv ? "Parsing resume..." : "Create from resume text"}
+          <span className="button-content">
+            {isCreatingCv ? <span className="spinner" aria-hidden="true" /> : null}
+            {isCreatingCv ? "Parsing resume..." : "Create from resume text"}
+          </span>
         </button>
         <p className="helper">Resume text is only required when creating a new profile.</p>
       </div>
