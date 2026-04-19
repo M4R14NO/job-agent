@@ -64,6 +64,7 @@ body {
   top: 0;
   height: 100vh;
   z-index: 3;
+  overflow: visible;
 }
 
 .app-sidebar {
@@ -73,6 +74,7 @@ body {
   display: grid;
   gap: 6px;
   overflow-y: auto;
+  overflow-x: visible;
   height: 100%;
   position: relative;
 }
@@ -646,6 +648,227 @@ h1 {
 .filters {
   display: grid;
   gap: 16px;
+}
+
+.search-bar {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 999px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+  position: relative;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: 100%;
+}
+
+.search-segment {
+  display: grid;
+  gap: 4px;
+  min-width: 140px;
+  position: relative;
+  flex: 1 1 auto;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.search-segment:hover,
+.search-segment:focus-within {
+  background: #f8fafc;
+  box-shadow: inset 0 0 0 1px #e5e7eb;
+  border-radius: 14px;
+}
+
+.search-segment.has-dropdown {
+  cursor: pointer;
+}
+
+.search-segment input {
+  border: none;
+  padding: 0;
+  font-size: 14px;
+  background: transparent;
+}
+
+.search-segment input:focus {
+  outline: none;
+}
+
+.search-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.search-divider {
+  width: 1px;
+  height: 36px;
+  background: #e5e7eb;
+}
+
+.search-segment.has-dropdown.is-active {
+  z-index: 5;
+}
+
+.search-select {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  color: #111827;
+}
+
+.search-toggle {
+  min-width: 90px;
+  align-items: start;
+}
+
+.toggle-pill {
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.toggle-pill.is-active {
+  background: #111827;
+  color: #ffffff;
+  border-color: #111827;
+}
+
+.search-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-sidebar .search-bar {
+  flex-direction: column;
+  align-items: stretch;
+  border-radius: 20px;
+  padding: 16px;
+  gap: 14px;
+  width: fit-content;
+  max-width: 100%;
+  align-self: start;
+}
+
+.app-sidebar .search-segment {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.app-sidebar .search-segment input,
+.app-sidebar .search-select {
+  width: clamp(200px, 40vw, 260px);
+}
+
+.app-sidebar .search-divider {
+  display: none;
+}
+
+.app-sidebar .search-actions {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.app-sidebar .search-dropdown {
+  top: 0;
+  left: calc(100% + 12px);
+  min-width: max-content;
+  max-width: 280px;
+  z-index: 30;
+}
+
+.search-dropdown {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 0;
+  min-width: 0;
+  width: max-content;
+  max-width: 280px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.14);
+  z-index: 6;
+}
+
+.dropdown-group {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.dropdown-group:last-child {
+  margin-bottom: 0;
+}
+
+.dropdown-label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.dropdown-list {
+  display: grid;
+  gap: 6px;
+}
+
+.dropdown-item {
+  border: none;
+  background: #f9fafb;
+  padding: 8px 10px;
+  border-radius: 10px;
+  text-align: left;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dropdown-item:hover {
+  background: #eef2ff;
+}
+
+.llm-panel {
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.llm-panel-body {
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 16px;
+  display: grid;
+  gap: 16px;
+  background: #ffffff;
+}
+
+.tailoring-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: #f8faff;
+  border: 1px solid #e0e7ff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
 }
 
 .checkbox {
@@ -1317,5 +1540,24 @@ select {
   .panel-body {
     grid-template-columns: 1fr;
     padding: 16px;
+  }
+
+  .search-bar {
+    border-radius: 20px;
+    align-items: stretch;
+  }
+
+  .search-divider {
+    display: none;
+  }
+
+  .search-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .search-dropdown {
+    position: static;
+    margin-top: 8px;
   }
 }

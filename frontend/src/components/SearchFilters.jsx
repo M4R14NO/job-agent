@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const SITES = [
   { id: "indeed", label: "Indeed" },
@@ -14,12 +14,29 @@ const TIME_FILTERS = [
   { label: "Last month", value: 720 }
 ];
 
+const RECENT_LOCATIONS_KEY = "job-agent:recent-locations";
+
+const LOCATION_GROUPS = [
+  {
+    label: "Cities",
+    items: ["Berlin", "Munich", "Hamburg", "Cologne", "Frankfurt", "Stuttgart", "Vienna", "Zurich"]
+  },
+  {
+    label: "Regions",
+    items: ["Bavaria", "Berlin", "Hesse", "North Rhine-Westphalia", "Baden-Wuerttemberg"]
+  },
+  {
+    label: "Countries",
+    items: ["Germany", "Austria", "Switzerland", "Netherlands", "United Kingdom"]
+  }
+];
+
 export default function SearchFilters({
   searchTerm, onSearchTermChange,
   location, onLocationChange,
-  resultsWanted, onResultsWantedChange,
   hoursOld, onHoursOldChange,
   isRemote, onIsRemoteChange,
+  resultsWanted, onResultsWantedChange,
   sites, onSitesChange,
   fetchFullDescriptions, onFetchFullDescriptionsChange,
   resumeText, onResumeTextChange,
@@ -31,8 +48,6 @@ export default function SearchFilters({
   lmTimeoutMinutes,
   onLmTimeoutChange,
   modelError,
-  enableRerank,
-  onEnableRerankChange,
   rerankTopN,
   onRerankTopNChange,
   defaultRerankTopN,
@@ -49,11 +64,16 @@ export default function SearchFilters({
   cachedAt,
   onLoadCache,
   onClearCache,
+  onClearAll,
   isLoading,
   error,
   onSearch
 }) {
   const [showExample, setShowExample] = useState(false);
+  const [activeDropdown, setActiveDropdown] = useState(null);
+  const [recentLocations, setRecentLocations] = useState([]);
+  const [isLlmOpen, setIsLlmOpen] = useState(false);
+  const barRef = useRef(null);
 
   function handleSiteToggle(id, checked) {
     onSitesChange(
@@ -62,7 +82,44 @@ export default function SearchFilters({
   }
 
   const isSearchDisabled = isLoading;
-  const needsResume = enableRerank && !resumeText.trim();
+  const needsResume = false;
+
+  const activeTimeLabel = useMemo(() => {
+    const match = TIME_FILTERS.find((option) => option.value === hoursOld);
+    return match ? match.label : "Any time";
+  }, [hoursOld]);
+
+  const locationGroups = useMemo(() => {
+    const groups = [];
+    if (recentLocations.length) {
+      groups.push({ label: "Recent", items: recentLocations });
+    }
+    return [...groups, ...LOCATION_GROUPS];
+  }, [recentLocations]);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(RECENT_LOCATIONS_KEY);
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        setRecentLocations(parsed.filter((item) => typeof item === "string"));
+      }
+    } catch (err) {
+      localStorage.removeItem(RECENT_LOCATIONS_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!barRef.current) return;
+      if (!barRef.current.contains(event.target)) {
+        setActiveDropdown(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const exampleText = `PROFILE
 Name: Ada Lovelace
@@ -84,43 +141,272 @@ SKILLS
     onLmTimeoutChange(Math.round(clamped * 60));
   };
 
+  const handleLocationSelect = (value) => {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    onLocationChange(trimmed);
+    setActiveDropdown(null);
+    setRecentLocations((prev) => {
+      const next = [trimmed, ...prev.filter((item) => item !== trimmed)].slice(0, 6);
+      localStorage.setItem(RECENT_LOCATIONS_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const handleDateSelect = (value) => {
+    onHoursOldChange(value);
+    setActiveDropdown(null);
+  };
+
+  const handleSearchKey = (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    setActiveDropdown(null);
+    onSearch();
+  };
+
+  const handleClearAllClick = () => {
+    setActiveDropdown(null);
+    onClearAll?.();
+  };
+
   return (
     <>
-      <div className="sidebar-section">
-        <div className="field-grid">
-          <div>
-            <label htmlFor="searchTerm" className="label">Search term</label>
-            <input
-              id="searchTerm"
-              placeholder="e.g. backend engineer"
-              value={searchTerm}
-              onChange={(e) => onSearchTermChange(e.target.value)}
-            />
-          </div>
-          <div>
-            <label htmlFor="location" className="label">Location</label>
-            <input
-              id="location"
-              placeholder="e.g. Berlin"
-              value={location}
-              onChange={(e) => onLocationChange(e.target.value)}
-            />
-          </div>
-        </div>
-        <label className="checkbox">
+      <div className="search-bar" ref={barRef}>
+        <div className="search-segment">
+          <label className="search-label" htmlFor="searchTerm">Role</label>
           <input
-            type="checkbox"
-            checked={isRemote}
-            onChange={(e) => onIsRemoteChange(e.target.checked)}
+            id="searchTerm"
+            placeholder="Search roles, skills, or companies"
+            value={searchTerm}
+            onChange={(e) => onSearchTermChange(e.target.value)}
+            onKeyDown={handleSearchKey}
           />
-          Remote only
-        </label>
+        </div>
+        <div className="search-divider" />
+        <div className={`search-segment has-dropdown ${activeDropdown === "location" ? "is-active" : ""}`}>
+          <label className="search-label" htmlFor="location">Location</label>
+          <input
+            id="location"
+            placeholder="Add a location"
+            value={location}
+            onChange={(e) => onLocationChange(e.target.value)}
+            onFocus={() => setActiveDropdown("location")}
+            onKeyDown={handleSearchKey}
+          />
+          {activeDropdown === "location" && (
+            <div className="search-dropdown">
+              {locationGroups.map((group) => (
+                <div key={group.label} className="dropdown-group">
+                  <p className="dropdown-label">{group.label}</p>
+                  <div className="dropdown-list">
+                    {group.items.map((item) => (
+                      <button
+                        key={`${group.label}-${item}`}
+                        type="button"
+                        className="dropdown-item"
+                        onClick={() => handleLocationSelect(item)}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {!locationGroups.length && <p className="helper">No locations yet.</p>}
+            </div>
+          )}
+        </div>
+        <div className="search-divider" />
+        <div className={`search-segment has-dropdown ${activeDropdown === "date" ? "is-active" : ""}`}>
+          <label className="search-label">Posted</label>
+          <button
+            type="button"
+            className="search-select"
+            onClick={() => setActiveDropdown(activeDropdown === "date" ? null : "date")}
+          >
+            {activeTimeLabel}
+          </button>
+          {activeDropdown === "date" && (
+            <div className="search-dropdown">
+              <div className="dropdown-list">
+                {TIME_FILTERS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className="dropdown-item"
+                    onClick={() => handleDateSelect(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="search-divider" />
+        <div className="search-segment search-toggle">
+          <label className="search-label">Remote</label>
+          <button
+            type="button"
+            className={`toggle-pill ${isRemote ? "is-active" : ""}`}
+            onClick={() => onIsRemoteChange(!isRemote)}
+          >
+            {isRemote ? "Remote" : "Any"}
+          </button>
+        </div>
+        <div className="search-actions">
+          <button type="button" className="ghost" onClick={handleClearAllClick}>
+            Clear all
+          </button>
+          <button className="primary" disabled={isSearchDisabled || needsResume} onClick={onSearch}>
+            <span className="button-content">
+              {isLoading ? <span className="spinner" aria-hidden="true" /> : null}
+              {isLoading ? "Searching..." : "Search"}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <div className={`llm-panel ${isLlmOpen ? "is-open" : ""}`}>
+        <button type="button" className="ghost" onClick={() => setIsLlmOpen((prev) => !prev)}>
+          {isLlmOpen ? "Hide tailoring" : "Tailor results with CV"}
+        </button>
+        {isLlmOpen && (
+          <div className="llm-panel-body">
+            <div>
+              <label htmlFor="wishes" className="label">Job wishes</label>
+              <textarea
+                id="wishes"
+                rows={4}
+                placeholder="e.g. mission-driven teams, no on-call, EU time zones, climate tech"
+                value={wishes}
+                onChange={(e) => onWishesChange(e.target.value)}
+              />
+              <p className="helper">
+                Preferences bias the automatic LLM rerank after results are loaded.
+              </p>
+            </div>
+            <div>
+              <label htmlFor="resume" className="label">Resume / CV text</label>
+              <textarea
+                id="resume"
+                rows={8}
+                placeholder="Paste plain text from your resume here..."
+                value={resumeText}
+                onChange={(e) => onResumeTextChange(e.target.value)}
+              />
+              <div className="inline-actions">
+                <button type="button" className="secondary" disabled>
+                  Upload CV (soon)
+                </button>
+                <button
+                  className="ghost"
+                  onClick={() => setShowExample((prev) => !prev)}
+                  type="button"
+                >
+                  {showExample ? "Hide example" : "Show example"}
+                </button>
+              </div>
+              {showExample && (
+                <pre className="example-box">{exampleText}</pre>
+              )}
+            </div>
+            <div className="field-grid">
+              <div>
+                <label htmlFor="model" className="label">LLM model</label>
+                <select
+                  id="model"
+                  value={selectedModel}
+                  onChange={(e) => onSelectedModelChange(e.target.value)}
+                  disabled={!models.length}
+                >
+                  {!models.length && <option value="">No models available</option>}
+                  {models.map((model) => (
+                    <option key={model} value={model}>{model}</option>
+                  ))}
+                </select>
+                {modelError && <p className="error">{modelError}</p>}
+              </div>
+              <div>
+                <label htmlFor="lmTimeout" className="label">LLM timeout (minutes)</label>
+                <input
+                  id="lmTimeout"
+                  type="number"
+                  min={0.5}
+                  max={10}
+                  step={0.5}
+                  value={lmTimeoutMinutes}
+                  onChange={(e) => handleLmTimeoutMinutesChange(e.target.value, Number(e.target.value))}
+                />
+                <p className="helper">Default 2 minutes for most local models.</p>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="rerankTopN" className="label">Rerank top K</label>
+              <input
+                id="rerankTopN"
+                type="number"
+                min={1}
+                max={50}
+                placeholder="Auto"
+                value={rerankTopN ?? ""}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (!value) {
+                    onRerankTopNChange(null);
+                    return;
+                  }
+                  onRerankTopNChange(Number(value));
+                }}
+              />
+              <p className="helper">
+                Auto default: {defaultRerankTopN ?? "-"} (40% of results, min 3)
+              </p>
+            </div>
+
+            <div className="profile-block">
+              <label className="label">Named refinement profiles</label>
+              <div className="filters">
+                <select
+                  value={selectedLlmProfileId}
+                  onChange={(e) => onSelectedLlmProfileIdChange(e.target.value)}
+                >
+                  <option value="">Select a profile</option>
+                  {llmProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  placeholder="Profile name"
+                  value={llmProfileName}
+                  onChange={(e) => onLlmProfileNameChange(e.target.value)}
+                />
+                <div className="profile-actions">
+                  <button className="secondary" onClick={onSaveLlmProfile} type="button">
+                    Save
+                  </button>
+                  <button className="secondary" onClick={() => onLoadLlmProfile()} type="button">
+                    Load
+                  </button>
+                  <button className="secondary" onClick={onDeleteLlmProfile} type="button">
+                    Delete
+                  </button>
+                </div>
+                {llmProfileError && <p className="error">{llmProfileError}</p>}
+                <p className="helper">Saved locally in this browser.</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="filters-accordion">
         <details className="accordion-item">
           <summary className="accordion-button">
-            <span>Search Options</span>
+            <span>Advanced filters</span>
             <span className="accordion-chevron">▾</span>
           </summary>
           <div className="accordion-panel">
@@ -135,20 +421,6 @@ SKILLS
                   value={resultsWanted}
                   onChange={(e) => onResultsWantedChange(Number(e.target.value))}
                 />
-              </div>
-              <div>
-                <label htmlFor="hoursOld" className="label">Time filter</label>
-                <select
-                  id="hoursOld"
-                  value={String(hoursOld)}
-                  onChange={(e) => onHoursOldChange(Number(e.target.value))}
-                >
-                  {TIME_FILTERS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
               </div>
               <div className="site-group">
                 <span className="label">Sites</span>
@@ -173,198 +445,10 @@ SKILLS
                 />
                 Fetch full descriptions (slower)
               </label>
-              <button
-                className="secondary"
-                disabled={isSearchDisabled}
-                onClick={onSearch}
-              >
-                <span className="button-content">
-                  {isLoading ? <span className="spinner" aria-hidden="true" /> : null}
-                  {isLoading ? "Applying..." : "Apply search options"}
-                </span>
-              </button>
-            </div>
-          </div>
-        </details>
-
-        <details className="accordion-item">
-          <summary className="accordion-button">
-            <span>LLM search refinement</span>
-            <span className="accordion-chevron">▾</span>
-          </summary>
-          <div className="accordion-panel">
-            <div className="filters">
-              <div>
-                <label htmlFor="wishes" className="label">Job wishes</label>
-                <textarea
-                  id="wishes"
-                  rows={4}
-                  placeholder="e.g. mission-driven teams, no on-call, EU time zones, climate tech"
-                  value={wishes}
-                  onChange={(e) => onWishesChange(e.target.value)}
-                />
-                <p className="helper">
-                  Uses your preferences to bias the LLM rerank toward culture, industry, and constraints.
-                </p>
-              </div>
-
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={enableRerank}
-                  onChange={(e) => onEnableRerankChange(e.target.checked)}
-                />
-                Enable LLM rerank
-              </label>
-              <p className="helper">
-                Reorders the top results using your resume context and wishes.
-              </p>
-
-              {enableRerank && (
-                <div>
-                  <label htmlFor="rerankTopN" className="label">Rerank top K</label>
-                  <input
-                    id="rerankTopN"
-                    type="number"
-                    min={1}
-                    max={50}
-                    placeholder="Auto"
-                    value={rerankTopN ?? ""}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (!value) {
-                        onRerankTopNChange(null);
-                        return;
-                      }
-                      onRerankTopNChange(Number(value));
-                    }}
-                  />
-                  <p className="helper">
-                    Auto default: {defaultRerankTopN ?? "-"} (40% of results, min 3)
-                  </p>
-                </div>
-              )}
-
-              <div>
-                <label htmlFor="resume" className="label">Resume / CV text</label>
-                <textarea
-                  id="resume"
-                  rows={10}
-                  placeholder="Paste plain text from your resume here..."
-                  value={resumeText}
-                  onChange={(e) => onResumeTextChange(e.target.value)}
-                />
-                <p className="helper">
-                  Include dates and time spans so the model can ground experiences.
-                </p>
-                {needsResume && <p className="error">Resume text is required to apply refinement.</p>}
-              </div>
-
-              <button
-                className="ghost"
-                onClick={() => setShowExample((prev) => !prev)}
-                type="button"
-              >
-                {showExample ? "Hide example text" : "Show example text"}
-              </button>
-              {showExample && (
-                <pre className="example-box">{exampleText}</pre>
-              )}
-
-              <div>
-                <label htmlFor="model" className="label">LLM model</label>
-                <select
-                  id="model"
-                  value={selectedModel}
-                  onChange={(e) => onSelectedModelChange(e.target.value)}
-                  disabled={!models.length}
-                >
-                  {!models.length && <option value="">No models available</option>}
-                  {models.map((model) => (
-                    <option key={model} value={model}>{model}</option>
-                  ))}
-                </select>
-                {modelError && <p className="error">{modelError}</p>}
-              </div>
-
-              <div>
-                <label htmlFor="lmTimeout" className="label">LLM timeout (minutes)</label>
-                <input
-                  id="lmTimeout"
-                  type="number"
-                  min={0.5}
-                  max={10}
-                  step={0.5}
-                  value={lmTimeoutMinutes}
-                  onChange={(e) => handleLmTimeoutMinutesChange(e.target.value, Number(e.target.value))}
-                />
-                <p className="helper">Default 2 minutes for most local models.</p>
-              </div>
-
-              <div className="profile-block">
-                <label className="label">Named refinement profiles</label>
-                <div className="filters">
-                  <select
-                    value={selectedLlmProfileId}
-                    onChange={(e) => onSelectedLlmProfileIdChange(e.target.value)}
-                  >
-                    <option value="">Select a profile</option>
-                    {llmProfiles.map((profile) => (
-                      <option key={profile.id} value={profile.id}>
-                        {profile.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    placeholder="Profile name"
-                    value={llmProfileName}
-                    onChange={(e) => onLlmProfileNameChange(e.target.value)}
-                  />
-                  <div className="profile-actions">
-                    <button className="secondary" onClick={onSaveLlmProfile} type="button">
-                      Save
-                    </button>
-                    <button className="secondary" onClick={() => onLoadLlmProfile()} type="button">
-                      Load
-                    </button>
-                    <button className="secondary" onClick={onDeleteLlmProfile} type="button">
-                      Delete
-                    </button>
-                  </div>
-                  {llmProfileError && <p className="error">{llmProfileError}</p>}
-                  <p className="helper">Saved locally in this browser.</p>
-                </div>
-              </div>
-
-              <button
-                className="secondary"
-                disabled={isSearchDisabled || needsResume}
-                onClick={onSearch}
-              >
-                <span className="button-content">
-                  {isLoading ? <span className="spinner" aria-hidden="true" /> : null}
-                  {isLoading ? "Refining..." : "Apply refinement"}
-                </span>
-              </button>
             </div>
           </div>
         </details>
       </div>
-
-      <button
-        className="primary sidebar-primary"
-        disabled={isSearchDisabled || needsResume}
-        onClick={onSearch}
-      >
-        <span className="button-content">
-          {isLoading ? <span className="spinner" aria-hidden="true" /> : null}
-          {isLoading ? "Running..." : "Run search"}
-        </span>
-      </button>
-
-      {isLoading && (
-        <p className="helper loading-inline">Searching job boards and refining matches...</p>
-      )}
 
       {cachedAvailable && (
         <div className="cache-actions">

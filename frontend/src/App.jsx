@@ -28,6 +28,8 @@ export default function App() {
   const [response, setResponse] = useState(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isReranking, setIsReranking] = useState(false);
+  const [rerankError, setRerankError] = useState("");
   const [selectedJob, setSelectedJob] = useState(null);
   const [cvReview, setCvReview] = useState(null);
   const [models, setModels] = useState([]);
@@ -59,8 +61,10 @@ export default function App() {
   const [llmProfileError, setLlmProfileError] = useState("");
   const [searchElapsedMs, setSearchElapsedMs] = useState(0);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MIN_WIDTH);
+  const [llmPanelHint, setLlmPanelHint] = useState("");
 
   const searchTimerRef = useRef(null);
+  const searchRequestIdRef = useRef(0);
   const isResizingSidebarRef = useRef(false);
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(SIDEBAR_MIN_WIDTH);
@@ -69,6 +73,7 @@ export default function App() {
   const jobs = response?.jobs ?? [];
   const descriptionHtml = useJobDescription(selectedJob);
   const isFindView = activeView === "find";
+  const hasResumeText = Boolean(resumeText.trim());
 
   const defaultRerankTopN = (() => {
     const total = response?.jobs?.length ?? resultsWanted;
@@ -263,19 +268,33 @@ export default function App() {
   }, []);
 
   const handleSearch = async () => {
+    const requestId = searchRequestIdRef.current + 1;
+    searchRequestIdRef.current = requestId;
     setIsLoading(true);
+    setIsReranking(false);
+    setRerankError("");
+    setLlmPanelHint("");
     setError("");
     setResponse(null);
+    const basePayload = {
+      resumeText,
+      wishes,
+      searchTerm,
+      location,
+      resultsWanted,
+      hoursOld,
+      isRemote,
+      sites,
+      fetchFullDescriptions,
+      model: selectedModel,
+      enableRerank: false,
+      rerankTopN,
+      weightEmbedding,
+      weightKeyword
+    };
     try {
-      const data = await searchJobs({
-        resumeText, wishes, searchTerm, location,
-        resultsWanted, hoursOld, isRemote, sites, fetchFullDescriptions,
-        model: selectedModel,
-        enableRerank,
-        rerankTopN,
-        weightEmbedding,
-        weightKeyword
-      });
+      const data = await searchJobs(basePayload);
+      if (requestId !== searchRequestIdRef.current) return;
       setResponse(data);
       const savedAt = new Date().toISOString();
       sessionStorage.setItem(
@@ -303,9 +322,64 @@ export default function App() {
       setCachedResponse(data);
       setCachedAt(savedAt);
     } catch (err) {
+      if (requestId !== searchRequestIdRef.current) return;
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
-      setIsLoading(false);
+      if (requestId === searchRequestIdRef.current) {
+        setIsLoading(false);
+      }
+    }
+
+    if (requestId !== searchRequestIdRef.current) return;
+    if (!hasResumeText) {
+      setLlmPanelHint("Add your CV text to tailor results with the LLM.");
+      return;
+    }
+    if (!selectedModel) {
+      setLlmPanelHint("Select an LLM model to tailor results with your CV.");
+      return;
+    }
+
+    setIsReranking(true);
+    try {
+      const rerankData = await searchJobs({
+        ...basePayload,
+        enableRerank: true
+      });
+      if (requestId !== searchRequestIdRef.current) return;
+      setResponse(rerankData);
+      const savedAt = new Date().toISOString();
+      sessionStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify({
+          savedAt,
+          response: rerankData,
+          resumeText,
+          wishes,
+          searchTerm,
+          location,
+          resultsWanted,
+          hoursOld,
+          isRemote,
+          sites,
+          fetchFullDescriptions,
+          selectedModel,
+          lmTimeout,
+          enableRerank,
+          rerankTopN,
+          weightEmbedding,
+          weightKeyword
+        })
+      );
+      setCachedResponse(rerankData);
+      setCachedAt(savedAt);
+    } catch (err) {
+      if (requestId !== searchRequestIdRef.current) return;
+      setRerankError(err instanceof Error ? err.message : "Tailoring failed");
+    } finally {
+      if (requestId === searchRequestIdRef.current) {
+        setIsReranking(false);
+      }
     }
   };
 
@@ -393,6 +467,18 @@ export default function App() {
     sessionStorage.removeItem(CACHE_KEY);
     setCachedResponse(null);
     setCachedAt("");
+  };
+
+  const handleClearAll = () => {
+    setSearchTerm("");
+    setLocation("");
+    setHoursOld(72);
+    setIsRemote(false);
+    setResumeText("");
+    setWishes("");
+    setError("");
+    setRerankError("");
+    setLlmPanelHint("");
   };
 
   const handleStartCvReview = ({ canonical, job, templateId, docType, outputLanguage }) => {
@@ -632,8 +718,6 @@ export default function App() {
                 lmTimeoutMinutes={lmTimeoutMinutes}
                 onLmTimeoutChange={setLmTimeout}
                 modelError={modelError}
-                enableRerank={enableRerank}
-                onEnableRerankChange={setEnableRerank}
                 rerankTopN={rerankTopN}
                 onRerankTopNChange={setRerankTopN}
                 defaultRerankTopN={defaultRerankTopN}
@@ -650,6 +734,7 @@ export default function App() {
                 cachedAt={cachedAt}
                 onLoadCache={handleLoadCache}
                 onClearCache={handleClearCache}
+                onClearAll={handleClearAll}
                 isLoading={isLoading}
                 error={error}
                 onSearch={handleSearch}
@@ -674,6 +759,18 @@ export default function App() {
                   Paste your resume text to start a search and ranking flow.
                 </p>
               </header>
+              {isReranking && (
+                <div className="tailoring-banner">
+                  <span className="spinner" aria-hidden="true" />
+                  <span>Tailoring results with your CV...</span>
+                </div>
+              )}
+              {!isReranking && llmPanelHint && (
+                <p className="helper">{llmPanelHint}</p>
+              )}
+              {rerankError && (
+                <p className="error">Tailoring failed: {rerankError}</p>
+              )}
               <section className="card">
                 <ResultsList
                   jobs={jobs}
