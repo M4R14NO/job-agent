@@ -777,8 +777,9 @@ h1 {
 }
 
 .app-sidebar .search-actions {
-  width: 100%;
-  justify-content: space-between;
+  width: auto;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .app-sidebar .search-dropdown {
