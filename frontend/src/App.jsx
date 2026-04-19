@@ -74,6 +74,7 @@ export default function App() {
   const descriptionHtml = useJobDescription(selectedJob);
   const isFindView = activeView === "find";
   const hasResumeText = Boolean(resumeText.trim());
+  const canApplyTailoring = hasResumeText && Boolean(selectedModel);
 
   const defaultRerankTopN = (() => {
     const total = response?.jobs?.length ?? resultsWanted;
@@ -346,6 +347,80 @@ export default function App() {
         ...basePayload,
         enableRerank: true
       });
+      if (requestId !== searchRequestIdRef.current) return;
+      setResponse(rerankData);
+      const savedAt = new Date().toISOString();
+      sessionStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify({
+          savedAt,
+          response: rerankData,
+          resumeText,
+          wishes,
+          searchTerm,
+          location,
+          resultsWanted,
+          hoursOld,
+          isRemote,
+          sites,
+          fetchFullDescriptions,
+          selectedModel,
+          lmTimeout,
+          enableRerank,
+          rerankTopN,
+          weightEmbedding,
+          weightKeyword
+        })
+      );
+      setCachedResponse(rerankData);
+      setCachedAt(savedAt);
+    } catch (err) {
+      if (requestId !== searchRequestIdRef.current) return;
+      setRerankError(err instanceof Error ? err.message : "Tailoring failed");
+    } finally {
+      if (requestId === searchRequestIdRef.current) {
+        setIsReranking(false);
+      }
+    }
+  };
+
+  const handleApplyTailoring = async () => {
+    const requestId = searchRequestIdRef.current + 1;
+    searchRequestIdRef.current = requestId;
+    setIsReranking(true);
+    setRerankError("");
+    setLlmPanelHint("");
+
+    if (!hasResumeText) {
+      setIsReranking(false);
+      setLlmPanelHint("Add your CV text to tailor results with the LLM.");
+      return;
+    }
+    if (!selectedModel) {
+      setIsReranking(false);
+      setLlmPanelHint("Select an LLM model to tailor results with your CV.");
+      return;
+    }
+
+    const rerankPayload = {
+      resumeText,
+      wishes,
+      searchTerm,
+      location,
+      resultsWanted,
+      hoursOld,
+      isRemote,
+      sites,
+      fetchFullDescriptions,
+      model: selectedModel,
+      enableRerank: true,
+      rerankTopN,
+      weightEmbedding,
+      weightKeyword
+    };
+
+    try {
+      const rerankData = await searchJobs(rerankPayload);
       if (requestId !== searchRequestIdRef.current) return;
       setResponse(rerankData);
       const savedAt = new Date().toISOString();
@@ -736,6 +811,9 @@ export default function App() {
                 onClearCache={handleClearCache}
                 onClearAll={handleClearAll}
                 isLoading={isLoading}
+                isReranking={isReranking}
+                canApplyTailoring={canApplyTailoring}
+                onApplyTailoring={handleApplyTailoring}
                 error={error}
                 onSearch={handleSearch}
               />

@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Switch, Tooltip } from "@chakra-ui/react";
+import {
+  Accordion,
+  Dialog,
+  Switch,
+  Tooltip
+} from "@chakra-ui/react";
 
 const SITES = [
   { id: "indeed", label: "Indeed" },
@@ -83,16 +88,38 @@ export default function SearchFilters({
   onClearCache,
   onClearAll,
   isLoading,
+  isReranking,
+  canApplyTailoring,
+  onApplyTailoring,
   error,
   onSearch
 }) {
-  const [showExample, setShowExample] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [recentLocations, setRecentLocations] = useState([]);
   const [recentRoles, setRecentRoles] = useState([]);
   const [postedDays, setPostedDays] = useState(() => (hoursOld ? Math.round(hoursOld / 24) : ""));
-  const [isLlmOpen, setIsLlmOpen] = useState(false);
+  const [showExample, setShowExample] = useState(false);
   const barRef = useRef(null);
+
+  const exampleText = `PROFILE
+Name: Ada Lovelace
+Headline: Backend engineer, distributed systems
+Summary: 6+ years building APIs in Go and Python.
+
+EXPERIENCE
+2021-03 to Present | Staff Backend Engineer | ExampleCo
+- Led migration to event-driven architecture
+- Reduced p95 latency from 900ms to 220ms
+
+SKILLS
+- Go, Python, Postgres, Kafka, AWS
+`;
+
+  const resizeTextarea = (event) => {
+    const textarea = event.target;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  };
 
   function handleSiteToggle(id, checked) {
     onSitesChange(
@@ -173,20 +200,6 @@ export default function SearchFilters({
       setPostedDays(Math.round(hoursOld / 24));
     }
   }, [activeDropdown, hoursOld]);
-
-  const exampleText = `PROFILE
-Name: Ada Lovelace
-Headline: Backend engineer, distributed systems
-Summary: 6+ years building APIs in Go and Python.
-
-EXPERIENCE
-2021-03 to Present | Staff Backend Engineer | ExampleCo
-- Led migration to event-driven architecture
-- Reduced p95 latency from 900ms to 220ms
-
-SKILLS
-- Go, Python, Postgres, Kafka, AWS
-`;
 
   const handleLmTimeoutMinutesChange = (valueString, valueNumber) => {
     const nextMinutes = Number.isFinite(valueNumber) ? valueNumber : 0;
@@ -355,6 +368,178 @@ SKILLS
           )}
         </div>
         <div className="search-divider" />
+        <div className="search-segment search-tailor">
+          <label className="search-label">Tailor</label>
+          <Dialog.Root>
+            <Dialog.Trigger asChild>
+              <button type="button" className="ghost">
+                Tailor results
+              </button>
+            </Dialog.Trigger>
+            <Dialog.Backdrop />
+            <Dialog.Positioner>
+              <Dialog.Content className="llm-dialog">
+                <Dialog.Header>
+                  <Dialog.Title>Tailor results</Dialog.Title>
+                  <Dialog.Description>
+                    Add job wishes and your CV text so results can be tailored to your profile.
+                  </Dialog.Description>
+                </Dialog.Header>
+                <Dialog.Body>
+                  <div className="llm-dialog-section">
+                    <label htmlFor="wishes" className="label">Job wishes</label>
+                    <textarea
+                      id="wishes"
+                      rows={4}
+                      placeholder="e.g. mission-driven teams, no on-call, EU time zones, climate tech"
+                      value={wishes}
+                      onChange={(e) => onWishesChange(e.target.value)}
+                      onInput={resizeTextarea}
+                      className="auto-textarea"
+                    />
+                  </div>
+                  <div className="llm-dialog-section">
+                    <label htmlFor="cvText" className="label">CV text</label>
+                    <textarea
+                      id="cvText"
+                      rows={8}
+                      placeholder="Paste plain text from your CV here..."
+                      value={resumeText}
+                      onChange={(e) => onResumeTextChange(e.target.value)}
+                      onInput={resizeTextarea}
+                      className="auto-textarea"
+                    />
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => setShowExample((prev) => !prev)}
+                    >
+                      {showExample ? "Hide example" : "Show example"}
+                    </button>
+                    {showExample && (
+                      <pre className="example-box">{exampleText}</pre>
+                    )}
+                  </div>
+
+                  <Accordion.Root collapsible defaultValue={[]}> 
+                    <Accordion.Item value="advanced">
+                      <Accordion.ItemTrigger>
+                        Advanced tailoring options
+                      </Accordion.ItemTrigger>
+                      <Accordion.ItemContent>
+                        <div className="llm-dialog-advanced">
+                          <div className="field-grid">
+                            <div>
+                              <label htmlFor="model" className="label">LLM model</label>
+                              <select
+                                id="model"
+                                value={selectedModel}
+                                onChange={(e) => onSelectedModelChange(e.target.value)}
+                                disabled={!models.length}
+                              >
+                                {!models.length && <option value="">No models available</option>}
+                                {models.map((model) => (
+                                  <option key={model} value={model}>{model}</option>
+                                ))}
+                              </select>
+                              {modelError && <p className="error">{modelError}</p>}
+                            </div>
+                            <div>
+                              <label htmlFor="lmTimeout" className="label">LLM timeout (minutes)</label>
+                              <input
+                                id="lmTimeout"
+                                type="number"
+                                min={0.5}
+                                max={10}
+                                step={0.5}
+                                value={lmTimeoutMinutes}
+                                onChange={(e) => handleLmTimeoutMinutesChange(e.target.value, Number(e.target.value))}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label htmlFor="rerankTopN" className="label">Rerank top K</label>
+                            <input
+                              id="rerankTopN"
+                              type="number"
+                              min={1}
+                              max={50}
+                              placeholder="Auto"
+                              value={rerankTopN ?? ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                if (!value) {
+                                  onRerankTopNChange(null);
+                                  return;
+                                }
+                                onRerankTopNChange(Number(value));
+                              }}
+                            />
+                            <p className="helper">
+                              Auto default: {defaultRerankTopN ?? "-"} (40% of results, min 3)
+                            </p>
+                          </div>
+                          <div className="profile-block">
+                            <label className="label">Saved tailoring profiles</label>
+                            <p className="helper">Save your CV + wishes so you can reuse them later.</p>
+                            <div className="filters">
+                              <select
+                                value={selectedLlmProfileId}
+                                onChange={(e) => onSelectedLlmProfileIdChange(e.target.value)}
+                              >
+                                <option value="">Select a profile</option>
+                                {llmProfiles.map((profile) => (
+                                  <option key={profile.id} value={profile.id}>
+                                    {profile.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                placeholder="Profile name"
+                                value={llmProfileName}
+                                onChange={(e) => onLlmProfileNameChange(e.target.value)}
+                              />
+                              <div className="profile-actions">
+                                <button className="secondary" onClick={onSaveLlmProfile} type="button">
+                                  Save
+                                </button>
+                                <button className="secondary" onClick={() => onLoadLlmProfile()} type="button">
+                                  Load
+                                </button>
+                                <button className="secondary" onClick={onDeleteLlmProfile} type="button">
+                                  Delete
+                                </button>
+                              </div>
+                              {llmProfileError && <p className="error">{llmProfileError}</p>}
+                            </div>
+                          </div>
+                        </div>
+                      </Accordion.ItemContent>
+                    </Accordion.Item>
+                  </Accordion.Root>
+                </Dialog.Body>
+                <Dialog.Footer>
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={onApplyTailoring}
+                    disabled={!canApplyTailoring || isReranking}
+                  >
+                    <span className="button-content">
+                      {isReranking ? <span className="spinner" aria-hidden="true" /> : null}
+                      {isReranking ? "Applying..." : "Apply tailoring"}
+                    </span>
+                  </button>
+                  <Dialog.ActionTrigger asChild>
+                    <button type="button" className="secondary">Close</button>
+                  </Dialog.ActionTrigger>
+                </Dialog.Footer>
+                <Dialog.CloseTrigger />
+              </Dialog.Content>
+            </Dialog.Positioner>
+          </Dialog.Root>
+        </div>
+        <div className="search-divider" />
         <div className="search-segment search-toggle">
           <label className="search-label">Remote</label>
           <Tooltip.Root>
@@ -388,141 +573,6 @@ SKILLS
             </span>
           </button>
         </div>
-      </div>
-
-      <div className={`llm-panel ${isLlmOpen ? "is-open" : ""}`}>
-        <button type="button" className="ghost" onClick={() => setIsLlmOpen((prev) => !prev)}>
-          {isLlmOpen ? "Hide tailoring" : "Tailor results with CV"}
-        </button>
-        {isLlmOpen && (
-          <div className="llm-panel-body">
-            <div>
-              <label htmlFor="wishes" className="label">Job wishes</label>
-              <textarea
-                id="wishes"
-                rows={4}
-                placeholder="e.g. mission-driven teams, no on-call, EU time zones, climate tech"
-                value={wishes}
-                onChange={(e) => onWishesChange(e.target.value)}
-              />
-              <p className="helper">
-                Preferences bias the automatic LLM rerank after results are loaded.
-              </p>
-            </div>
-            <div>
-              <label htmlFor="resume" className="label">Resume / CV text</label>
-              <textarea
-                id="resume"
-                rows={8}
-                placeholder="Paste plain text from your resume here..."
-                value={resumeText}
-                onChange={(e) => onResumeTextChange(e.target.value)}
-              />
-              <div className="inline-actions">
-                <button type="button" className="secondary" disabled>
-                  Upload CV (soon)
-                </button>
-                <button
-                  className="ghost"
-                  onClick={() => setShowExample((prev) => !prev)}
-                  type="button"
-                >
-                  {showExample ? "Hide example" : "Show example"}
-                </button>
-              </div>
-              {showExample && (
-                <pre className="example-box">{exampleText}</pre>
-              )}
-            </div>
-            <div className="field-grid">
-              <div>
-                <label htmlFor="model" className="label">LLM model</label>
-                <select
-                  id="model"
-                  value={selectedModel}
-                  onChange={(e) => onSelectedModelChange(e.target.value)}
-                  disabled={!models.length}
-                >
-                  {!models.length && <option value="">No models available</option>}
-                  {models.map((model) => (
-                    <option key={model} value={model}>{model}</option>
-                  ))}
-                </select>
-                {modelError && <p className="error">{modelError}</p>}
-              </div>
-              <div>
-                <label htmlFor="lmTimeout" className="label">LLM timeout (minutes)</label>
-                <input
-                  id="lmTimeout"
-                  type="number"
-                  min={0.5}
-                  max={10}
-                  step={0.5}
-                  value={lmTimeoutMinutes}
-                  onChange={(e) => handleLmTimeoutMinutesChange(e.target.value, Number(e.target.value))}
-                />
-                <p className="helper">Default 2 minutes for most local models.</p>
-              </div>
-            </div>
-            <div>
-              <label htmlFor="rerankTopN" className="label">Rerank top K</label>
-              <input
-                id="rerankTopN"
-                type="number"
-                min={1}
-                max={50}
-                placeholder="Auto"
-                value={rerankTopN ?? ""}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (!value) {
-                    onRerankTopNChange(null);
-                    return;
-                  }
-                  onRerankTopNChange(Number(value));
-                }}
-              />
-              <p className="helper">
-                Auto default: {defaultRerankTopN ?? "-"} (40% of results, min 3)
-              </p>
-            </div>
-
-            <div className="profile-block">
-              <label className="label">Named refinement profiles</label>
-              <div className="filters">
-                <select
-                  value={selectedLlmProfileId}
-                  onChange={(e) => onSelectedLlmProfileIdChange(e.target.value)}
-                >
-                  <option value="">Select a profile</option>
-                  {llmProfiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  placeholder="Profile name"
-                  value={llmProfileName}
-                  onChange={(e) => onLlmProfileNameChange(e.target.value)}
-                />
-                <div className="profile-actions">
-                  <button className="secondary" onClick={onSaveLlmProfile} type="button">
-                    Save
-                  </button>
-                  <button className="secondary" onClick={() => onLoadLlmProfile()} type="button">
-                    Load
-                  </button>
-                  <button className="secondary" onClick={onDeleteLlmProfile} type="button">
-                    Delete
-                  </button>
-                </div>
-                {llmProfileError && <p className="error">{llmProfileError}</p>}
-                <p className="helper">Saved locally in this browser.</p>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="filters-accordion">
