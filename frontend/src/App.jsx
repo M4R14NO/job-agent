@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { searchJobs } from "./api/search";
 import { fetchModels, getCvProfile, listCvProfiles, parseCvCanonical } from "./api/llm";
 import { useJobDescription } from "./hooks/useJobDescription";
@@ -14,6 +14,73 @@ const LLM_PROFILE_KEY = "job-agent:llm-profiles";
 const SIDEBAR_WIDTH_KEY = "job-agent:sidebar-width";
 const SIDEBAR_MIN_WIDTH = 360;
 const SIDEBAR_MAX_WIDTH = 720;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const MILES_TO_KM = 1.60934;
+
+const toFiniteNumber = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parsePostedDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "number") {
+    const ms = value < 1_000_000_000_000 ? value * 1000 : value;
+    const date = new Date(ms);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const lowered = trimmed.toLowerCase();
+  if (lowered === "today" || lowered === "just posted") return new Date();
+  if (lowered === "yesterday") {
+    const date = new Date();
+    date.setDate(date.getDate() - 1);
+    return date;
+  }
+  const parsed = Date.parse(trimmed);
+  if (!Number.isNaN(parsed)) return new Date(parsed);
+  const relative = trimmed.match(/(\d+)\s*(hour|day|week|month)s?\s*ago/i);
+  if (relative) {
+    const amount = Number(relative[1]);
+    const unit = relative[2].toLowerCase();
+    const multiplier = unit === "hour" ? 1 / 24 : unit === "day" ? 1 : unit === "week" ? 7 : 30;
+    const date = new Date();
+    date.setDate(date.getDate() - amount * multiplier);
+    return date;
+  }
+  return null;
+};
+
+const parseDistanceKm = (job) => {
+  if (!job) return null;
+  const kmValue = toFiniteNumber(
+    job.distance_km ?? job.distanceKm ?? job.distance_kilometers ?? job.distance_kilometres
+  );
+  if (kmValue != null) return kmValue;
+
+  const milesValue = toFiniteNumber(job.distance_miles ?? job.distanceMiles ?? job.distance_mi);
+  if (milesValue != null) return milesValue * MILES_TO_KM;
+
+  if (typeof job.distance === "string") {
+    const match = job.distance.match(/([\d.]+)\s*(km|kilometers?|mi|miles?)/i);
+    if (match) {
+      const value = Number(match[1]);
+      if (!Number.isNaN(value)) {
+        return match[2].toLowerCase().startsWith("km") ? value : value * MILES_TO_KM;
+      }
+    }
+  }
+
+  const distanceValue = toFiniteNumber(job.distance ?? job.distance_value ?? job.distanceValue);
+  if (distanceValue == null) return null;
+  const unit = typeof job.distance_unit === "string" ? job.distance_unit.toLowerCase() : "";
+  if (unit.startsWith("km") || unit.startsWith("kilometer")) return distanceValue;
+  return distanceValue * MILES_TO_KM;
+};
 
 export default function App() {
   const [resumeText, setResumeText] = useState("");
@@ -62,6 +129,8 @@ export default function App() {
   const [searchElapsedMs, setSearchElapsedMs] = useState(0);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MIN_WIDTH);
   const [llmPanelHint, setLlmPanelHint] = useState("");
+  const [clientDateFilterDays, setClientDateFilterDays] = useState(null);
+  const [sortBy, setSortBy] = useState("newest");
 
   const searchTimerRef = useRef(null);
   const searchRequestIdRef = useRef(0);
@@ -71,6 +140,35 @@ export default function App() {
   const sidebarWidthRef = useRef(SIDEBAR_MIN_WIDTH);
 
   const jobs = response?.jobs ?? [];
+  const visibleJobs = useMemo(() => {
+    if (!jobs.length) return [];
+    const cutoffMs = clientDateFilterDays ? Date.now() - clientDateFilterDays * MS_PER_DAY : null;
+    const prepared = jobs.map((job) => {
+      const postedDate = parsePostedDate(job.date_posted);
+      return {
+        job,
+        postedTime: postedDate ? postedDate.getTime() : null,
+        distanceKm: parseDistanceKm(job)
+      };
+    });
+
+    const filtered = cutoffMs
+      ? prepared.filter((item) => item.postedTime && item.postedTime >= cutoffMs)
+      : prepared;
+
+    const sorted = [...filtered].sort((a, b) => {
+      if (sortBy === "distance") {
+        const distanceA = a.distanceKm ?? Number.POSITIVE_INFINITY;
+        const distanceB = b.distanceKm ?? Number.POSITIVE_INFINITY;
+        return distanceA - distanceB;
+      }
+      const timeA = a.postedTime ?? Number.NEGATIVE_INFINITY;
+      const timeB = b.postedTime ?? Number.NEGATIVE_INFINITY;
+      return sortBy === "oldest" ? timeA - timeB : timeB - timeA;
+    });
+
+    return sorted.map((item) => item.job);
+  }, [jobs, clientDateFilterDays, sortBy]);
   const descriptionHtml = useJobDescription(selectedJob);
   const isFindView = activeView === "find";
   const hasResumeText = Boolean(resumeText.trim());
@@ -271,6 +369,8 @@ export default function App() {
   const handleSearch = async () => {
     const requestId = searchRequestIdRef.current + 1;
     searchRequestIdRef.current = requestId;
+    setClientDateFilterDays(null);
+    setSortBy("newest");
     setIsLoading(true);
     setIsReranking(false);
     setRerankError("");
@@ -851,13 +951,18 @@ export default function App() {
               )}
               <section className="card">
                 <ResultsList
-                  jobs={jobs}
+                  jobs={visibleJobs}
                   rerankApplied={response?.rerank_applied}
                   rerankTopN={response?.rerank_top_n}
                   onSelectJob={handleSelectJob}
                   isLoading={isLoading}
                   hasResponse={Boolean(response)}
                   refinementProgress={refinementProgress}
+                  clientDateFilterDays={clientDateFilterDays}
+                  sortBy={sortBy}
+                  onClientDateFilterChange={setClientDateFilterDays}
+                  onSortChange={setSortBy}
+                  onClearClientDateFilter={() => setClientDateFilterDays(null)}
                 />
               </section>
             </>

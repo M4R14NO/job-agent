@@ -42,6 +42,10 @@ export function normalizeJob(job) {
     location: job.location ?? "",
     site: job.site ?? "",
     date_posted: job.date_posted ?? "",
+    distance: job.distance ?? job.distance_value ?? null,
+    distance_km: job.distance_km ?? job.distanceKm ?? job.distance_kilometers ?? job.distance_kilometres ?? null,
+    distance_miles: job.distance_miles ?? job.distanceMiles ?? job.distance_mi ?? null,
+    distance_unit: job.distance_unit ?? job.distanceUnit ?? null,
     match_score: job.match_score ?? null,
     match_reasons: Array.isArray(job.match_reasons) ? job.match_reasons : []
   };
