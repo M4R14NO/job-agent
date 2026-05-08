@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from app.schemas.search import SearchRequest
 
 
@@ -13,3 +16,8 @@ def test_search_request_accepts_integer_search_radius_km():
     )
 
     assert payload.search_radius_km == 50
+
+
+def test_search_request_rejects_negative_search_radius_km():
+    with pytest.raises(ValidationError):
+        SearchRequest.model_validate({"resume_text": "resume", "search_radius_km": -1})
