@@ -448,6 +448,8 @@ export default function App() {
     });
     setSelectedJob(null);
     setActiveView("create");
+    setCvPreviewPayload(null);
+    setPdfPreviewUrl(null);
   };
 
   const handleCreateCvFromResume = async () => {
