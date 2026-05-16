@@ -276,6 +276,25 @@ export default function CvReview({
     [enabledSections]
   );
 
+  // Derive github/linkedin/homepage from formData.links for display in the header editor
+  const derivedLinks = useMemo(() => {
+    let homepage = "", github = "", linkedin = "";
+    for (const link of formData.links || []) {
+      if (!link) continue;
+      let host = "";
+      try {
+        const normalized = link.startsWith("http") ? link : `https://${link}`;
+        host = new URL(normalized).hostname.toLowerCase();
+      } catch (e) {
+        host = link.toLowerCase();
+      }
+      if ((host === "github.com" || host.endsWith(".github.com")) && !github) { github = link; continue; }
+      if ((host === "linkedin.com" || host.endsWith(".linkedin.com")) && !linkedin) { linkedin = link; continue; }
+      if (!homepage) { homepage = link; }
+    }
+    return { homepage, github, linkedin };
+  }, [formData.links]);
+
   const clearPreview = () => {
     setPreviewPayload(null);
     setPreviewHash("");
@@ -339,6 +358,23 @@ export default function CvReview({
   const updateSectionLabel = (key, value) => {
     setSectionLabels((prev) => ({ ...prev, [key]: value }));
     setPreviewPayload((prev) => prev ? { ...prev, section_labels: { ...(prev.section_labels || {}), [key]: value } } : prev);
+  };
+
+  // Updates a canonical formData field AND the corresponding preview payload field simultaneously.
+  // Does not clear the preview so changes are instantly reflected without re-generating the mapping.
+  const updateBaseField = (canonicalField, previewField, value) => {
+    setFormData((prev) => ({ ...prev, [canonicalField]: value }));
+    if (previewField) {
+      setPreviewPayload((prev) => prev ? { ...prev, [previewField]: value || null } : prev);
+    }
+  };
+
+  // Updates one of github/linkedin/homepage in both previewPayload and formData.links.
+  const updateLinkField = (linkKey, value, currentDerived) => {
+    setPreviewPayload((prev) => prev ? { ...prev, [linkKey]: value || null } : prev);
+    const updated = { ...currentDerived, [linkKey]: value };
+    const links = [updated.homepage, updated.github, updated.linkedin].filter(Boolean);
+    setFormData((prev) => ({ ...prev, links }));
   };
 
   const updateField = (field, value) => {
@@ -1258,42 +1294,90 @@ export default function CvReview({
   const renderBasics = () =>
     renderCollapsibleSection({
       key: "basics",
-      title: "Basics",
-      helper: "Personal details used in the header.",
+      title: "Personal information",
+      helper: "Name, contact details and profile links used in the CV header.",
       content: (
         <>
           <div className="field-grid">
             <div>
               <label className="label">First name</label>
-              <input value={formData.first_name} onChange={(e) => updateField("first_name", e.target.value)} />
+              <input
+                value={previewPayload?.first_name ?? formData.first_name}
+                onChange={(e) => updateBaseField("first_name", "first_name", e.target.value)}
+              />
             </div>
             <div>
               <label className="label">Last name</label>
-              <input value={formData.last_name} onChange={(e) => updateField("last_name", e.target.value)} />
+              <input
+                value={previewPayload?.last_name ?? formData.last_name}
+                onChange={(e) => updateBaseField("last_name", "last_name", e.target.value)}
+              />
             </div>
             <div>
-              <label className="label">Headline</label>
-              <input value={formData.headline} onChange={(e) => updateField("headline", e.target.value)} />
+              <label className="label">Headline / Position</label>
+              <input
+                value={previewPayload?.position ?? formData.headline}
+                onChange={(e) => updateBaseField("headline", "position", e.target.value)}
+              />
             </div>
             <div>
               <label className="label">Location</label>
-              <input value={formData.location} onChange={(e) => updateField("location", e.target.value)} />
+              <input
+                value={previewPayload?.address ?? formData.location}
+                onChange={(e) => updateBaseField("location", "address", e.target.value)}
+              />
             </div>
             <div>
               <label className="label">Email</label>
-              <input value={formData.email} onChange={(e) => updateField("email", e.target.value)} />
+              <input
+                type="email"
+                value={previewPayload?.email ?? formData.email}
+                onChange={(e) => updateBaseField("email", "email", e.target.value)}
+              />
             </div>
             <div>
               <label className="label">Phone</label>
-              <input value={formData.phone} onChange={(e) => updateField("phone", e.target.value)} />
+              <input
+                value={previewPayload?.mobile ?? formData.phone}
+                onChange={(e) => updateBaseField("phone", "mobile", e.target.value)}
+              />
             </div>
-          </div>
-          <div>
-            <label className="label">Links (comma separated)</label>
-            <input
-              value={formData.links.join(", ")}
-              onChange={(e) => updateField("links", e.target.value.split(",").map((item) => item.trim()).filter(Boolean))}
-            />
+            <div>
+              <label className="label">GitHub</label>
+              <input
+                placeholder="https://github.com/username"
+                value={previewPayload?.github ?? derivedLinks.github}
+                onChange={(e) => updateLinkField("github", e.target.value, {
+                  homepage: previewPayload?.homepage ?? derivedLinks.homepage,
+                  github: previewPayload?.github ?? derivedLinks.github,
+                  linkedin: previewPayload?.linkedin ?? derivedLinks.linkedin
+                })}
+              />
+            </div>
+            <div>
+              <label className="label">LinkedIn</label>
+              <input
+                placeholder="https://linkedin.com/in/username"
+                value={previewPayload?.linkedin ?? derivedLinks.linkedin}
+                onChange={(e) => updateLinkField("linkedin", e.target.value, {
+                  homepage: previewPayload?.homepage ?? derivedLinks.homepage,
+                  github: previewPayload?.github ?? derivedLinks.github,
+                  linkedin: previewPayload?.linkedin ?? derivedLinks.linkedin
+                })}
+              />
+            </div>
+            <div>
+              <label className="label">Homepage</label>
+              <input
+                placeholder="https://yourwebsite.com"
+                value={previewPayload?.homepage ?? derivedLinks.homepage}
+                onChange={(e) => updateLinkField("homepage", e.target.value, {
+                  homepage: previewPayload?.homepage ?? derivedLinks.homepage,
+                  github: previewPayload?.github ?? derivedLinks.github,
+                  linkedin: previewPayload?.linkedin ?? derivedLinks.linkedin
+                })}
+              />
+            </div>
           </div>
         </>
       )
@@ -1884,43 +1968,22 @@ export default function CvReview({
     <div className="panel-card cv-editor">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">CV preview</p>
-          <h2>Preview and edit</h2>
-          <p className="subtitle">Review the mapped CV data and make final edits before rendering.</p>
-        </div>
-      </div>
-
-      <div className="field-grid">
-        <div>
-          <label className="label" htmlFor="profileId">Profile ID</label>
-          <input
-            id="profileId"
-            value={profileId}
-            onChange={(e) => setProfileId(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="label" htmlFor="revision">Revision</label>
-          <input id="revision" value={revision} readOnly />
+          <p className="eyebrow">CV editor</p>
+          <h2>Edit &amp; preview</h2>
         </div>
       </div>
 
       <div className="cv-step-panel">
-        <div className="cv-step-header">
-          <div>
-            <p className="eyebrow">Preview</p>
-            <h3>Preview and edit</h3>
-            <p className="helper">Review the preview and edit each section.</p>
-          </div>
-        </div>
-
         <div className="cv-step-content">
           {!hasJobContext && (
             <p className="helper">No job context provided. Preview will be generic.</p>
           )}
+
+          {renderBasics()}
+
           <div className="sub-card">
             <div className="sub-card-header">
-              <strong>Rewrite with AI (optional)</strong>
+              <strong>✨ Rewrite with AI (optional)</strong>
               <button
                 type="button"
                 className="ghost icon-button"
@@ -1934,7 +1997,7 @@ export default function CvReview({
             {rewriteOpen && (
               <>
                 <p className="helper">
-                  Deterministic preview uses your canonical data. Add guidance to adjust wording, then rewrite.
+                  Add guidance to adjust wording across all sections, then rewrite using AI.
                 </p>
                 <textarea
                   rows={4}
@@ -1949,20 +2012,15 @@ export default function CvReview({
                     onClick={handleRewrite}
                     disabled={isRewriting}
                   >
-                    {isRewriting ? "Rewriting..." : "Rewrite with AI"}
+                    {isRewriting ? "Rewriting..." : "✨ Rewrite with AI"}
                   </button>
-                  <span className="helper">This updates the canonical data and refreshes preview.</span>
+                  <span className="helper">This updates all sections and refreshes the preview.</span>
                 </div>
               </>
             )}
           </div>
           {previewPayload ? (
             <>
-              <div className="panel-actions">
-                <button type="button" className="ghost" onClick={() => handlePreview({ force: true })} disabled={isPreviewing}>
-                  {isPreviewing ? "Updating preview..." : "Run preview again"}
-                </button>
-              </div>
               <div className="preview-grid">
                 {sectionOrder
                   .filter((key) => enabledSections.has(key))
@@ -1990,11 +2048,11 @@ export default function CvReview({
                           </button>
                         )}
                         <div className="inline-actions">
-                          <button type="button" className="ghost" onClick={() => toggleSectionInReview(key)}>
-                            Remove
+                          <button type="button" className="btn-danger" onClick={() => toggleSectionInReview(key)}>
+                            🗑 Remove
                           </button>
-                          <button type="button" className="ghost" onClick={() => togglePreviewEditor(key)}>
-                            {openPreviewEditors[key] ? "Hide edit" : "Edit"}
+                          <button type="button" className="secondary" onClick={() => togglePreviewEditor(key)}>
+                            {openPreviewEditors[key] ? "✕ Close" : "✏ Edit"}
                           </button>
                         </div>
                       </div>
@@ -2014,15 +2072,15 @@ export default function CvReview({
                     className="ghost"
                     onClick={() => setHiddenSectionsOpen((prev) => !prev)}
                   >
-                    {hiddenSectionsOpen ? "Hide" : "Show"} available sections ({hiddenSectionKeys.length})
+                    {hiddenSectionsOpen ? "▾ Hide" : "▸ Show"} available sections ({hiddenSectionKeys.length})
                   </button>
                   {hiddenSectionsOpen && (
                     <div className="hidden-sections-list">
                       {hiddenSectionKeys.map((key) => (
                         <div key={`review-hidden-${key}`} className="hidden-section-item">
                           <span>{sectionLabels[key] ?? SECTION_LABELS[key]}</span>
-                          <button type="button" className="ghost" onClick={() => toggleSectionInReview(key)}>
-                            Add
+                          <button type="button" className="secondary" onClick={() => toggleSectionInReview(key)}>
+                            ＋ Add
                           </button>
                         </div>
                       ))}
@@ -2039,16 +2097,24 @@ export default function CvReview({
 
       {error && <p className="error">{error}</p>}
 
-      <div className="panel-actions">
+      <div className="panel-actions cv-profile-actions">
+        <div className="cv-profile-id">
+          <label className="label" htmlFor="profileId">Profile ID</label>
+          <input
+            id="profileId"
+            value={profileId}
+            onChange={(e) => setProfileId(e.target.value)}
+          />
+        </div>
         <button className="secondary" onClick={handleValidate}>Validate</button>
         <button className="secondary" onClick={handleSave} disabled={isSaving}>
-          {isSaving ? "Saving..." : "Save"}
+          {isSaving ? "Saving..." : "💾 Save"}
         </button>
-        <button className="secondary" onClick={handleDelete}>Delete</button>
+        <button className="secondary" onClick={handleDelete}>🗑 Delete</button>
         <button className="primary" onClick={handleRender} disabled={!canRender || isRendering}>
-          {isRendering ? "Rendering..." : "Render PDF"}
+          {isRendering ? "Rendering..." : "⬇ Download PDF"}
         </button>
-        {!canRender ? <p className="helper">Run preview before rendering a PDF.</p> : null}
+        {!canRender ? <p className="helper">Preview is generating before PDF can be rendered.</p> : null}
       </div>
     </div>
   );

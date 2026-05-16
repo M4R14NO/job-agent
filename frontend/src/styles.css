@@ -742,6 +742,46 @@ select {
   cursor: pointer;
 }
 
+.secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  background: transparent;
+  border: 1px solid #fca5a5;
+  color: #b91c1c;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-danger:hover {
+  background: #fef2f2;
+}
+
+.cv-profile-actions {
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.cv-profile-id {
+  display: grid;
+  gap: 6px;
+  min-width: 160px;
+  flex: 1;
+}
+
+.cv-profile-id input {
+  max-width: 280px;
+}
+
 .primary.chakra-button,
 .secondary.chakra-button,
 .ghost.chakra-button {

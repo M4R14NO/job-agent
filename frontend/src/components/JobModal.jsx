@@ -120,11 +120,11 @@ export function PdfPreviewCard({ pdfUrl, isGenerating, onUpdate }) {
         </div>
         <button
           type="button"
-          className="ghost"
+          className="secondary"
           onClick={onUpdate}
           disabled={isGenerating}
         >
-          {isGenerating ? "Rendering..." : "Update PDF preview"}
+          {isGenerating ? "🔄 Rendering..." : "🔄 Update PDF preview"}
         </button>
       </div>
       <div className="pdf-preview-container">
