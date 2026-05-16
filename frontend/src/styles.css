@@ -1224,7 +1224,7 @@ select {
 
 .action-panel-cv-content {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(220px, 1fr);
+  grid-template-columns: 1fr;
   gap: 16px;
   align-items: start;
 }
