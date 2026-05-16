@@ -182,7 +182,6 @@ export default function CvReview({
   const [isRewriting, setIsRewriting] = useState(false);
   const [draggedSection, setDraggedSection] = useState(null);
   const [dragOverKey, setDragOverKey] = useState(null);
-  const [activeStep, setActiveStep] = useState(0);
   const [openPreviewEditors, setOpenPreviewEditors] = useState({});
   const [hiddenSectionsOpen, setHiddenSectionsOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState(() => ({
@@ -229,21 +228,6 @@ export default function CvReview({
       })
     );
 
-  const steps = [
-    {
-      id: "inspect",
-      title: "Review parsed CV data",
-      shortTitle: "Inspect",
-      helper: "Review your parsed CV data and arrange the sections."
-    },
-    {
-      id: "review",
-      title: "Preview and edit",
-      shortTitle: "Preview",
-      helper: "Review the preview and edit each section."
-    }
-  ];
-
   useEffect(() => {
     setFormData(normalizeCanonical(canonical?.data));
     setSectionOrder(normalizeSectionOrder(canonical?.section_order));
@@ -254,17 +238,14 @@ export default function CvReview({
     setRewritePrompt("");
     setIsRewriting(false);
     setOpenPreviewEditors({});
-    setActiveStep(0);
   }, [canonical]);
 
   useEffect(() => {
-    if (activeStep !== 1) return;
     if (isPreviewing) return;
     const nextHash = buildPreviewHash();
     if (previewPayload && previewHash === nextHash) return;
     handlePreview();
   }, [
-    activeStep,
     isPreviewing,
     previewPayload,
     previewHash,
@@ -1888,9 +1869,9 @@ export default function CvReview({
     <div className="panel-card cv-editor">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">CV review</p>
-          <h2>CV editor</h2>
-          <p className="subtitle">Edit sections and set the final order.</p>
+          <p className="eyebrow">CV preview</p>
+          <h2>Preview and edit</h2>
+          <p className="subtitle">Review the mapped CV data and make final edits before rendering.</p>
         </div>
       </div>
 
@@ -1909,185 +1890,104 @@ export default function CvReview({
         </div>
       </div>
 
-      <div className="cv-step-nav">
-        {steps.map((step, index) => (
-          <button
-            key={step.id}
-            type="button"
-            className={`cv-step ${activeStep === index ? "is-active" : ""}`}
-            onClick={() => setActiveStep(index)}
-          >
-            <span className="cv-step-index">{index + 1}</span>
-            <span className="cv-step-title">{step.title}</span>
-          </button>
-        ))}
-      </div>
-
       <div className="cv-step-panel">
         <div className="cv-step-header">
           <div>
-            <p className="eyebrow">Step {activeStep + 1}</p>
-            <h3>{steps[activeStep].title}</h3>
-            <p className="helper">{steps[activeStep].helper}</p>
-          </div>
-          <div className="cv-step-actions">
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => setActiveStep((prev) => Math.max(0, prev - 1))}
-              disabled={activeStep === 0}
-            >
-              Prev: {steps[Math.max(0, activeStep - 1)].shortTitle}
-            </button>
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => setActiveStep((prev) => Math.min(steps.length - 1, prev + 1))}
-              disabled={activeStep === steps.length - 1}
-            >
-              Next: {steps[Math.min(steps.length - 1, activeStep + 1)].shortTitle}
-            </button>
+            <p className="eyebrow">Preview</p>
+            <h3>Preview and edit</h3>
+            <p className="helper">Review the preview and edit each section.</p>
           </div>
         </div>
 
-        {activeStep === 0 && (
-          <div className="cv-step-content">
-            {renderBasics()}
-            {sectionOrder.map((key) => (
-              <div key={key}>{renderSection(key)}</div>
-            ))}
-            {hiddenSectionKeys.length > 0 && (
-              <div className="hidden-sections">
-                <button
-                  type="button"
-                  className="ghost"
-                  onClick={() => setHiddenSectionsOpen((prev) => !prev)}
-                >
-                  {hiddenSectionsOpen ? "Hide" : "Show"} hidden sections ({hiddenSectionKeys.length})
-                </button>
-                {hiddenSectionsOpen && (
-                  <div className="hidden-sections-list">
-                    {hiddenSectionKeys.map((key) => (
-                      <div key={`hidden-${key}`} className="hidden-section-item">
-                        <span>{SECTION_LABELS[key]}</span>
-                        <label className="checkbox small">
-                          <input
-                            type="checkbox"
-                            checked={enabledSections.has(key)}
-                            onChange={() => toggleSection(key)}
-                          />
-                          <span>Enable</span>
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="step-cta">
+        <div className="cv-step-content">
+          {!hasJobContext && (
+            <p className="helper">No job context provided. Preview will be generic.</p>
+          )}
+          <div className="sub-card">
+            <div className="sub-card-header">
+              <strong>Rewrite with AI (optional)</strong>
+            </div>
+            <p className="helper">
+              Deterministic preview uses your canonical data. Add guidance to adjust wording, then rewrite.
+            </p>
+            <textarea
+              rows={4}
+              placeholder="Example: Emphasize impact metrics and leadership. Keep bullets concise."
+              value={rewritePrompt}
+              onChange={(event) => setRewritePrompt(event.target.value)}
+            />
+            <div className="inline-actions">
               <button
                 type="button"
-                className="primary"
-                onClick={() => setActiveStep(1)}
+                className="secondary"
+                onClick={handleRewrite}
+                disabled={isRewriting}
               >
-                Next: Preview
+                {isRewriting ? "Rewriting..." : "Rewrite with AI"}
               </button>
-              <p className="helper">Continue to the preview and editing step.</p>
+              <span className="helper">This updates the canonical data and refreshes preview.</span>
             </div>
           </div>
-        )}
-
-        {activeStep === 1 && (
-          <div className="cv-step-content">
-            {!hasJobContext && (
-              <p className="helper">No job context provided. Preview will be generic.</p>
-            )}
-            <div className="sub-card">
-              <div className="sub-card-header">
-                <strong>Rewrite with AI (optional)</strong>
-              </div>
-              <p className="helper">
-                Deterministic preview uses your canonical data. Add guidance to adjust wording, then rewrite.
-              </p>
-              <textarea
-                rows={4}
-                placeholder="Example: Emphasize impact metrics and leadership. Keep bullets concise."
-                value={rewritePrompt}
-                onChange={(event) => setRewritePrompt(event.target.value)}
-              />
-              <div className="inline-actions">
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={handleRewrite}
-                  disabled={isRewriting}
-                >
-                  {isRewriting ? "Rewriting..." : "Rewrite with AI"}
+          {previewPayload ? (
+            <>
+              <div className="panel-actions">
+                <button type="button" className="ghost" onClick={() => handlePreview({ force: true })} disabled={isPreviewing}>
+                  {isPreviewing ? "Updating preview..." : "Run preview again"}
                 </button>
-                <span className="helper">This updates the canonical data and refreshes preview.</span>
               </div>
-            </div>
-            {previewPayload ? (
-              <>
-                <div className="panel-actions">
-                  <button type="button" className="ghost" onClick={() => handlePreview({ force: true })} disabled={isPreviewing}>
-                    {isPreviewing ? "Updating preview..." : "Run preview again"}
-                  </button>
-                </div>
-                <div className="preview-grid">
-                  {sectionOrder
-                    .filter((key) => enabledSections.has(key))
-                    .map((key) => (
-                      <div key={`preview-${key}`} id={`preview-card-${key}`} className="preview-card">
-                        <div className="preview-card-header">
-                          <h4>{SECTION_LABELS[key]}</h4>
-                          <div className="inline-actions">
-                            <button type="button" className="ghost" onClick={() => toggleSectionInReview(key)}>
-                              Remove
-                            </button>
-                            <button type="button" className="ghost" onClick={() => togglePreviewEditor(key)}>
-                              {openPreviewEditors[key] ? "Hide edit" : "Edit"}
-                            </button>
-                          </div>
+              <div className="preview-grid">
+                {sectionOrder
+                  .filter((key) => enabledSections.has(key))
+                  .map((key) => (
+                    <div key={`preview-${key}`} id={`preview-card-${key}`} className="preview-card">
+                      <div className="preview-card-header">
+                        <h4>{SECTION_LABELS[key]}</h4>
+                        <div className="inline-actions">
+                          <button type="button" className="ghost" onClick={() => toggleSectionInReview(key)}>
+                            Remove
+                          </button>
+                          <button type="button" className="ghost" onClick={() => togglePreviewEditor(key)}>
+                            {openPreviewEditors[key] ? "Hide edit" : "Edit"}
+                          </button>
                         </div>
-                        {renderPreviewSection(key) || <p className="helper">No entries.</p>}
-                        {openPreviewEditors[key] && (
-                          <div className="preview-editor">
-                            {renderPreviewEditorSection(key)}
-                          </div>
-                        )}
                       </div>
-                    ))}
+                      {renderPreviewSection(key) || <p className="helper">No entries.</p>}
+                      {openPreviewEditors[key] && (
+                        <div className="preview-editor">
+                          {renderPreviewEditorSection(key)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+              </div>
+              {hiddenSectionKeys.length > 0 && (
+                <div className="hidden-sections">
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => setHiddenSectionsOpen((prev) => !prev)}
+                  >
+                    {hiddenSectionsOpen ? "Hide" : "Show"} available sections ({hiddenSectionKeys.length})
+                  </button>
+                  {hiddenSectionsOpen && (
+                    <div className="hidden-sections-list">
+                      {hiddenSectionKeys.map((key) => (
+                        <div key={`review-hidden-${key}`} className="hidden-section-item">
+                          <span>{SECTION_LABELS[key]}</span>
+                          <button type="button" className="ghost" onClick={() => toggleSectionInReview(key)}>
+                            Add
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {hiddenSectionKeys.length > 0 && (
-                  <div className="hidden-sections">
-                    <button
-                      type="button"
-                      className="ghost"
-                      onClick={() => setHiddenSectionsOpen((prev) => !prev)}
-                    >
-                      {hiddenSectionsOpen ? "Hide" : "Show"} available sections ({hiddenSectionKeys.length})
-                    </button>
-                    {hiddenSectionsOpen && (
-                      <div className="hidden-sections-list">
-                        {hiddenSectionKeys.map((key) => (
-                          <div key={`review-hidden-${key}`} className="hidden-section-item">
-                            <span>{SECTION_LABELS[key]}</span>
-                            <button type="button" className="ghost" onClick={() => toggleSectionInReview(key)}>
-                              Add
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </>
-            ) : (
-              <p className="helper">Generating the preview. This can take a moment.</p>
-            )}
-          </div>
-        )}
+              )}
+            </>
+          ) : (
+            <p className="helper">Generating the preview. This can take a moment.</p>
+          )}
+        </div>
       </div>
 
       {error && <p className="error">{error}</p>}
