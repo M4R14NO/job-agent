@@ -1234,6 +1234,27 @@ select {
   gap: 12px;
 }
 
+.cv-helper-copy {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #e9e3d3;
+  background: #fffaf0;
+}
+
+.cv-generate-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cv-generate-button {
+  min-width: 150px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 .cv-sample-preview {
   display: grid;
   gap: 8px;
@@ -1331,5 +1352,13 @@ select {
 
   .cv-options {
     grid-template-columns: 1fr;
+  }
+
+  .cv-generate-row {
+    justify-content: stretch;
+  }
+
+  .cv-generate-button {
+    width: 100%;
   }
 }

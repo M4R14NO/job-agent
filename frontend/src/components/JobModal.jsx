@@ -218,12 +218,10 @@ export function JobActionsCard({
         <div className="action-panel action-panel-cv">
           <div className="rank-header">
             <h3>CV generation</h3>
-            <button className="secondary" onClick={handleGenerateCv} disabled={isGeneratingCv}>
-              {isGeneratingCv ? "Filling CV..." : "Create CV"}
-            </button>
           </div>
-          <p className="helper">
-            Edit the resume source text below. This exact text is used as the AI input to populate your CV sections.
+          <p className="helper cv-helper-copy">
+            Edit the resume source text below. This exact text is used as the AI input to generate your CV sections.
+            After generation, you can still review and edit the CV content.
           </p>
           <div className="action-panel-cv-content">
             <div className="action-panel-cv-form">
@@ -262,6 +260,18 @@ export function JobActionsCard({
                   onResumeTextChange?.(nextValue);
                 }}
               />
+              <div className="cv-generate-row">
+                <button className="primary cv-generate-button" onClick={handleGenerateCv} disabled={isGeneratingCv}>
+                  {isGeneratingCv ? (
+                    <>
+                      <Spinner size="sm" color="currentColor" />
+                      <span>Filling CV...</span>
+                    </>
+                  ) : (
+                    "Create CV"
+                  )}
+                </button>
+              </div>
             </div>
             <div className="cv-sample-preview">
               <p className="label">Sample CV preview</p>
@@ -272,12 +282,6 @@ export function JobActionsCard({
               />
             </div>
           </div>
-          {isGeneratingCv && (
-            <div className="results-loading">
-              <Spinner size="sm" color="blue.500" />
-              <span>Filling your CV with AI. This can take a minute.</span>
-            </div>
-          )}
           {cvError && <p className="error">{cvError}</p>}
         </div>
       ) : null}
