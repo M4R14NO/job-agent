@@ -153,9 +153,9 @@ class CvAwesomePayload(BaseModel):
     first_name: str
     last_name: str
     position: str
-    address: str
-    mobile: str
-    email: str
+    address: str | None = None
+    mobile: str | None = None
+    email: str | None = None
     homepage: str | None = None
     github: str | None = None
     linkedin: str | None = None
@@ -222,9 +222,9 @@ def _build_template_prompt(
         "    \"first_name\": string,\n"
         "    \"last_name\": string,\n"
         "    \"position\": string,\n"
-        "    \"address\": string,\n"
-        "    \"mobile\": string,\n"
-        "    \"email\": string,\n"
+        "    \"address\": string, empty, or null,\n"
+        "    \"mobile\": string, empty, or null,\n"
+        "    \"email\": string, empty, or null,\n"
         "    \"homepage\": string or empty,\n"
         "    \"github\": string or empty,\n"
         "    \"linkedin\": string or empty,\n"

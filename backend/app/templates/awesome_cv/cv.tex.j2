@@ -62,10 +62,16 @@
 ((* endif *))
 \name{((( first_name | latex_escape )))}{((( last_name | latex_escape )))}
 \position{((( position | latex_escape )))}
+((* if address *))
 \address{((( address | latex_escape )))}
+((* endif *))
 
+((* if mobile *))
 \mobile{((( mobile | latex_escape )))}
+((* endif *))
+((* if email *))
 \email{((( email | latex_escape )))}
+((* endif *))
 ((* if date_of_birth *))
 \dateofbirth{((( date_of_birth | latex_escape )))}
 ((* endif *))
