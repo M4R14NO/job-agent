@@ -20,6 +20,7 @@ export default function App() {
   const [wishes, setWishes] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [location, setLocation] = useState("");
+  const [searchRadiusKm, setSearchRadiusKm] = useState(null);
   const [resultsWanted, setResultsWanted] = useState(10);
   const [hoursOld, setHoursOld] = useState(72);
   const [isRemote, setIsRemote] = useState(false);
@@ -245,6 +246,9 @@ export default function App() {
         if (typeof parsed.wishes === "string") setWishes(parsed.wishes);
         if (typeof parsed.searchTerm === "string") setSearchTerm(parsed.searchTerm);
         if (typeof parsed.location === "string") setLocation(parsed.location);
+        if (typeof parsed.searchRadiusKm === "number" || parsed.searchRadiusKm === null) {
+          setSearchRadiusKm(parsed.searchRadiusKm ?? null);
+        }
         if (typeof parsed.resultsWanted === "number") setResultsWanted(parsed.resultsWanted);
         if (typeof parsed.hoursOld === "number") setHoursOld(parsed.hoursOld);
         if (typeof parsed.isRemote === "boolean") setIsRemote(parsed.isRemote);
@@ -268,7 +272,7 @@ export default function App() {
     setResponse(null);
     try {
       const data = await searchJobs({
-        resumeText, wishes, searchTerm, location,
+        resumeText, wishes, searchTerm, location, searchRadiusKm,
         resultsWanted, hoursOld, isRemote, sites, fetchFullDescriptions,
         model: selectedModel,
         enableRerank,
@@ -287,6 +291,7 @@ export default function App() {
           wishes,
           searchTerm,
           location,
+          searchRadiusKm,
           resultsWanted,
           hoursOld,
           isRemote,
@@ -618,6 +623,7 @@ export default function App() {
               <SearchFilters
                 searchTerm={searchTerm} onSearchTermChange={setSearchTerm}
                 location={location} onLocationChange={setLocation}
+                searchRadiusKm={searchRadiusKm} onSearchRadiusKmChange={setSearchRadiusKm}
                 resultsWanted={resultsWanted} onResultsWantedChange={setResultsWanted}
                 hoursOld={hoursOld} onHoursOldChange={setHoursOld}
                 isRemote={isRemote} onIsRemoteChange={setIsRemote}

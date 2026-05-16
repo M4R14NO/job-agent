@@ -8,6 +8,7 @@ class SearchRequest(BaseModel):
     wishes: str | None = None
     search_term: str | None = None
     location: str | None = None
+    search_radius_km: int | None = Field(default=None, ge=0)
     results_wanted: int = 10
     hours_old: int | None = 72
     is_remote: bool = False

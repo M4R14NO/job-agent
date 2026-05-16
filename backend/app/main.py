@@ -104,6 +104,7 @@ def start_search(payload: SearchRequest) -> SearchResponse:
         site_name=sites,
         search_term=search_term,
         location=payload.location,
+        search_radius_km=payload.search_radius_km,
         results_wanted=payload.results_wanted,
         hours_old=payload.hours_old,
         is_remote=payload.is_remote,

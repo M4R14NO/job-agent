@@ -17,6 +17,7 @@ const TIME_FILTERS = [
 export default function SearchFilters({
   searchTerm, onSearchTermChange,
   location, onLocationChange,
+  searchRadiusKm, onSearchRadiusKmChange,
   resultsWanted, onResultsWantedChange,
   hoursOld, onHoursOldChange,
   isRemote, onIsRemoteChange,
@@ -104,6 +105,31 @@ SKILLS
               placeholder="e.g. Berlin"
               value={location}
               onChange={(e) => onLocationChange(e.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor="searchRadiusKm" className="label">Radius (km)</label>
+            <input
+              id="searchRadiusKm"
+              type="number"
+              min={0}
+              step={1}
+              placeholder="50 km"
+              value={searchRadiusKm ?? ""}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === "") {
+                  onSearchRadiusKmChange(null);
+                  return;
+                }
+
+                const nextValue = Math.round(Number(value));
+                if (Number.isNaN(nextValue)) {
+                  return;
+                }
+
+                onSearchRadiusKmChange(Math.max(0, nextValue));
+              }}
             />
           </div>
         </div>
