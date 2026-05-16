@@ -118,7 +118,17 @@ SKILLS
               value={searchRadiusKm ?? ""}
               onChange={(e) => {
                 const value = e.target.value;
-                onSearchRadiusKmChange(value === "" ? null : Math.round(Number(value)));
+                if (value === "") {
+                  onSearchRadiusKmChange(null);
+                  return;
+                }
+
+                const nextValue = Math.round(Number(value));
+                if (Number.isNaN(nextValue)) {
+                  return;
+                }
+
+                onSearchRadiusKmChange(Math.max(0, nextValue));
               }}
             />
           </div>
