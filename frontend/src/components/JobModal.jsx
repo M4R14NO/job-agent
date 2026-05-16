@@ -1,3 +1,4 @@
+import { Spinner } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { generateCoverLetter, parseCvCanonical } from "../api/llm";
 
@@ -77,6 +78,7 @@ export function JobActionsCard({
   mode,
   job,
   resumeText,
+  onResumeTextChange,
   selectedModel,
   lmTimeout,
   onStartCvReview
@@ -87,9 +89,9 @@ export function JobActionsCard({
   const [isGeneratingCv, setIsGeneratingCv] = useState(false);
   const [cvError, setCvError] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("awesomecv");
-  const [selectedDocType, setSelectedDocType] = useState("resume");
   const [outputLanguage, setOutputLanguage] = useState("english");
   const [coverOutputLanguage, setCoverOutputLanguage] = useState(outputLanguage);
+  const [cvSourceText, setCvSourceText] = useState(resumeText);
 
   useEffect(() => {
     setCoverLetter("");
@@ -99,6 +101,10 @@ export function JobActionsCard({
     setIsGeneratingCv(false);
     setCoverOutputLanguage(outputLanguage);
   }, [job]);
+
+  useEffect(() => {
+    setCvSourceText(resumeText);
+  }, [resumeText, job]);
 
   const handleGenerate = async () => {
     if (!selectedModel) {
@@ -131,11 +137,15 @@ export function JobActionsCard({
       setCvError("Select a model to generate a CV.");
       return;
     }
+    if (!cvSourceText.trim()) {
+      setCvError("Resume source text is required to generate a CV.");
+      return;
+    }
     setIsGeneratingCv(true);
     setCvError("");
     try {
       const canonical = await parseCvCanonical({
-        resume_text: resumeText,
+        resume_text: cvSourceText,
         model: selectedModel,
         lm_timeout: lmTimeout,
         output_language: outputLanguage,
@@ -148,7 +158,7 @@ export function JobActionsCard({
         canonical,
         job,
         templateId: selectedTemplate,
-        docType: selectedDocType,
+        docType: "resume",
         outputLanguage
       });
     } catch (err) {
@@ -208,48 +218,70 @@ export function JobActionsCard({
         <div className="action-panel action-panel-cv">
           <div className="rank-header">
             <h3>CV generation</h3>
-            <button className="secondary" onClick={handleGenerateCv} disabled={isGeneratingCv}>
-              {isGeneratingCv ? "Extracting..." : "Create CV"}
-            </button>
           </div>
-          <p className="helper">Uses the LLM to parse your resume text into editable CV data.</p>
-          <div className="cv-options">
-            <div>
-              <label htmlFor="cvTemplate" className="label">Template</label>
-              <select
-                id="cvTemplate"
-                value={selectedTemplate}
-                onChange={(e) => setSelectedTemplate(e.target.value)}
-              >
-                <option value="awesomecv">AwesomeCV</option>
-              </select>
+          <p className="helper cv-helper-copy">
+            Edit the resume source text below. This exact text is used as the AI input to generate your CV sections.
+            After generation, you can still review and edit the CV content.
+          </p>
+          <div className="action-panel-cv-content">
+            <div className="action-panel-cv-form">
+              <div className="cv-options">
+                <div>
+                  <label htmlFor="cvTemplate" className="label">Template</label>
+                  <select
+                    id="cvTemplate"
+                    value={selectedTemplate}
+                    onChange={(e) => setSelectedTemplate(e.target.value)}
+                  >
+                    <option value="awesomecv">AwesomeCV</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="outputLanguage" className="label">Output language</label>
+                  <select
+                    id="outputLanguage"
+                    value={outputLanguage}
+                    onChange={(e) => setOutputLanguage(e.target.value)}
+                  >
+                    <option value="english">English</option>
+                    <option value="german">German</option>
+                  </select>
+                </div>
+              </div>
+              <label htmlFor="cvSourceText" className="label">Resume source text</label>
+              <textarea
+                id="cvSourceText"
+                rows={12}
+                placeholder="Paste plain text from your resume here..."
+                value={cvSourceText}
+                onChange={(e) => {
+                  const nextValue = e.target.value;
+                  setCvSourceText(nextValue);
+                  onResumeTextChange?.(nextValue);
+                }}
+              />
+              <div className="cv-generate-row">
+                <button className="primary cv-generate-button" onClick={handleGenerateCv} disabled={isGeneratingCv}>
+                  {isGeneratingCv ? (
+                    <>
+                      <Spinner size="sm" color="currentColor" />
+                      <span>Filling CV...</span>
+                    </>
+                  ) : (
+                    "Create CV"
+                  )}
+                </button>
+              </div>
             </div>
-            <div>
-              <label htmlFor="docType" className="label">Document type</label>
-              <select
-                id="docType"
-                value={selectedDocType}
-                onChange={(e) => setSelectedDocType(e.target.value)}
-              >
-                <option value="resume">Resume</option>
-                <option value="cv">CV</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="outputLanguage" className="label">Output language</label>
-              <select
-                id="outputLanguage"
-                value={outputLanguage}
-                onChange={(e) => setOutputLanguage(e.target.value)}
-              >
-                <option value="english">English</option>
-                <option value="german">German</option>
-              </select>
+            <div className="cv-sample-preview">
+              <p className="label">Sample CV preview</p>
+              <img
+                src="/cv_example.png"
+                alt="Sample CV layout preview"
+                loading="lazy"
+              />
             </div>
           </div>
-          {isGeneratingCv && (
-            <p className="progress">Extracting canonical CV data...</p>
-          )}
           {cvError && <p className="error">{cvError}</p>}
         </div>
       ) : null}

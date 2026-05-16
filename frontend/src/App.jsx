@@ -559,6 +559,7 @@ export default function App() {
                   mode={activeJobAction}
                   job={selectedJob}
                   resumeText={resumeText}
+                  onResumeTextChange={setResumeText}
                   selectedModel={selectedModel}
                   lmTimeout={lmTimeout}
                   onStartCvReview={handleStartCvReview}
