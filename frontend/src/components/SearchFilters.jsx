@@ -113,11 +113,12 @@ SKILLS
               id="searchRadiusKm"
               type="number"
               min={0}
+              step={1}
               placeholder="50 km"
               value={searchRadiusKm ?? ""}
               onChange={(e) => {
                 const value = e.target.value;
-                onSearchRadiusKmChange(value === "" ? null : Number(value));
+                onSearchRadiusKmChange(value === "" ? null : Math.round(Number(value)));
               }}
             />
           </div>

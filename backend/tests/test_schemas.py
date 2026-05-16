@@ -21,3 +21,8 @@ def test_search_request_accepts_integer_search_radius_km():
 def test_search_request_rejects_negative_search_radius_km():
     with pytest.raises(ValidationError):
         SearchRequest.model_validate({"resume_text": "resume", "search_radius_km": -1})
+
+
+def test_search_request_rejects_fractional_search_radius_km():
+    with pytest.raises(ValidationError):
+        SearchRequest.model_validate({"resume_text": "resume", "search_radius_km": 12.5})
