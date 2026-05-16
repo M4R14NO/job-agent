@@ -1,4 +1,5 @@
 import { Spinner } from "@chakra-ui/react";
+import { Download, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { generateCoverLetter, parseCvCanonical } from "../api/llm";
 
@@ -110,7 +111,7 @@ export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defa
   );
 }
 
-export function PdfPreviewCard({ pdfUrl, isGenerating, onUpdate }) {
+export function PdfPreviewCard({ pdfUrl, isGenerating, isDownloading, onUpdate, onDownload }) {
   return (
     <div className="panel-card pdf-preview-card">
       <div className="panel-header">
@@ -118,14 +119,27 @@ export function PdfPreviewCard({ pdfUrl, isGenerating, onUpdate }) {
           <p className="eyebrow">PDF preview</p>
           <h2>Rendered CV</h2>
         </div>
-        <button
-          type="button"
-          className="secondary"
-          onClick={onUpdate}
-          disabled={isGenerating}
-        >
-          {isGenerating ? "🔄 Rendering..." : "🔄 Update PDF preview"}
-        </button>
+        <div className="pdf-preview-actions">
+          <button
+            type="button"
+            className="secondary btn-sm"
+            onClick={onUpdate}
+            disabled={isGenerating}
+          >
+            <RefreshCw size={14} />
+            {isGenerating ? "Rendering…" : "Update preview"}
+          </button>
+          <button
+            type="button"
+            className="primary btn-sm"
+            onClick={onDownload}
+            disabled={isDownloading || !pdfUrl}
+            title={!pdfUrl ? "Render a preview first" : "Download the current PDF"}
+          >
+            <Download size={14} />
+            {isDownloading ? "Downloading…" : "Download PDF"}
+          </button>
+        </div>
       </div>
       <div className="pdf-preview-container">
         {pdfUrl ? (
@@ -138,7 +152,7 @@ export function PdfPreviewCard({ pdfUrl, isGenerating, onUpdate }) {
           <div className="pdf-preview-placeholder">
             {isGenerating
               ? <p className="helper">Rendering PDF preview…</p>
-              : <p className="helper">Click "Update PDF preview" to render the current CV as PDF.</p>
+              : <p className="helper">Click "Update preview" to render the current CV as PDF.</p>
             }
           </div>
         )}

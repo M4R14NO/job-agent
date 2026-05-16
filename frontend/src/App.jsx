@@ -63,6 +63,7 @@ export default function App() {
   const [cvPreviewPayload, setCvPreviewPayload] = useState(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
+  const [isPdfDownloading, setIsPdfDownloading] = useState(false);
 
   const searchTimerRef = useRef(null);
   const isResizingSidebarRef = useRef(false);
@@ -438,6 +439,29 @@ export default function App() {
     }
   };
 
+  const handleDownloadPdf = async () => {
+    if (!cvPreviewPayload || !cvReview) return;
+    setIsPdfDownloading(true);
+    try {
+      const { blob, filename } = await renderCvFromTemplate({
+        payload: cvPreviewPayload,
+        doc_type: cvReview.docType || "resume"
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (_err) {
+      // intentional no-op; errors visible in CvReview
+    } finally {
+      setIsPdfDownloading(false);
+    }
+  };
+
   const handleStartCvEditor = ({ canonical }) => {
     setCvReview({
       canonical,
@@ -595,7 +619,9 @@ export default function App() {
               <PdfPreviewCard
                 pdfUrl={pdfPreviewUrl}
                 isGenerating={isPdfGenerating}
+                isDownloading={isPdfDownloading}
                 onUpdate={handleUpdatePdfPreview}
+                onDownload={handleDownloadPdf}
               />
             )}
           </div>

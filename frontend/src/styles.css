@@ -740,6 +740,15 @@ select {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* smaller variant used in section cards and preview card */
+.btn-sm {
+  padding: 5px 12px;
+  font-size: 13px;
 }
 
 .secondary:disabled {
@@ -1408,6 +1417,13 @@ select {
   min-height: 320px;
 }
 
+.pdf-preview-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .pdf-preview-container {
   min-height: 280px;
   border-radius: 12px;
@@ -1457,7 +1473,6 @@ select {
 }
 
 .section-label-edit-icon {
-  font-size: 12px;
   color: #aaa;
   opacity: 0;
   transition: opacity 0.15s;
@@ -1479,4 +1494,106 @@ select {
   width: auto;
   min-width: 120px;
   border-radius: 0;
+}
+
+/* Personal information field rows */
+.personal-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+
+@media (max-width: 640px) {
+  .personal-fields-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.personal-field-row {
+  display: grid;
+  gap: 4px;
+}
+
+.personal-field-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.personal-field-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.field-visibility-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  padding: 5px 7px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  color: #666;
+  transition: background 0.15s, color 0.15s;
+}
+
+.field-visibility-btn:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.field-visibility-btn.is-hidden {
+  border-color: #fca5a5;
+  color: #b91c1c;
+  background: #fff5f5;
+}
+
+.field-visibility-btn.is-hidden:hover {
+  background: #fef2f2;
+}
+
+.field-hidden input {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.field-hidden-note {
+  margin: 0;
+  font-size: 11px;
+  color: #b91c1c;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Sub-card title with icon */
+.sub-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Save profile card spacing */
+.save-profile-card .cv-profile-id {
+  flex: none;
+  max-width: 280px;
+}
+
+.save-revision-note {
+  color: #166534;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+/* Ensure inline-actions flex items (Lucide icons + text) align properly */
+.inline-actions button,
+.btn-danger,
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
