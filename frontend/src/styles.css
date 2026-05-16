@@ -1362,3 +1362,81 @@ select {
     width: 100%;
   }
 }
+
+/* PDF Preview card */
+.pdf-preview-card {
+  min-height: 320px;
+}
+
+.pdf-preview-container {
+  min-height: 280px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e6e6e6;
+  background: #f7f7f7;
+}
+
+.pdf-preview-iframe {
+  width: 100%;
+  height: 720px;
+  border: none;
+  display: block;
+}
+
+.pdf-preview-placeholder {
+  display: grid;
+  place-items: center;
+  min-height: 280px;
+  padding: 24px;
+  text-align: center;
+}
+
+/* Collapsed job panel */
+.job-panel-collapsed .panel-header {
+  align-items: center;
+}
+
+/* Editable section label in preview cards */
+.section-label-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+  border-bottom: 1px dashed transparent;
+}
+
+.section-label-btn:hover {
+  border-bottom-color: #aaa;
+}
+
+.section-label-edit-icon {
+  font-size: 12px;
+  color: #aaa;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.section-label-btn:hover .section-label-edit-icon {
+  opacity: 1;
+}
+
+.section-label-input {
+  font: inherit;
+  font-weight: 700;
+  font-size: 1rem;
+  border: none;
+  border-bottom: 2px solid #ff9f1c;
+  outline: none;
+  background: transparent;
+  padding: 0;
+  width: auto;
+  min-width: 120px;
+  border-radius: 0;
+}

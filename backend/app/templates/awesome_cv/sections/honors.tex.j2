@@ -4,7 +4,8 @@
 %-------------------------------------------------------------------------------
 %\tSECTION TITLE
 %-------------------------------------------------------------------------------
-\cvsection{Honors \& Awards}
+((* set _st = (section_labels or {}).get('honors', 'Honors & Awards') *))
+\cvsection{((( _st | latex_escape )))}
 
 
 ((* if honor_subsections *))

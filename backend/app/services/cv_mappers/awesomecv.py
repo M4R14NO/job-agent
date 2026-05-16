@@ -171,6 +171,7 @@ class CvAwesomePayload(BaseModel):
     writings: list[CvWriting] = Field(default_factory=list)
     sections: CvSections = Field(default_factory=CvSections)
     section_order: list[str] = Field(default_factory=list)
+    section_labels: dict[str, str] = Field(default_factory=dict)
 
     class Config:
         extra = "forbid"

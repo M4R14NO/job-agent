@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { searchJobs } from "./api/search";
-import { fetchModels, getCvProfile, listCvProfiles, parseCvCanonical } from "./api/llm";
+import { fetchModels, getCvProfile, listCvProfiles, parseCvCanonical, renderCvFromTemplate } from "./api/llm";
 import { useJobDescription } from "./hooks/useJobDescription";
 import SearchFilters from "./components/SearchFilters";
 import ResultsList from "./components/ResultsList";
-import { JobActionsCard, JobDetailsCard } from "./components/JobModal";
+import { JobActionsCard, JobDetailsCard, PdfPreviewCard } from "./components/JobModal";
 import CvReview from "./components/CvReview";
 import CvEntry from "./components/CvEntry";
 import { Box, Grid, GridItem } from "@chakra-ui/react";
@@ -60,6 +60,9 @@ export default function App() {
   const [llmProfileError, setLlmProfileError] = useState("");
   const [searchElapsedMs, setSearchElapsedMs] = useState(0);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MIN_WIDTH);
+  const [cvPreviewPayload, setCvPreviewPayload] = useState(null);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
+  const [isPdfGenerating, setIsPdfGenerating] = useState(false);
 
   const searchTimerRef = useRef(null);
   const isResizingSidebarRef = useRef(false);
@@ -184,6 +187,12 @@ export default function App() {
   useEffect(() => {
     loadProfiles();
   }, []);
+
+  useEffect(() => {
+    if (!cvPreviewPayload || !cvReview) return;
+    if (pdfPreviewUrl) return;
+    handleUpdatePdfPreview();
+  }, [cvPreviewPayload]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -404,6 +413,29 @@ export default function App() {
     setCvReview({ canonical, job, templateId, docType, outputLanguage });
     setSelectedJob(job);
     setActiveJobAction("cv");
+    setCvPreviewPayload(null);
+    setPdfPreviewUrl(null);
+  };
+
+  const handleUpdatePdfPreview = async () => {
+    if (!cvPreviewPayload || !cvReview) return;
+    if (pdfPreviewUrl) {
+      URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl(null);
+    }
+    setIsPdfGenerating(true);
+    try {
+      const { blob } = await renderCvFromTemplate({
+        payload: cvPreviewPayload,
+        doc_type: cvReview.docType || "resume"
+      });
+      const url = URL.createObjectURL(blob);
+      setPdfPreviewUrl(url);
+    } catch (err) {
+      // silently fail — error is visible in CvReview
+    } finally {
+      setIsPdfGenerating(false);
+    }
   };
 
   const handleStartCvEditor = ({ canonical }) => {
@@ -466,6 +498,8 @@ export default function App() {
     setCvReview(null);
     setActiveView("find");
     setActiveJobAction("none");
+    setCvPreviewPayload(null);
+    setPdfPreviewUrl(null);
   };
 
   const handleBackToResults = () => {
@@ -473,6 +507,8 @@ export default function App() {
     setCvReview(null);
     setActiveView("find");
     setActiveJobAction("none");
+    setCvPreviewPayload(null);
+    setPdfPreviewUrl(null);
   };
 
   const handleSetView = (view) => {
@@ -550,7 +586,16 @@ export default function App() {
             <JobDetailsCard
               job={selectedJob}
               descriptionHtml={descriptionHtml}
+              collapsible={Boolean(cvReview)}
+              defaultCollapsed={Boolean(cvReview)}
             />
+            {cvReview && (
+              <PdfPreviewCard
+                pdfUrl={pdfPreviewUrl}
+                isGenerating={isPdfGenerating}
+                onUpdate={handleUpdatePdfPreview}
+              />
+            )}
           </div>
           {showActionsPanel || cvReview ? (
             <div className="panel-column">
@@ -574,6 +619,7 @@ export default function App() {
                   outputLanguage={cvReview.outputLanguage}
                   model={selectedModel}
                   lmTimeout={lmTimeout}
+                  onPreviewPayloadChange={setCvPreviewPayload}
                 />
               ) : null}
             </div>

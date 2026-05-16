@@ -166,12 +166,16 @@ export default function CvReview({
   docType,
   outputLanguage,
   model,
-  lmTimeout
+  lmTimeout,
+  onPreviewPayloadChange
 }) {
   const [profileId, setProfileId] = useState(canonical?.profile_id || "default");
   const [revision, setRevision] = useState(canonical?.revision ?? 0);
   const [formData, setFormData] = useState(() => normalizeCanonical(canonical?.data));
   const [sectionOrder, setSectionOrder] = useState(() => normalizeSectionOrder(canonical?.section_order));
+  const [sectionLabels, setSectionLabels] = useState(() => ({ ...SECTION_LABELS }));
+  const [editingLabelKey, setEditingLabelKey] = useState(null);
+  const [rewriteOpen, setRewriteOpen] = useState(false);
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isRendering, setIsRendering] = useState(false);
@@ -238,7 +242,13 @@ export default function CvReview({
     setRewritePrompt("");
     setIsRewriting(false);
     setOpenPreviewEditors({});
+    setSectionLabels({ ...SECTION_LABELS });
+    setEditingLabelKey(null);
   }, [canonical]);
+
+  useEffect(() => {
+    onPreviewPayloadChange?.(previewPayload);
+  }, [previewPayload]);
 
   useEffect(() => {
     if (isPreviewing) return;
@@ -324,6 +334,11 @@ export default function CvReview({
     setDraggedSection(null);
     setDragOverKey(null);
     clearPreview();
+  };
+
+  const updateSectionLabel = (key, value) => {
+    setSectionLabels((prev) => ({ ...prev, [key]: value }));
+    setPreviewPayload((prev) => prev ? { ...prev, section_labels: { ...(prev.section_labels || {}), [key]: value } } : prev);
   };
 
   const updateField = (field, value) => {
@@ -501,7 +516,7 @@ export default function CvReview({
         section_order: sectionOrder,
         mapping_mode: "deterministic"
       });
-      setPreviewPayload(result.payload || null);
+      setPreviewPayload(result.payload ? { ...result.payload, section_labels: sectionLabels } : null);
       setPreviewHash(nextHash);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Preview failed");
@@ -1906,27 +1921,40 @@ export default function CvReview({
           <div className="sub-card">
             <div className="sub-card-header">
               <strong>Rewrite with AI (optional)</strong>
-            </div>
-            <p className="helper">
-              Deterministic preview uses your canonical data. Add guidance to adjust wording, then rewrite.
-            </p>
-            <textarea
-              rows={4}
-              placeholder="Example: Emphasize impact metrics and leadership. Keep bullets concise."
-              value={rewritePrompt}
-              onChange={(event) => setRewritePrompt(event.target.value)}
-            />
-            <div className="inline-actions">
               <button
                 type="button"
-                className="secondary"
-                onClick={handleRewrite}
-                disabled={isRewriting}
+                className="ghost icon-button"
+                onClick={() => setRewriteOpen((prev) => !prev)}
+                aria-expanded={rewriteOpen}
               >
-                {isRewriting ? "Rewriting..." : "Rewrite with AI"}
+                <span className="icon" aria-hidden="true">{rewriteOpen ? "▾" : "▸"}</span>
+                <span>{rewriteOpen ? "Collapse" : "Expand"}</span>
               </button>
-              <span className="helper">This updates the canonical data and refreshes preview.</span>
             </div>
+            {rewriteOpen && (
+              <>
+                <p className="helper">
+                  Deterministic preview uses your canonical data. Add guidance to adjust wording, then rewrite.
+                </p>
+                <textarea
+                  rows={4}
+                  placeholder="Example: Emphasize impact metrics and leadership. Keep bullets concise."
+                  value={rewritePrompt}
+                  onChange={(event) => setRewritePrompt(event.target.value)}
+                />
+                <div className="inline-actions">
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={handleRewrite}
+                    disabled={isRewriting}
+                  >
+                    {isRewriting ? "Rewriting..." : "Rewrite with AI"}
+                  </button>
+                  <span className="helper">This updates the canonical data and refreshes preview.</span>
+                </div>
+              </>
+            )}
           </div>
           {previewPayload ? (
             <>
@@ -1941,7 +1969,26 @@ export default function CvReview({
                   .map((key) => (
                     <div key={`preview-${key}`} id={`preview-card-${key}`} className="preview-card">
                       <div className="preview-card-header">
-                        <h4>{SECTION_LABELS[key]}</h4>
+                        {editingLabelKey === key ? (
+                          <input
+                            className="section-label-input"
+                            value={sectionLabels[key] ?? SECTION_LABELS[key]}
+                            autoFocus
+                            onChange={(e) => updateSectionLabel(key, e.target.value)}
+                            onBlur={() => setEditingLabelKey(null)}
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingLabelKey(null); }}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className="section-label-btn"
+                            title="Click to rename section"
+                            onClick={() => setEditingLabelKey(key)}
+                          >
+                            {sectionLabels[key] ?? SECTION_LABELS[key]}
+                            <span className="section-label-edit-icon" aria-hidden="true">✎</span>
+                          </button>
+                        )}
                         <div className="inline-actions">
                           <button type="button" className="ghost" onClick={() => toggleSectionInReview(key)}>
                             Remove
@@ -1973,7 +2020,7 @@ export default function CvReview({
                     <div className="hidden-sections-list">
                       {hiddenSectionKeys.map((key) => (
                         <div key={`review-hidden-${key}`} className="hidden-section-item">
-                          <span>{SECTION_LABELS[key]}</span>
+                          <span>{sectionLabels[key] ?? SECTION_LABELS[key]}</span>
                           <button type="button" className="ghost" onClick={() => toggleSectionInReview(key)}>
                             Add
                           </button>

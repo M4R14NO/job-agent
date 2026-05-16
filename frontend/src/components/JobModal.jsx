@@ -2,7 +2,32 @@ import { Spinner } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { generateCoverLetter, parseCvCanonical } from "../api/llm";
 
-export function JobDetailsCard({ job, descriptionHtml }) {
+export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defaultCollapsed = false }) {
+  const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+
+  if (collapsible && isCollapsed) {
+    return (
+      <div className="panel-card job-panel job-panel-collapsed">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Job detail</p>
+            <h2>{job.title}</h2>
+            <p className="subtitle">{job.company}</p>
+          </div>
+          <button
+            type="button"
+            className="ghost icon-button"
+            onClick={() => setIsCollapsed(false)}
+            aria-label="Expand job detail"
+          >
+            <span className="icon" aria-hidden="true">▸</span>
+            <span>Expand</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="panel-card job-panel">
       <div className="panel-header">
@@ -11,6 +36,17 @@ export function JobDetailsCard({ job, descriptionHtml }) {
           <h2>{job.title}</h2>
           <p className="subtitle">{job.company}</p>
         </div>
+        {collapsible && (
+          <button
+            type="button"
+            className="ghost icon-button"
+            onClick={() => setIsCollapsed(true)}
+            aria-label="Collapse job detail"
+          >
+            <span className="icon" aria-hidden="true">▾</span>
+            <span>Collapse</span>
+          </button>
+        )}
       </div>
 
       <div className="modal-meta">
@@ -73,6 +109,44 @@ export function JobDetailsCard({ job, descriptionHtml }) {
     </div>
   );
 }
+
+export function PdfPreviewCard({ pdfUrl, isGenerating, onUpdate }) {
+  return (
+    <div className="panel-card pdf-preview-card">
+      <div className="panel-header">
+        <div>
+          <p className="eyebrow">PDF preview</p>
+          <h2>Rendered CV</h2>
+        </div>
+        <button
+          type="button"
+          className="ghost"
+          onClick={onUpdate}
+          disabled={isGenerating}
+        >
+          {isGenerating ? "Rendering..." : "Update PDF preview"}
+        </button>
+      </div>
+      <div className="pdf-preview-container">
+        {pdfUrl ? (
+          <iframe
+            src={pdfUrl}
+            title="CV PDF preview"
+            className="pdf-preview-iframe"
+          />
+        ) : (
+          <div className="pdf-preview-placeholder">
+            {isGenerating
+              ? <p className="helper">Rendering PDF preview…</p>
+              : <p className="helper">Click "Update PDF preview" to render the current CV as PDF.</p>
+            }
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 export function JobActionsCard({
   mode,
