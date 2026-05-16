@@ -266,7 +266,7 @@ export function JobActionsCard({
             <div className="cv-sample-preview">
               <p className="label">Sample CV preview</p>
               <img
-                src="https://github.com/user-attachments/assets/cfcb6279-b8e8-44d2-a164-22b12ef2569e"
+                src="/example_cv.png"
                 alt="Sample CV layout preview"
                 loading="lazy"
               />
