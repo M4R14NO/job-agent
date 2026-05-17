@@ -198,6 +198,8 @@ export default function CvReview({
   const [isRewriting, setIsRewriting] = useState(false);
   const [draggedSection, setDraggedSection] = useState(null);
   const [dragOverKey, setDragOverKey] = useState(null);
+  const [draggedItem, setDraggedItem] = useState(null); // { namespace, index }
+  const [dragOverItem, setDragOverItem] = useState(null); // { namespace, index }
   const [openPreviewEditors, setOpenPreviewEditors] = useState({});
   const [hiddenSectionsOpen, setHiddenSectionsOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState(() => ({
@@ -350,6 +352,83 @@ export default function CvReview({
     clearPreview();
   };
 
+  // ── Item-level drag & drop ──────────────────────────────────────────────────
+
+  const movePreviewListItem = (payloadField, fromIndex, toIndex) => {
+    setPreviewPayload((prev) => {
+      if (!prev) return prev;
+      const updated = [...(prev[payloadField] || [])];
+      const [removed] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, removed);
+      return { ...prev, [payloadField]: updated };
+    });
+  };
+
+  const handlePreviewItemDrop = (sectionKey, targetIndex) => {
+    const ns = `preview:${sectionKey}`;
+    if (!draggedItem || draggedItem.namespace !== ns || draggedItem.index === targetIndex) {
+      setDraggedItem(null);
+      setDragOverItem(null);
+      return;
+    }
+    const payloadField = sectionKey === "writing" ? "writings" : sectionKey;
+    movePreviewListItem(payloadField, draggedItem.index, targetIndex);
+    setDraggedItem(null);
+    setDragOverItem(null);
+  };
+
+  // Returns className fragments for a draggable sub-card
+  const getItemDragClass = (namespace, index) => {
+    const isDragged = draggedItem?.namespace === namespace && draggedItem?.index === index;
+    const isTarget =
+      dragOverItem?.namespace === namespace &&
+      dragOverItem?.index === index &&
+      draggedItem?.namespace === namespace &&
+      draggedItem?.index !== index;
+    const dirClass = isTarget
+      ? (draggedItem.index < index ? " is-drop-from-above" : " is-drop-from-below")
+      : "";
+    return `${isDragged ? " is-item-dragged" : ""}${dirClass}`;
+  };
+
+  // Drag events to spread onto a draggable sub-card div
+  const itemDragEvents = (namespace, index, onDrop) => ({
+    onDragOver: (e) => {
+      if (draggedItem?.namespace !== namespace) return;
+      e.preventDefault();
+      setDragOverItem({ namespace, index });
+    },
+    onDragLeave: (e) => {
+      if (!e.currentTarget.contains(e.relatedTarget)) setDragOverItem(null);
+    },
+    onDrop: (e) => {
+      if (draggedItem?.namespace !== namespace) return;
+      onDrop(index);
+    },
+  });
+
+  // Drag handle button for items (used inside sub-card headers)
+  const renderItemDragHandle = (namespace, index) => (
+    <button
+      type="button"
+      className="drag-handle item-drag-handle"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.stopPropagation();
+        setDraggedItem({ namespace, index });
+        setDragOverItem(null);
+      }}
+      onDragEnd={() => { setDraggedItem(null); setDragOverItem(null); }}
+      aria-label="Drag to reorder"
+    >
+      <span aria-hidden="true">⋮⋮</span>
+      <span aria-hidden="true">⋮⋮</span>
+    </button>
+  );
+
+  // ────────────────────────────────────────────────────────────────────────────
+
   const updateSectionLabel = (key, value) => {
     setSectionLabels((prev) => ({ ...prev, [key]: value }));
     setPreviewPayload((prev) => prev ? { ...prev, section_labels: { ...(prev.section_labels || {}), [key]: value } } : prev);
@@ -402,11 +481,14 @@ export default function CvReview({
     const isDraggable = Boolean(dragKey) && isEnabled;
     const isDragged = draggedSection === dragKey;
     const isDropTarget = dragOverKey === dragKey && draggedSection && draggedSection !== dragKey;
+    const sectionDropDir = isDropTarget
+      ? (sectionOrder.indexOf(draggedSection) < sectionOrder.indexOf(dragKey) ? " is-drop-from-above" : " is-drop-from-below")
+      : "";
     return (
       <div
-        className={`section-card ${isOpen ? "is-open" : "is-collapsed"} ${isDragged ? "is-dragged" : ""} ${isDropTarget ? "is-drop-target" : ""} ${!isEnabled ? "is-disabled" : ""}`}
-        onDragOver={dragKey ? (event) => { event.preventDefault(); setDragOverKey(dragKey); } : undefined}
-        onDragLeave={dragKey ? () => setDragOverKey(null) : undefined}
+        className={`section-card ${isOpen ? "is-open" : "is-collapsed"} ${isDragged ? "is-dragged" : ""} ${isDropTarget ? `is-drop-target${sectionDropDir}` : ""} ${!isEnabled ? "is-disabled" : ""}`}
+        onDragOver={dragKey ? (event) => { if (!draggedSection) return; event.preventDefault(); setDragOverKey(dragKey); } : undefined}
+        onDragLeave={dragKey ? (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverKey(null); } : undefined}
         onDrop={dragKey ? () => { handleDrop(dragKey); setDragOverKey(null); } : undefined}
       >
         <div className="section-header">
@@ -689,9 +771,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.skills || []).map((skill, idx) => (
-              <div key={`skill-${idx}`} className="sub-card">
+              <div key={`skill-${idx}`} className={`sub-card${getItemDragClass("preview:skills", idx)}`} {...itemDragEvents("preview:skills", idx, (i) => handlePreviewItemDrop("skills", i))}>
                 <div className="sub-card-header">
-                  <strong>Skill {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:skills", idx)}
+                    <strong>Skill {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("skills", idx)}>
                     Remove
                   </button>
@@ -727,9 +812,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.languages || []).map((lang, idx) => (
-              <div key={`lang-${idx}`} className="sub-card">
+              <div key={`lang-${idx}`} className={`sub-card${getItemDragClass("preview:languages", idx)}`} {...itemDragEvents("preview:languages", idx, (i) => handlePreviewItemDrop("languages", i))}>
                 <div className="sub-card-header">
-                  <strong>Language {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:languages", idx)}
+                    <strong>Language {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("languages", idx)}>
                     Remove
                   </button>
@@ -765,9 +853,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.interests || []).map((interest, idx) => (
-              <div key={`interest-${idx}`} className="sub-card">
+              <div key={`interest-${idx}`} className={`sub-card${getItemDragClass("preview:interests", idx)}`} {...itemDragEvents("preview:interests", idx, (i) => handlePreviewItemDrop("interests", i))}>
                 <div className="sub-card-header">
-                  <strong>Interest {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:interests", idx)}
+                    <strong>Interest {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("interests", idx)}>
                     Remove
                   </button>
@@ -791,9 +882,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.experience || []).map((entry, idx) => (
-              <div key={`exp-${idx}`} className="sub-card">
+              <div key={`exp-${idx}`} className={`sub-card${getItemDragClass("preview:experience", idx)}`} {...itemDragEvents("preview:experience", idx, (i) => handlePreviewItemDrop("experience", i))}>
                 <div className="sub-card-header">
-                  <strong>Role {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:experience", idx)}
+                    <strong>Role {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("experience", idx)}>
                     Remove
                   </button>
@@ -850,9 +944,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.volunteer || []).map((entry, idx) => (
-              <div key={`vol-${idx}`} className="sub-card">
+              <div key={`vol-${idx}`} className={`sub-card${getItemDragClass("preview:volunteer", idx)}`} {...itemDragEvents("preview:volunteer", idx, (i) => handlePreviewItemDrop("volunteer", i))}>
                 <div className="sub-card-header">
-                  <strong>Volunteer {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:volunteer", idx)}
+                    <strong>Volunteer {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("volunteer", idx)}>
                     Remove
                   </button>
@@ -909,9 +1006,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.honors || []).map((honor, idx) => (
-              <div key={`honor-${idx}`} className="sub-card">
+              <div key={`honor-${idx}`} className={`sub-card${getItemDragClass("preview:honors", idx)}`} {...itemDragEvents("preview:honors", idx, (i) => handlePreviewItemDrop("honors", i))}>
                 <div className="sub-card-header">
-                  <strong>Honor {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:honors", idx)}
+                    <strong>Honor {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("honors", idx)}>
                     Remove
                   </button>
@@ -961,9 +1061,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.certificates || []).map((cert, idx) => (
-              <div key={`cert-${idx}`} className="sub-card">
+              <div key={`cert-${idx}`} className={`sub-card${getItemDragClass("preview:certificates", idx)}`} {...itemDragEvents("preview:certificates", idx, (i) => handlePreviewItemDrop("certificates", i))}>
                 <div className="sub-card-header">
-                  <strong>Certificate {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:certificates", idx)}
+                    <strong>Certificate {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("certificates", idx)}>
                     Remove
                   </button>
@@ -1013,9 +1116,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.writings || []).map((writing, idx) => (
-              <div key={`writing-${idx}`} className="sub-card">
+              <div key={`writing-${idx}`} className={`sub-card${getItemDragClass("preview:writing", idx)}`} {...itemDragEvents("preview:writing", idx, (i) => handlePreviewItemDrop("writing", i))}>
                 <div className="sub-card-header">
-                  <strong>Writing {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:writing", idx)}
+                    <strong>Writing {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("writings", idx)}>
                     Remove
                   </button>
@@ -1072,9 +1178,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.education || []).map((entry, idx) => (
-              <div key={`edu-${idx}`} className="sub-card">
+              <div key={`edu-${idx}`} className={`sub-card${getItemDragClass("preview:education", idx)}`} {...itemDragEvents("preview:education", idx, (i) => handlePreviewItemDrop("education", i))}>
                 <div className="sub-card-header">
-                  <strong>Education {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:education", idx)}
+                    <strong>Education {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("education", idx)}>
                     Remove
                   </button>
@@ -1969,29 +2078,55 @@ export default function CvReview({
               <div className="preview-grid">
                 {sectionOrder
                   .filter((key) => enabledSections.has(key))
-                  .map((key) => (
-                    <div key={`preview-${key}`} id={`preview-card-${key}`} className="preview-card">
+                  .map((key) => {
+                    const isCardDragged = draggedSection === key;
+                    const isCardTarget = dragOverKey === key && draggedSection && draggedSection !== key;
+                    const cardDropDir = isCardTarget
+                      ? (sectionOrder.indexOf(draggedSection) < sectionOrder.indexOf(key) ? " is-drop-from-above" : " is-drop-from-below")
+                      : "";
+                    return (
+                    <div
+                      key={`preview-${key}`}
+                      id={`preview-card-${key}`}
+                      className={`preview-card${isCardDragged ? " is-dragged" : ""}${isCardTarget ? ` is-drop-target${cardDropDir}` : ""}`}
+                      onDragOver={(e) => { if (!draggedSection) return; e.preventDefault(); setDragOverKey(key); }}
+                      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverKey(null); }}
+                      onDrop={() => { handleDrop(key); setDragOverKey(null); }}
+                    >
                       <div className="preview-card-header">
-                        {editingLabelKey === key ? (
-                          <input
-                            className="section-label-input"
-                            value={sectionLabels[key] ?? SECTION_LABELS[key]}
-                            autoFocus
-                            onChange={(e) => updateSectionLabel(key, e.target.value)}
-                            onBlur={() => setEditingLabelKey(null)}
-                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingLabelKey(null); }}
-                          />
-                        ) : (
+                        <div className="preview-card-title">
                           <button
                             type="button"
-                            className="section-label-btn"
-                            title="Click to rename section"
-                            onClick={() => setEditingLabelKey(key)}
+                            className="drag-handle"
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, key)}
+                            onDragEnd={() => { setDraggedSection(null); setDragOverKey(null); }}
+                            aria-label="Drag to reorder section"
                           >
-                            {sectionLabels[key] ?? SECTION_LABELS[key]}
-                            <Pencil size={12} className="section-label-edit-icon" aria-hidden="true" />
+                            <span aria-hidden="true">⋮⋮</span>
+                            <span aria-hidden="true">⋮⋮</span>
                           </button>
-                        )}
+                          {editingLabelKey === key ? (
+                            <input
+                              className="section-label-input"
+                              value={sectionLabels[key] ?? SECTION_LABELS[key]}
+                              autoFocus
+                              onChange={(e) => updateSectionLabel(key, e.target.value)}
+                              onBlur={() => setEditingLabelKey(null)}
+                              onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingLabelKey(null); }}
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              className="section-label-btn"
+                              title="Click to rename section"
+                              onClick={() => setEditingLabelKey(key)}
+                            >
+                              {sectionLabels[key] ?? SECTION_LABELS[key]}
+                              <Pencil size={12} className="section-label-edit-icon" aria-hidden="true" />
+                            </button>
+                          )}
+                        </div>
                         <div className="inline-actions">
                           <button type="button" className="btn-danger" onClick={() => toggleSectionInReview(key)}>
                             <Trash2 size={13} /> Remove
@@ -2008,7 +2143,8 @@ export default function CvReview({
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
               </div>
               {hiddenSectionKeys.length > 0 && (
                 <div className="hidden-sections">
