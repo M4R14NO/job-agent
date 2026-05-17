@@ -1,11 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Pencil,
+  Plus,
+  Save,
+  Sparkles,
+  Trash2,
+  X
+} from "lucide-react";
+import {
   deleteCvProfile,
   previewCvMapping,
   rewriteCvCanonical,
-  renderCvFromTemplate,
-  saveCvProfile,
-  validateCvCanonical
+  saveCvProfile
 } from "../api/llm";
 
 const DEFAULT_SECTION_ORDER = [
@@ -166,15 +177,20 @@ export default function CvReview({
   docType,
   outputLanguage,
   model,
-  lmTimeout
+  lmTimeout,
+  onPreviewPayloadChange
 }) {
   const [profileId, setProfileId] = useState(canonical?.profile_id || "default");
   const [revision, setRevision] = useState(canonical?.revision ?? 0);
   const [formData, setFormData] = useState(() => normalizeCanonical(canonical?.data));
   const [sectionOrder, setSectionOrder] = useState(() => normalizeSectionOrder(canonical?.section_order));
+  const [sectionLabels, setSectionLabels] = useState(() => ({ ...SECTION_LABELS }));
+  const [editingLabelKey, setEditingLabelKey] = useState(null);
+  const [rewriteOpen, setRewriteOpen] = useState(false);
+  const [saveProfileOpen, setSaveProfileOpen] = useState(false);
+  const [hiddenPersonalFields, setHiddenPersonalFields] = useState(new Set());
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [isRendering, setIsRendering] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewPayload, setPreviewPayload] = useState(null);
   const [previewHash, setPreviewHash] = useState("");
@@ -238,7 +254,15 @@ export default function CvReview({
     setRewritePrompt("");
     setIsRewriting(false);
     setOpenPreviewEditors({});
+    setSectionLabels({ ...SECTION_LABELS });
+    setEditingLabelKey(null);
+    setHiddenPersonalFields(new Set());
+    setSaveProfileOpen(false);
   }, [canonical]);
+
+  useEffect(() => {
+    onPreviewPayloadChange?.(previewPayload);
+  }, [previewPayload]);
 
   useEffect(() => {
     if (isPreviewing) return;
@@ -326,6 +350,36 @@ export default function CvReview({
     clearPreview();
   };
 
+  const updateSectionLabel = (key, value) => {
+    setSectionLabels((prev) => ({ ...prev, [key]: value }));
+    setPreviewPayload((prev) => prev ? { ...prev, section_labels: { ...(prev.section_labels || {}), [key]: value } } : prev);
+  };
+
+  // Updates a canonical formData field AND the corresponding preview payload field simultaneously.
+  // Does not clear the preview so changes are instantly reflected without re-generating the mapping.
+  const updateBaseField = (canonicalField, previewField, value) => {
+    setFormData((prev) => ({ ...prev, [canonicalField]: value }));
+    if (previewField) {
+      setPreviewPayload((prev) => prev ? { ...prev, [previewField]: value || null } : prev);
+    }
+  };
+
+  // Updates one of github/linkedin/homepage in previewPayload only.
+  // formData.links is kept in sync via the useEffect below.
+  const updateLinkField = (linkKey, value) => {
+    setPreviewPayload((prev) => prev ? { ...prev, [linkKey]: value || null } : prev);
+  };
+
+  // Sync formData.links from previewPayload link fields so saves use current values.
+  useEffect(() => {
+    if (!previewPayload) return;
+    const links = [previewPayload.homepage, previewPayload.github, previewPayload.linkedin].filter(Boolean);
+    setFormData((prev) => {
+      const same = JSON.stringify(prev.links) === JSON.stringify(links);
+      return same ? prev : { ...prev, links };
+    });
+  }, [previewPayload?.homepage, previewPayload?.github, previewPayload?.linkedin]);
+
   const updateField = (field, value) => {
     clearPreview();
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -411,15 +465,6 @@ export default function CvReview({
     });
   };
 
-  const handleValidate = async () => {
-    setError("");
-    try {
-      await validateCvCanonical({ schema_version: schemaVersion, data: formData });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Validation failed");
-    }
-  };
-
   const handleSave = async () => {
     setError("");
     setIsSaving(true);
@@ -450,37 +495,6 @@ export default function CvReview({
     }
   };
 
-  const handleRender = async () => {
-    setError("");
-    if (!model) {
-      setError("Select a model to render a CV.");
-      return;
-    }
-    if (!previewPayload) {
-      setError("Preview the mapped CV data before rendering.");
-      return;
-    }
-    setIsRendering(true);
-    try {
-      const { blob, filename } = await renderCvFromTemplate({
-        payload: previewPayload,
-        doc_type: docType
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Render failed");
-    } finally {
-      setIsRendering(false);
-    }
-  };
-
   const handlePreview = async ({ force = false } = {}) => {
     setError("");
     const nextHash = buildPreviewHash();
@@ -501,7 +515,7 @@ export default function CvReview({
         section_order: sectionOrder,
         mapping_mode: "deterministic"
       });
-      setPreviewPayload(result.payload || null);
+      setPreviewPayload(result.payload ? { ...result.payload, section_labels: sectionLabels } : null);
       setPreviewHash(nextHash);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Preview failed");
@@ -599,7 +613,7 @@ export default function CvReview({
             <strong>{entry.title}</strong> {entry.organization ? `· ${entry.organization}` : ""}
             <div className="helper">{[entry.location, entry.period].filter(Boolean).join(" | ")}</div>
             <ul>
-              {(entry.details || []).map((detail, detailIdx) => (
+              {(entry.details || []).filter(Boolean).map((detail, detailIdx) => (
                 <li key={`${entry.title}-detail-${detailIdx}`}>{detail}</li>
               ))}
             </ul>
@@ -611,7 +625,7 @@ export default function CvReview({
             <strong>{entry.role}</strong> {entry.organization ? `· ${entry.organization}` : ""}
             <div className="helper">{[entry.location, entry.period].filter(Boolean).join(" | ")}</div>
             <ul>
-              {(entry.details || []).map((detail, detailIdx) => (
+              {(entry.details || []).filter(Boolean).map((detail, detailIdx) => (
                 <li key={`${entry.role}-detail-${detailIdx}`}>{detail}</li>
               ))}
             </ul>
@@ -635,7 +649,7 @@ export default function CvReview({
             <strong>{writing.title}</strong> {writing.role ? `· ${writing.role}` : ""}
             <div className="helper">{[writing.location, writing.period].filter(Boolean).join(" | ")}</div>
             <ul>
-              {(writing.details || []).map((detail, detailIdx) => (
+              {(writing.details || []).filter(Boolean).map((detail, detailIdx) => (
                 <li key={`${writing.title}-detail-${detailIdx}`}>{detail}</li>
               ))}
             </ul>
@@ -647,7 +661,7 @@ export default function CvReview({
             <strong>{entry.degree}</strong> {entry.institution ? `· ${entry.institution}` : ""}
             <div className="helper">{[entry.location, entry.period].filter(Boolean).join(" | ")}</div>
             <ul>
-              {(entry.details || []).map((detail, detailIdx) => (
+              {(entry.details || []).filter(Boolean).map((detail, detailIdx) => (
                 <li key={`${entry.degree}-detail-${detailIdx}`}>{detail}</li>
               ))}
             </ul>
@@ -818,7 +832,7 @@ export default function CvReview({
                 <textarea
                   value={(entry.details || []).join("\n")}
                   onChange={(event) =>
-                    updatePreviewListItem("experience", idx, { details: event.target.value.split("\n").map((line) => line.trim()).filter(Boolean) })
+                    updatePreviewListItem("experience", idx, { details: event.target.value.split("\n") })
                   }
                 />
               </div>
@@ -877,7 +891,7 @@ export default function CvReview({
                 <textarea
                   value={(entry.details || []).join("\n")}
                   onChange={(event) =>
-                    updatePreviewListItem("volunteer", idx, { details: event.target.value.split("\n").map((line) => line.trim()).filter(Boolean) })
+                    updatePreviewListItem("volunteer", idx, { details: event.target.value.split("\n") })
                   }
                 />
               </div>
@@ -1040,7 +1054,7 @@ export default function CvReview({
                 <textarea
                   value={(writing.details || []).join("\n")}
                   onChange={(event) =>
-                    updatePreviewListItem("writings", idx, { details: event.target.value.split("\n").map((line) => line.trim()).filter(Boolean) })
+                    updatePreviewListItem("writings", idx, { details: event.target.value.split("\n") })
                   }
                 />
               </div>
@@ -1099,7 +1113,7 @@ export default function CvReview({
                 <textarea
                   value={(entry.details || []).join("\n")}
                   onChange={(event) =>
-                    updatePreviewListItem("education", idx, { details: event.target.value.split("\n").map((line) => line.trim()).filter(Boolean) })
+                    updatePreviewListItem("education", idx, { details: event.target.value.split("\n") })
                   }
                 />
               </div>
@@ -1240,47 +1254,78 @@ export default function CvReview({
     }
   };
 
+  // Helper: toggle a personal field's visibility in the CV (hidden → null in previewPayload)
+  const togglePersonalField = (previewKey, restoreValue) => {
+    setHiddenPersonalFields((prev) => {
+      const next = new Set(prev);
+      if (next.has(previewKey)) {
+        next.delete(previewKey);
+        setPreviewPayload((p) => p ? { ...p, [previewKey]: restoreValue || null } : p);
+      } else {
+        next.add(previewKey);
+        setPreviewPayload((p) => p ? { ...p, [previewKey]: null } : p);
+      }
+      return next;
+    });
+  };
+
+  // Renders a personal info field row with label, input and optional visibility toggle
+  const renderPersonalField = ({ label, previewKey, canonicalField, previewFieldMap, type = "text", placeholder, canHide = false }) => {
+    const isHidden = hiddenPersonalFields.has(previewKey);
+    const rawValue = previewPayload ? (previewPayload[previewKey] ?? "") : (formData[canonicalField] ?? "");
+    const displayValue = isHidden ? "" : rawValue;
+    return (
+      <div key={previewKey} className={`personal-field-row${isHidden ? " field-hidden" : ""}`}>
+        <label className="label">{label}</label>
+        <div className="personal-field-input-row">
+          <input
+            type={type}
+            placeholder={isHidden ? "(hidden from CV)" : placeholder}
+            value={displayValue}
+            disabled={isHidden}
+            onChange={(e) => {
+              if (previewFieldMap) {
+                updateLinkField(previewKey, e.target.value);
+              } else {
+                updateBaseField(canonicalField, previewKey, e.target.value);
+              }
+            }}
+          />
+          {canHide && (
+            <button
+              type="button"
+              className={`field-visibility-btn${isHidden ? " is-hidden" : ""}`}
+              title={isHidden ? "Include in CV" : "Exclude from CV"}
+              onClick={() => togglePersonalField(previewKey, rawValue)}
+            >
+              {isHidden ? <EyeOff size={15} /> : <Eye size={15} />}
+            </button>
+          )}
+        </div>
+        {canHide && isHidden && (
+          <p className="field-hidden-note">Not shown in CV</p>
+        )}
+      </div>
+    );
+  };
+
   const renderBasics = () =>
     renderCollapsibleSection({
       key: "basics",
-      title: "Basics",
-      helper: "Personal details used in the header.",
+      title: "Personal information",
+      helper: "Edit the details shown in the CV header. Use the eye icon to hide optional fields.",
       content: (
-        <>
-          <div className="field-grid">
-            <div>
-              <label className="label">First name</label>
-              <input value={formData.first_name} onChange={(e) => updateField("first_name", e.target.value)} />
-            </div>
-            <div>
-              <label className="label">Last name</label>
-              <input value={formData.last_name} onChange={(e) => updateField("last_name", e.target.value)} />
-            </div>
-            <div>
-              <label className="label">Headline</label>
-              <input value={formData.headline} onChange={(e) => updateField("headline", e.target.value)} />
-            </div>
-            <div>
-              <label className="label">Location</label>
-              <input value={formData.location} onChange={(e) => updateField("location", e.target.value)} />
-            </div>
-            <div>
-              <label className="label">Email</label>
-              <input value={formData.email} onChange={(e) => updateField("email", e.target.value)} />
-            </div>
-            <div>
-              <label className="label">Phone</label>
-              <input value={formData.phone} onChange={(e) => updateField("phone", e.target.value)} />
-            </div>
-          </div>
-          <div>
-            <label className="label">Links (comma separated)</label>
-            <input
-              value={formData.links.join(", ")}
-              onChange={(e) => updateField("links", e.target.value.split(",").map((item) => item.trim()).filter(Boolean))}
-            />
-          </div>
-        </>
+        <div className="personal-fields-grid">
+          {renderPersonalField({ label: "First name", previewKey: "first_name", canonicalField: "first_name" })}
+          {renderPersonalField({ label: "Last name", previewKey: "last_name", canonicalField: "last_name" })}
+          {renderPersonalField({ label: "Headline / Position", previewKey: "position", canonicalField: "headline" })}
+          {renderPersonalField({ label: "Location", previewKey: "address", canonicalField: "location", canHide: true })}
+          {renderPersonalField({ label: "Email", previewKey: "email", canonicalField: "email", type: "email", canHide: true })}
+          {renderPersonalField({ label: "Phone", previewKey: "mobile", canonicalField: "phone", canHide: true })}
+          {renderPersonalField({ label: "GitHub", previewKey: "github", canonicalField: "github", placeholder: "https://github.com/username", previewFieldMap: true, canHide: true })}
+          {renderPersonalField({ label: "LinkedIn", previewKey: "linkedin", canonicalField: "linkedin", placeholder: "https://linkedin.com/in/username", previewFieldMap: true, canHide: true })}
+          {renderPersonalField({ label: "Homepage", previewKey: "homepage", canonicalField: "homepage", placeholder: "https://yourwebsite.com", previewFieldMap: true, canHide: true })}
+        </div>
       )
     });
 
@@ -1863,91 +1908,96 @@ export default function CvReview({
     }
   };
 
-  const canRender = Boolean(previewPayload);
-
   return (
     <div className="panel-card cv-editor">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">CV preview</p>
-          <h2>Preview and edit</h2>
-          <p className="subtitle">Review the mapped CV data and make final edits before rendering.</p>
-        </div>
-      </div>
-
-      <div className="field-grid">
-        <div>
-          <label className="label" htmlFor="profileId">Profile ID</label>
-          <input
-            id="profileId"
-            value={profileId}
-            onChange={(e) => setProfileId(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="label" htmlFor="revision">Revision</label>
-          <input id="revision" value={revision} readOnly />
+          <p className="eyebrow">CV editor</p>
+          <h2>Edit &amp; preview</h2>
         </div>
       </div>
 
       <div className="cv-step-panel">
-        <div className="cv-step-header">
-          <div>
-            <p className="eyebrow">Preview</p>
-            <h3>Preview and edit</h3>
-            <p className="helper">Review the preview and edit each section.</p>
-          </div>
-        </div>
-
         <div className="cv-step-content">
           {!hasJobContext && (
             <p className="helper">No job context provided. Preview will be generic.</p>
           )}
+
+          {renderBasics()}
+
           <div className="sub-card">
             <div className="sub-card-header">
-              <strong>Rewrite with AI (optional)</strong>
-            </div>
-            <p className="helper">
-              Deterministic preview uses your canonical data. Add guidance to adjust wording, then rewrite.
-            </p>
-            <textarea
-              rows={4}
-              placeholder="Example: Emphasize impact metrics and leadership. Keep bullets concise."
-              value={rewritePrompt}
-              onChange={(event) => setRewritePrompt(event.target.value)}
-            />
-            <div className="inline-actions">
+              <strong className="sub-card-title"><Sparkles size={15} /> Rewrite with AI (optional)</strong>
               <button
                 type="button"
-                className="secondary"
-                onClick={handleRewrite}
-                disabled={isRewriting}
+                className="ghost icon-button"
+                onClick={() => setRewriteOpen((prev) => !prev)}
+                aria-expanded={rewriteOpen}
               >
-                {isRewriting ? "Rewriting..." : "Rewrite with AI"}
+                {rewriteOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                <span>{rewriteOpen ? "Collapse" : "Expand"}</span>
               </button>
-              <span className="helper">This updates the canonical data and refreshes preview.</span>
             </div>
+            {rewriteOpen && (
+              <>
+                <p className="helper">
+                  Add guidance to adjust wording across all sections, then rewrite using AI.
+                </p>
+                <textarea
+                  rows={4}
+                  placeholder="Example: Emphasize impact metrics and leadership. Keep bullets concise."
+                  value={rewritePrompt}
+                  onChange={(event) => setRewritePrompt(event.target.value)}
+                />
+                <div className="inline-actions">
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={handleRewrite}
+                    disabled={isRewriting}
+                  >
+                    <Sparkles size={14} />
+                    {isRewriting ? "Rewriting..." : "Rewrite with AI"}
+                  </button>
+                  <span className="helper">This updates all sections and refreshes the preview.</span>
+                </div>
+              </>
+            )}
           </div>
           {previewPayload ? (
             <>
-              <div className="panel-actions">
-                <button type="button" className="ghost" onClick={() => handlePreview({ force: true })} disabled={isPreviewing}>
-                  {isPreviewing ? "Updating preview..." : "Run preview again"}
-                </button>
-              </div>
               <div className="preview-grid">
                 {sectionOrder
                   .filter((key) => enabledSections.has(key))
                   .map((key) => (
                     <div key={`preview-${key}`} id={`preview-card-${key}`} className="preview-card">
                       <div className="preview-card-header">
-                        <h4>{SECTION_LABELS[key]}</h4>
-                        <div className="inline-actions">
-                          <button type="button" className="ghost" onClick={() => toggleSectionInReview(key)}>
-                            Remove
+                        {editingLabelKey === key ? (
+                          <input
+                            className="section-label-input"
+                            value={sectionLabels[key] ?? SECTION_LABELS[key]}
+                            autoFocus
+                            onChange={(e) => updateSectionLabel(key, e.target.value)}
+                            onBlur={() => setEditingLabelKey(null)}
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingLabelKey(null); }}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className="section-label-btn"
+                            title="Click to rename section"
+                            onClick={() => setEditingLabelKey(key)}
+                          >
+                            {sectionLabels[key] ?? SECTION_LABELS[key]}
+                            <Pencil size={12} className="section-label-edit-icon" aria-hidden="true" />
                           </button>
-                          <button type="button" className="ghost" onClick={() => togglePreviewEditor(key)}>
-                            {openPreviewEditors[key] ? "Hide edit" : "Edit"}
+                        )}
+                        <div className="inline-actions">
+                          <button type="button" className="btn-danger" onClick={() => toggleSectionInReview(key)}>
+                            <Trash2 size={13} /> Remove
+                          </button>
+                          <button type="button" className="secondary btn-sm" onClick={() => togglePreviewEditor(key)}>
+                            {openPreviewEditors[key] ? <><X size={13} /> Close</> : <><Pencil size={13} /> Edit</>}
                           </button>
                         </div>
                       </div>
@@ -1967,15 +2017,16 @@ export default function CvReview({
                     className="ghost"
                     onClick={() => setHiddenSectionsOpen((prev) => !prev)}
                   >
+                    {hiddenSectionsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     {hiddenSectionsOpen ? "Hide" : "Show"} available sections ({hiddenSectionKeys.length})
                   </button>
                   {hiddenSectionsOpen && (
                     <div className="hidden-sections-list">
                       {hiddenSectionKeys.map((key) => (
                         <div key={`review-hidden-${key}`} className="hidden-section-item">
-                          <span>{SECTION_LABELS[key]}</span>
-                          <button type="button" className="ghost" onClick={() => toggleSectionInReview(key)}>
-                            Add
+                          <span>{sectionLabels[key] ?? SECTION_LABELS[key]}</span>
+                          <button type="button" className="secondary btn-sm" onClick={() => toggleSectionInReview(key)}>
+                            <Plus size={13} /> Add
                           </button>
                         </div>
                       ))}
@@ -1987,22 +2038,57 @@ export default function CvReview({
           ) : (
             <p className="helper">Generating the preview. This can take a moment.</p>
           )}
+
+          {/* Save profile — collapsible, at bottom of edit panel */}
+          <div className="sub-card save-profile-card">
+            <div className="sub-card-header">
+              <strong className="sub-card-title"><Save size={15} /> Save profile (optional)</strong>
+              <button
+                type="button"
+                className="ghost icon-button"
+                onClick={() => setSaveProfileOpen((prev) => !prev)}
+                aria-expanded={saveProfileOpen}
+              >
+                {saveProfileOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                <span>{saveProfileOpen ? "Collapse" : "Expand"}</span>
+              </button>
+            </div>
+            {saveProfileOpen && (
+              <>
+                <p className="helper">
+                  Save your current CV data under a profile ID so you can reload it later from the home screen.
+                  The profile stores all sections and personal information — it does not save the rendered PDF.
+                </p>
+                <div className="cv-profile-id">
+                  <label className="label" htmlFor="profileId">Profile ID</label>
+                  <input
+                    id="profileId"
+                    value={profileId}
+                    placeholder="e.g. default, software-engineer-2025"
+                    onChange={(e) => setProfileId(e.target.value)}
+                  />
+                </div>
+                <div className="inline-actions" style={{ marginTop: 8 }}>
+                  <button className="secondary" onClick={handleSave} disabled={isSaving}>
+                    <Save size={14} />
+                    {isSaving ? "Saving..." : "Save profile"}
+                  </button>
+                  <button className="btn-danger" onClick={handleDelete}>
+                    <Trash2 size={13} /> Delete profile
+                  </button>
+                </div>
+                {revision > 0 && (
+                  <p className="helper save-revision-note">
+                    <Check size={13} /> Last saved revision: {revision}
+                  </p>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 
       {error && <p className="error">{error}</p>}
-
-      <div className="panel-actions">
-        <button className="secondary" onClick={handleValidate}>Validate</button>
-        <button className="secondary" onClick={handleSave} disabled={isSaving}>
-          {isSaving ? "Saving..." : "Save"}
-        </button>
-        <button className="secondary" onClick={handleDelete}>Delete</button>
-        <button className="primary" onClick={handleRender} disabled={!canRender || isRendering}>
-          {isRendering ? "Rendering..." : "Render PDF"}
-        </button>
-        {!canRender ? <p className="helper">Run preview before rendering a PDF.</p> : null}
-      </div>
     </div>
   );
 }
