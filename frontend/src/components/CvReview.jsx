@@ -57,6 +57,7 @@ const PREVIEW_SECTION_TO_CANONICAL = {
   honors: "awards",
   certificates: "certificates",
   writing: "publications",
+  writings: "publications",
   education: "education"
 };
 
@@ -246,6 +247,7 @@ const mapPreviewItemToCanonical = (section, item) => {
         location: item.location || ""
       };
     case "writing":
+    case "writings":
       return {
         id: item.id || makeId("pub"),
         title: item.title || "",
@@ -267,6 +269,61 @@ const mapPreviewItemToCanonical = (section, item) => {
       return item;
   }
 };
+
+const hasText = (value) => Boolean(String(value || "").trim());
+
+const hasPreviewSectionContent = (section, items = []) => {
+  if (!Array.isArray(items) || items.length === 0) return false;
+  switch (section) {
+    case "skills":
+      return items.some((item) => hasText(item.category) || hasText(item.list));
+    case "languages":
+      return items.some((item) => hasText(item.name) || hasText(item.level));
+    case "interests":
+      return items.some((item) => hasText(item.name));
+    case "experience":
+      return items.some((item) =>
+        hasText(item.title) ||
+        hasText(item.organization) ||
+        hasText(item.location) ||
+        hasText(item.period) ||
+        (item.details || []).some((detail) => hasText(detail))
+      );
+    case "volunteer":
+      return items.some((item) =>
+        hasText(item.role) ||
+        hasText(item.organization) ||
+        hasText(item.location) ||
+        hasText(item.period) ||
+        (item.details || []).some((detail) => hasText(detail))
+      );
+    case "honors":
+      return items.some((item) => hasText(item.award) || hasText(item.event) || hasText(item.location) || hasText(item.date));
+    case "certificates":
+      return items.some((item) => hasText(item.title) || hasText(item.organization) || hasText(item.location) || hasText(item.date));
+    case "writing":
+    case "writings":
+      return items.some((item) =>
+        hasText(item.role) ||
+        hasText(item.title) ||
+        hasText(item.location) ||
+        hasText(item.period) ||
+        (item.details || []).some((detail) => hasText(detail))
+      );
+    case "education":
+      return items.some((item) =>
+        hasText(item.degree) ||
+        hasText(item.institution) ||
+        hasText(item.location) ||
+        hasText(item.period) ||
+        (item.details || []).some((detail) => hasText(detail))
+      );
+    default:
+      return items.length > 0;
+  }
+};
+
+const normalizePreviewSectionKey = (section) => (section === "writings" ? "writing" : section);
 
 export default function CvReview({
   canonical,
@@ -456,12 +513,24 @@ export default function CvReview({
     const nextItems = [...currentItems];
     const [removed] = nextItems.splice(fromIndex, 1);
     nextItems.splice(toIndex, 0, removed);
-    setPreviewPayload((prev) => (prev ? { ...prev, [payloadField]: nextItems } : prev));
+    const normalizedSection = normalizePreviewSectionKey(payloadField);
+    const sectionHasContent = hasPreviewSectionContent(normalizedSection, nextItems);
+    setPreviewPayload((prev) => (
+      prev
+        ? {
+            ...prev,
+            [payloadField]: nextItems,
+            sections: {
+              ...(prev.sections || {}),
+              [normalizedSection]: sectionHasContent
+            }
+          }
+        : prev
+    ));
 
-    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[payloadField === "writings" ? "writing" : payloadField];
+    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[normalizedSection];
     if (!canonicalField) return;
-    const sourceSection = payloadField === "writings" ? "writing" : payloadField;
-    const nextCanonicalItems = nextItems.map((item) => mapPreviewItemToCanonical(sourceSection, item));
+    const nextCanonicalItems = nextItems.map((item) => mapPreviewItemToCanonical(normalizedSection, item));
     const nextFormData = { ...formData, [canonicalField]: nextCanonicalItems };
     setFormData(nextFormData);
     setPreviewHash(buildPreviewHashFrom(nextFormData));
@@ -745,7 +814,17 @@ export default function CvReview({
   };
 
   const updatePreviewField = (field, value) => {
-    setPreviewPayload((prev) => (prev ? { ...prev, [field]: value } : prev));
+    setPreviewPayload((prev) => (
+      prev
+        ? {
+            ...prev,
+            [field]: value,
+            sections: field === "summary"
+              ? { ...(prev.sections || {}), summary: hasText(value) }
+              : prev.sections
+          }
+        : prev
+    ));
     if (field !== "summary") return;
     const nextFormData = { ...formData, summary: value };
     setFormData(nextFormData);
@@ -755,11 +834,24 @@ export default function CvReview({
   const updatePreviewListItem = (section, index, patch) => {
     const currentItems = previewPayload?.[section] || [];
     const nextItems = currentItems.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item));
-    setPreviewPayload((prev) => (prev ? { ...prev, [section]: nextItems } : prev));
+    const normalizedSection = normalizePreviewSectionKey(section);
+    const sectionHasContent = hasPreviewSectionContent(normalizedSection, nextItems);
+    setPreviewPayload((prev) => (
+      prev
+        ? {
+            ...prev,
+            [section]: nextItems,
+            sections: {
+              ...(prev.sections || {}),
+              [normalizedSection]: sectionHasContent
+            }
+          }
+        : prev
+    ));
 
-    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[section];
+    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[normalizedSection];
     if (!canonicalField) return;
-    const nextCanonicalItems = nextItems.map((item) => mapPreviewItemToCanonical(section, item));
+    const nextCanonicalItems = nextItems.map((item) => mapPreviewItemToCanonical(normalizedSection, item));
     const nextFormData = { ...formData, [canonicalField]: nextCanonicalItems };
     setFormData(nextFormData);
     setPreviewHash(buildPreviewHashFrom(nextFormData));
@@ -768,11 +860,24 @@ export default function CvReview({
   const addPreviewListItem = (section, item) => {
     const currentItems = previewPayload?.[section] || [];
     const nextItems = [...currentItems, item];
-    setPreviewPayload((prev) => (prev ? { ...prev, [section]: nextItems } : prev));
+    const normalizedSection = normalizePreviewSectionKey(section);
+    const sectionHasContent = hasPreviewSectionContent(normalizedSection, nextItems);
+    setPreviewPayload((prev) => (
+      prev
+        ? {
+            ...prev,
+            [section]: nextItems,
+            sections: {
+              ...(prev.sections || {}),
+              [normalizedSection]: sectionHasContent
+            }
+          }
+        : prev
+    ));
 
-    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[section];
+    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[normalizedSection];
     if (!canonicalField) return;
-    const nextCanonicalItems = nextItems.map((nextItem) => mapPreviewItemToCanonical(section, nextItem));
+    const nextCanonicalItems = nextItems.map((nextItem) => mapPreviewItemToCanonical(normalizedSection, nextItem));
     const nextFormData = { ...formData, [canonicalField]: nextCanonicalItems };
     setFormData(nextFormData);
     setPreviewHash(buildPreviewHashFrom(nextFormData));
@@ -781,11 +886,24 @@ export default function CvReview({
   const removePreviewListItem = (section, index) => {
     const currentItems = previewPayload?.[section] || [];
     const nextItems = currentItems.filter((_, itemIndex) => itemIndex !== index);
-    setPreviewPayload((prev) => (prev ? { ...prev, [section]: nextItems } : prev));
+    const normalizedSection = normalizePreviewSectionKey(section);
+    const sectionHasContent = hasPreviewSectionContent(normalizedSection, nextItems);
+    setPreviewPayload((prev) => (
+      prev
+        ? {
+            ...prev,
+            [section]: nextItems,
+            sections: {
+              ...(prev.sections || {}),
+              [normalizedSection]: sectionHasContent
+            }
+          }
+        : prev
+    ));
 
-    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[section];
+    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[normalizedSection];
     if (!canonicalField) return;
-    const nextCanonicalItems = nextItems.map((nextItem) => mapPreviewItemToCanonical(section, nextItem));
+    const nextCanonicalItems = nextItems.map((nextItem) => mapPreviewItemToCanonical(normalizedSection, nextItem));
     const nextFormData = { ...formData, [canonicalField]: nextCanonicalItems };
     setFormData(nextFormData);
     setPreviewHash(buildPreviewHashFrom(nextFormData));
@@ -1365,7 +1483,14 @@ export default function CvReview({
   };
 
   const togglePreviewEditor = (key) => {
-    setOpenPreviewEditors((prev) => ({ ...prev, [key]: !prev[key] }));
+    setOpenPreviewEditors((prev) => {
+      const isClosing = Boolean(prev[key]);
+      if (isClosing && previewPayload) {
+        // Push a fresh snapshot so parent consumers (PDF update) always see latest edits.
+        onPreviewPayloadChange?.({ ...previewPayload });
+      }
+      return { ...prev, [key]: !prev[key] };
+    });
   };
 
   const renderSectionActions = (key, extraActions = null) => {
