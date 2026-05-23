@@ -1,0 +1,13 @@
+((# Supported variables: strengths[], section_labels.strengths? #))
+((* if strengths and strengths | length > 0 *))
+((* set _st = (section_labels or {}).get('strengths', 'Strengths') *))
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{((( _st | latex_escape )))} \\
+\\
+\hspace{-1em}\begin{minipage}[t]{\leftcolwidth}
+((* for strength in strengths *))
+\bg{cvBlue4}{iconcolour}{((( strength | latex_escape )))}\hspace{0.1cm}
+((* endfor *))
+\end{minipage}
+\vspace{4em}
+((* endif *))
+

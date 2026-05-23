@@ -139,6 +139,14 @@ class CvInterest(BaseModel):
         extra = "forbid"
 
 
+class CvHobby(BaseModel):
+    name: str
+    icon: str | None = None
+
+    class Config:
+        extra = "forbid"
+
+
 class CvHonor(BaseModel):
     award: str | None = None
     event: str | None = None
@@ -166,6 +174,8 @@ class CvAwesomePayload(BaseModel):
     volunteer: list[CvVolunteer] = Field(default_factory=list)
     languages: list[CvLanguage] = Field(default_factory=list)
     interests: list[CvInterest] = Field(default_factory=list)
+    strengths: list[str] = Field(default_factory=list)
+    hobbies: list[CvHobby] = Field(default_factory=list)
     honors: list[CvHonor] = Field(default_factory=list)
     certificates: list[CvCertificate] = Field(default_factory=list)
     writings: list[CvWriting] = Field(default_factory=list)

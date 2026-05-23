@@ -1,0 +1,24 @@
+((# Supported variables: hobbies[] with optional icon keys, section_labels.hobbies? #))
+((* if hobbies and hobbies | length > 0 *))
+((* set _st = (section_labels or {}).get('hobbies', 'Hobbies') *))
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{((( _st | latex_escape )))} \\
+\\
+((* for hobby in hobbies *))
+((* if hobby.icon == "bicycle" *))\hspace{-0.6em}\hobbyicon{\color{iconcolour}\faBicycle}{((( hobby.name | latex_escape )))}{cvBlue4}{\iconsize}{2em}
+((* elif hobby.icon == "book" *))\hspace{-0.6em}\hobbyicon{\color{iconcolour}\faBook}{((( hobby.name | latex_escape )))}{cvBlue4}{\iconsize}{2em}
+((* elif hobby.icon == "soccer" *))\hspace{-0.6em}\hobbyicon{\color{iconcolour}\faSoccerBallO}{((( hobby.name | latex_escape )))}{cvBlue4}{\iconsize}{2em}
+((* elif hobby.icon == "music" *))\hspace{-0.6em}\hobbyicon{\color{iconcolour}\faMusic}{((( hobby.name | latex_escape )))}{cvBlue4}{\iconsize}{2em}
+((* elif hobby.icon == "code" *))\hspace{-0.6em}\hobbyicon{\color{iconcolour}\faCode}{((( hobby.name | latex_escape )))}{cvBlue4}{\iconsize}{2em}
+((* elif hobby.icon == "camera" *))\hspace{-0.6em}\hobbyicon{\color{iconcolour}\faCamera}{((( hobby.name | latex_escape )))}{cvBlue4}{\iconsize}{2em}
+((* elif hobby.icon == "plane" or hobby.icon == "travel" *))\hspace{-0.6em}\hobbyicon{\color{iconcolour}\faPlane}{((( hobby.name | latex_escape )))}{cvBlue4}{\iconsize}{2em}
+((* elif hobby.icon == "heart" *))\hspace{-0.6em}\hobbyicon{\color{iconcolour}\faHeart}{((( hobby.name | latex_escape )))}{cvBlue4}{\iconsize}{2em}
+((* elif hobby.icon == "tree" or hobby.icon == "hiking" *))\hspace{-0.6em}\hobbyicon{\color{iconcolour}\faTree}{((( hobby.name | latex_escape )))}{cvBlue4}{\iconsize}{2em}
+((* elif hobby.icon == "gamepad" *))\hspace{-0.6em}\hobbyicon{\color{iconcolour}\faGamepad}{((( hobby.name | latex_escape )))}{cvBlue4}{\iconsize}{2em}
+((* elif hobby.icon == "paint" *))\hspace{-0.6em}\hobbyicon{\color{iconcolour}\faPaintBrush}{((( hobby.name | latex_escape )))}{cvBlue4}{\iconsize}{2em}
+((* elif hobby.icon == "cooking" *))\hspace{-0.6em}\hobbyicon{\color{iconcolour}\faCutlery}{((( hobby.name | latex_escape )))}{cvBlue4}{\iconsize}{2em}
+((* elif hobby.icon == "running" *))\hspace{-0.6em}\hobbyicon{\color{iconcolour}\faHeartbeat}{((( hobby.name | latex_escape )))}{cvBlue4}{\iconsize}{2em}
+((* else *))\hspace{-1.2em}{\small ((( hobby.name | latex_escape )))}\\[2pt]
+((* endif *))
+((* endfor *))
+\vspace{3em}
+((* endif *))

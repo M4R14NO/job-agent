@@ -1,0 +1,12 @@
+((# Supported variables: languages[], section_labels.languages? #))
+((* if languages and languages | length > 0 *))
+((* set _st = (section_labels or {}).get('languages', 'Languages') *))
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{((( _st | latex_escape )))}\\
+\\
+\hspace{-2.2em}\begin{tabular}{l | l}
+((* for language in languages *))
+	{\bfseries ((( language.name | default('') | latex_escape )))} & ((( language.level | default('') | latex_escape )))\\[1pt]
+((* endfor *))
+\end{tabular}
+\vspace{4em}
+((* endif *))

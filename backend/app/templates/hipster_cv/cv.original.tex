@@ -1,0 +1,334 @@
+%!TEX option = --shell-escape
+\documentclass[pastel]{hipstercv}
+% available options are: darkhipster, lighthipster, pastel, allblack, grey, verylight
+\usepackage[utf8]{inputenc}
+\usepackage[default]{raleway}
+\usepackage[margin=1cm, a4paper]{geometry}
+\usepackage[ngerman]{babel}
+
+%------------------------------------------------------------------ Variablen
+
+\newlength{\rightcolwidth}
+\newlength{\leftcolwidth}
+\setlength{\leftcolwidth}{0.2\textwidth}
+\setlength{\rightcolwidth}{0.8\textwidth}
+
+%------------------------------------------------------------------
+\title{Hipster-CV}
+\author{\LaTeX{} Ninja}
+\date{March 2019}
+
+\pagestyle{empty}
+\begin{document}
+
+
+\thispagestyle{empty}
+%-------------------------------------------------------------
+
+\section*{Start}
+
+
+% 1. Argument: \bg{headerfontbox}{headerfontboxfont}{Lebenslauf} 
+\header{}{\bgupper{backBlue}{headerfontboxfont}{\bfseries\Huge Vorname Nachname}}{\bg{backBlue}{headerfontboxfont}{\large Senior Consultant mit KI-Berufserfahrung}}{Vorname_latest.jpg}{backBlue}{3.5cm}{2cm}%fotoGrau2
+
+% mf1_w.png
+
+%------------------------------------------------
+
+% hier muss die "unsichtbare" Überschrift rein, weil er sonst nicht die Paracols startet... komisch...
+\subsection*{}
+\vspace{4em}
+
+\setlength{\columnsep}{0.5cm}
+\columnratio{0.2}[0.79] %{0.3}[0.69]
+\begin{paracol}{2}
+\hbadness5000
+%\backgroundcolor{c[1]}[rgb]{1,1,0.8} % cream yellow for column-1 %\backgroundcolor{g}[rgb]{0.8,1,1} % \backgroundcolor{l}[rgb]{0,0,0.7} % dark blue for left margin
+
+\paracolbackgroundoptions
+
+% 0.9,0.9,0.9 -- 0.8,0.8,0.8
+
+\small
+{\setasidefontcolour
+\vspace{1em}
+    \hspace{-0.7cm}\bgUpper{backBlue}{white}{Kontakt}\\
+%\bg{backBlue}{white}{\faAngleDoubleRight PERSÖNLICHE} \\
+% \begin{tabular}{ll}
+% \faPhone&+49 1234567\\[1pt]
+% \faEnvelopeO&Landshuter Str. 48\\[1pt]
+% &93053 Heimatstadt\\[1pt]
+% \faAt&\protect\url{Vorname.nachname@mail.xy.org}
+% \end{tabular}
+
+\hspace{-3em}\begin{tabular}{l l}
+%    \textbf{\icon{\faPhone}{backBlue}{}} & \href{tel:+49 1234567}{+49 1234567}\\[1pt]
+     %& \\[1pt]
+    \icon{\faEnvelopeO}{backBlue}{} & \href{mailto:Vorname.nachname@mail.xy.org}{Vorname.nachname}\\[1pt]
+ & \href{mailto:Vorname.nachname@mail.xy.org}{@mail.xy.org}\\[1pt]
+ %& \\[1pt]
+ \icon{\faLinkedinSquare}{backBlue}{} & \href{https://www.linkedin.com/in/Vornamenachname/}{linkedin.com/in/}\\[1pt]
+ & \href{https://www.linkedin.com/in/Vornamenachname/}{Vornamenachname/}\\[1pt]
+ \icon{\faGithub}{backBlue}{} & \href{https://github.com/asdf4NO}{github.com/asdf4NO}\\[1pt]
+\end{tabular}
+% \icon{\faPhone}{backBlue}{}+49 1234567\\[1pt]
+% \icon{\faEnvelopeO}{backBlue}{}\href{mailto:Vorname.nachname@mail.xy.org}{Vorname.nachname\\
+% @mail.xy.org}\\[1pt]
+% \url{https://www.linkedin.com/in/Vornamenachname/}
+%\bigskip
+\vspace{6em}
+
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{IT-Skills}\\
+%\bg{backBlue}{white}{\faAngleDoubleRight PROGRAMMIERSPRACHEN} \\
+\begin{minipage}[t]{\leftcolwidth}%0.3\textwidth
+\vspace{0.2em}
+\hspace{-1.1em}\begin{tabular}{l | l}
+    \textbf{Coding} & Python\\[1pt]
+    \textbf{} & Java\\[1pt]
+    \textbf{} & Matlab\\[1pt]
+    \textbf{} & C, C++\\[1pt] % ehemals 3. spalte: \pictofraction{\faCircle}{cvpurple}{1}{black!30}{3}{\tiny}\\
+    \textbf{} & R\\[1pt]
+    & SQL\\[1pt]
+    \textbf{} & bash\\[1pt]
+    \textbf{} & Docker\\[1pt]
+    \textbf{} & git\\[1pt]
+    \textbf{} & \\[1pt]
+    \textbf{OS} & Linux\\[1pt]%\icon{\faWindows}{labelcolour}{\Large}, \icon{\faLinux}{labelcolour}{\large}
+    \textbf{} & Windows\\[1pt]
+    \textbf{} & Mac\\[1pt]
+    \textbf{} & \\[1pt]
+    \textbf{Frame-} & PyTorch\\[1pt]
+    \textbf{works} & LangChain\\[1pt]
+    \textbf{} & \href{https://rasa.com/}{Rasa}\\[1pt]
+    \textbf{} & \href{https://github.com/kaldi-asr/kaldi}{Kaldi}\\[1pt] % ehemals 3. spalte: \pictofraction{\faCircle}{cvpurple}{1}{black!30}{3}{\tiny}\\
+    \textbf{} & \href{https://espnet.github.io/espnet/}{Espnet}\\[1pt]
+\end{tabular}
+% #################### Seriöse Angabe der Programmiersprachen
+% %Used open-source frameworks \textit{Kaldi} and \textit{Espnet}.
+
+\vspace{5em}
+
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{Sprachen}
+\\
+
+\hspace{-2.5em}\begin{tabular}{l | l}
+    \textbf{Deutsch} & Muttersprache\\[1pt]
+    \textbf{Englisch} & C1\\[1pt]
+    \textbf{Italienisch} & A2\\[1pt] % ehemals 3. spalte: \pictofraction{\faCircle}{cvpurple}{1}{black!30}{3}{\tiny}\\
+    \textbf{Spanisch} & A1
+\end{tabular}
+
+\vspace{5em}
+
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{Ehrenamt}
+\\
+
+\hspace{-1.2cm}\begin{minipage}[t]{1.2\leftcolwidth}
+    \begin{itemize}
+    \item Mitgründer von \href{https://www.parkour-Heimatstadt.de/}{Parkour Heimatstadt} (bis 2013)
+    \item Mentor für Austauschstudierende (Sommer 2018)
+    \end{itemize}
+\end{minipage}% \begin{minipage}[t]{\leftcolwidth}
+
+%\dashrule{}{}
+\end{minipage}
+
+
+\bigskip
+
+\phantom{turn the page}
+\phantom{turn the page}
+
+\begin{minipage}[t]{\leftcolwidth}
+\vspace{0.3em}
+
+\vspace{3em}
+
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{Stärken} \\
+
+\hspace{-1em}\begin{minipage}[t]{\leftcolwidth}
+    \bg{cvBlue4}{iconcolour}{wissbegierig} \bg{cvBlue4}{iconcolour}{tolerant}
+    \hspace{0.1cm}%\bg{cvBlue4}{iconcolour}{geduldig}
+    \hspace{0.1cm}
+    % \vspace{0.3em}    
+  \bg{cvBlue4}{iconcolour}{freundlich}  \bg{cvBlue4}{iconcolour}{verlässlich}\hspace{0.1cm} 
+    \vspace{0.3em}
+    \bg{cvBlue4}{iconcolour}{anpassungsfähig}	
+    \bg{cvBlue4}{iconcolour}{resilient}
+\end{minipage}
+
+\vspace{5em}
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{Hobbies} \\
+
+% usage \hobbyicon{<fontawesome icon}{Text}{background color of circle}{size of icon}{space text below icon}
+\hspace{-0.6em}\hobbyicon{\color{iconcolour}\faHandGrabO}{Bouldern}{cvBlue4}{\iconsize}{2em} 
+\hobbyicon{\color{iconcolour}\faBicycle}{Radeln}{cvBlue4}{\iconsize}{2em}
+
+\hspace{-0.7em}\hobbyicon{\color{iconcolour}\faSoccerBallO}{Volleyball}{cvBlue4}{\iconsize}{2em} \hspace{-0.1em}
+\hobbyicon{\color{iconcolour}\faBook}{Lesen}{cvBlue4}{\iconsize}{2em}
+\end{minipage}
+}
+
+%-----------------------------------------------------------
+\switchcolumn
+
+\small
+\section*{Berufserfahrung}
+\vspace{1em}
+\hspace{-0.3cm}
+
+
+\begin{tabular}{c| p{0.6\textwidth} c} % früher: mittlere Spalte: p{0.4\textwidth}
+%	\cvevent{seit 02/19 }{}{THX}{Heimatstadt \color{backBlue}}{Skripterstellung für die Vorlesung Codierungstheorie}{THXp.png}\\
+\cvevent{\scriptsize{01/24 -- heute}}{Senior Consultant -- \textit{Prozessautomatisierung, KI \& SW-Entwicklung}}{DATA Integration Technology GmbH}{NeueStadt \color{backBlue}}{
+\par\noindent\textcolor{darkgray}{\textbf{\small Software-Entwicklung für Auftraggeber der öffentlichen Verwaltung}}
+\begin{itemize}
+    \item Anforderungsanalyse und technische Prozessmodellierung in camunda 12
+    \item Regelmäßiger Austausch mit Kunden vor Ort und remote.
+    \item Entwicklung von Front- und Backend inklusive REST API und Datenbank.
+    \item Installation und Deployment auf Remote Linux-Servern.
+\end{itemize}
+
+\par\noindent\textcolor{darkgray}{\textbf{\small Implementierung verschiedener LLM-basierter Vertriebs-Prototypen}}
+\begin{itemize}
+    \item \textbf{Voice-2-HTML:} Automatische Befüllung von HTML-Formularen in camunda per Mikrofon Sprach-Eingabe. Genutzte Technologien: \href{https://github.com/ahmetoner/whisper-asr-webservice}{Whisper ASR Webservice} (via Docker) und LangChain4j.
+    \item \textbf{Document Understanding:} Automatisierte Extraktion von Entitäten aus PDF-Rechnungen. Genutzte Technologien: lokal gehostete LLMs über \href{https://ollama.com}{Ollama}, Integration in Java-Client-Anwendung mit LangChain4j und PDF-Vorverarbeitung mit \href{https://github.com/docling-project/docling-serve}{docling-serve} (via Docker);
+\end{itemize}
+\par\noindent\textcolor{darkgray}{\textbf{\small Projektleitung: Beratung eines Bundesamtes zur Einführung der Low-Code Prozess-Plattform camunda}}
+\begin{itemize}
+    \item Wöchentliche Jour Fixes und Ad-Hoc Support
+    \item Unterstützung bei Implementierung von Pilot Use-cases
+    \item Planung, Vorbereitung und Durchführung einer 7-tägigen Schulung für technisch versierte Stakeholder im Amt.
+\end{itemize}
+\par\vspace{-1em}
+}{DATA_klein.png}
+\\
+\\
+\cvevent{\scriptsize{04/21 -- 12/23}}{Wissenschaftlicher Mitarbeiter -- \textit{Natural Language Processing \& AI}}{AImotion, Hochschule}{Beispielstadt \color{backBlue}}{
+
+ \vspace{-0.25em}
+ \textcolor{darkgray}{\textbf{\small Forschung in \textit{Spoken Language Understanding} (SLU) mit Fokus auf robuste Intentions- und Slot-Erkennung}}
+    \begin{itemize} 	    
+        \item Evaluation von PyTorch-basierten Modellen für Automatische Spracherkennung (ASR) und \textit{Natural Language Understanding} (NLU) mit \textit{open-source} Datensätzen für \href{https://www.openslr.org/12}{Englisch} und \href{https://github.com/uhh-lt/kaldi-tuda-de}{Deutsch}.
+        \item Erhebung eines multi-lingualen SLU-Datensatzes (6h) mit Umgebungsgeräuschen  für die Evaluation von \textit{Voice-Bots} im ÖPNV %Organized speech recordings with diverse international speakers.
+        % \item Carried out \textit{Automatic Speech Recognition} (ASR) experiments with public and custom data sets based on pre-trained models for English and German.
+        % \item Conducted Natural Language Understanding (NLU) experiments using Transformer-based models for joint Intent and Slot Detection. Used PyTorch based NLU models available on GitHub and \href{https://rasa.com/}{Rasa}.
+    \end{itemize}  
+\vspace{1em}
+\textcolor{darkgray}{\textbf{\small Betreuung von Studierenden, stellvertretende Teamleitung, Mitarbeit bei zwei Forschungsprojekten und weitere Lehrstuhlaufgaben}}
+ \begin{itemize}
+    \item Betreuung von Studierenden bei der Entwicklung eines web-basierten Prototypen für multi-linguales Sprachverstehen (\href{https://www.werwer.de/asdfprojectnewXY-eine-neue-stufe-des-oepnv-angebots-der-region-Beispielstadt/}{Projekt: \textit{awefawefectnewXY}})
+    \item Anleitung von Praktikanten und studentischen Hilfskräften bei semantischer Annotation von Text- und Video-Daten im Projekt \href{https://www.myscience.de/news/wire/kuenstliche_faiowfjwaifojaweio23}{wert} 
+ \end{itemize}
+ \vspace{1em}
+ \textcolor{darkgray}{\textbf{\small Lehrveranstaltungen für KI- und UX-Design Studierende (Sprachen: DE/EN)}}
+ \begin{itemize}
+    \item Vorbereitung und Abhalten von Vorlesungen \& Übungen zu NLP und KI; Korrektur von Assignments
+    \item Betreuung von UX-Design-Projekten: \href{https://www.elbekurier.de/lokales/Beispielstadt/blabla-haben-bei-roboterhund-spike-gefuehle-geweckt-10562791}{"PROJEKTXY"}  und  \href{https://google.com}{"visual assistance for Smart Kitchen Devices"}.
+ \end{itemize}
+    \vspace{-1em}
+    % \hspace{0.5cm}\begin{tabular}{l| c | c | c | c}
+    %     Course & Lang. & SP & SWS & Semester\\[1pt]%\textbf{Course} & \textbf{Lang.} & \textbf{SP} & \textbf{SWS} & \textbf{Semester}\\[1pt]
+    %     \hline
+    %     Lecture "Voice Assistants" & DE & KI-M & 2 & SS23\\[1pt]
+    %     Lecture "SLU, NLU" & EN & KI-B & 2 & SS23\\[1pt]
+    %     Exercise "SLU, NLU" & DE & KI-B & 4& WS21/22\\[1pt]
+    %     Project \href{https://www.elbekurier.de/lokales/Beispielstadt/blabla-haben-bei-roboterhund-spike-gefuehle-geweckt-10562791}{"PROJEKTXY"} & DE/EN & UX/KI & 2 & SS22\\[1pt] % ehemals 3. spalte: \pictofraction{\faCircle}{cvpurple}{1}{black!30}{3}{\tiny}\\
+    %     Seminar "Emotions and AI" & DE & KI-B & 2& SS22
+    % \end{tabular}
+}{thi_logo_b_RGB.jpg}%thi_logo_wb_RGB.jpg
+\end{tabular}
+
+\section*{Studium}
+\vspace{1em}
+\hspace{-0.3cm}\begin{tabular}{c| p{0.6\textwidth} c}
+	\cveventUni{\scriptsize 03/00 -- 11/20}{Master of Science -- KI}{IT-Schwerpunkt}{THX Heimatstadt \color{backBlue}}{\vspace{-1.1em}
+		\newline
+		Thesis: \textit{Evaluation und Implementierung eines probabilistischen Algorithmus zur Lösung von Gitterproblemen.} (1.0)
+}{THXp.png} \\
+\\
+	\cvevent{\scriptsize 09/18 -- 01/19}{Auslandssemester}{KI}{stadt University\color{backBlue}}{Fourier Analysis, Kommutative Algebra \& Algebraische Geometrie\newline}{stock.png} \\
+	
+	\cveventUni{\scriptsize 99/99 -- 99/99}{Bachelor of Science -- KI}{IT-Schwerpunkt}{THX Heimatstadt \color{backBlue}}{\vspace{-1.1em}
+		\newline
+        Thesis: \textit{Anwendung von maschinellen Lernverfahren in Seitenkanalattacken} (2.0)
+		\vspace{0.2em}
+}{THXp.png}
+\end{tabular}
+
+\vspace{4.5em}
+
+\section*{Studentenjobs}
+\vspace{1em}
+\hspace{-0.4cm}\begin{tabular}{c| p{0.6\textwidth} c}
+% \cveventButleR{\scriptsize 02/19 - 03/21}{Werkstudent}{beispielej GbR}{Heimatstadt \color{backBlue}}{Delivered food from restaurants and groceries to customers while Covid-19.}\\
+
+% \cvevent{\scriptsize 02/19 - 03/21}{Werkstudent -- \textit{Food Delivery}}{beispielej GbR}{Heimatstadt \color{backBlue}}
+% {Delivered food from restaurants and groceries to customers while Covid-19.}{dbtler.png}
+% \\
+% \\
+\cvevent{\scriptsize 04/17 -- 08/18}{sklave \textit{Processes, Methods \& Tools}}{EIW Software \& Functions GmbH}{Heimatstadt \color{backBlue}}{Planung und Entwicklung eines Tools zur automatischen Berechnung von Komplexitätsmetriken aus einer \textit{Simulink} Modell-Datenbank (\texttt{MATLAB})}{EIW.png}
+\\
+\\
+ \cvevent{\scriptsize 10/16 -- 01/17}{Studentische Hilfskraft -- Abteilung \textit{Analytics}}{Osram O. S. GmbH}{Heimatstadt\color{backBlue}}{Literaturrecherche für \textit{Predictive Maintenance Use-Cases in der Halbleiterfertigung}}{osr.png}
+ \\
+\\
+ \cvevent{\scriptsize 04/16 -- 09/16}{sklave \textit{Fahrerarssistenzsysteme}}{Firma XY Electronics}{Gaimersheim\color{backBlue}}{Entwicklung eines Tools zum Parsen von Videobildern \mbox{(\texttt{C++})}}{asdf.png}
+ \\
+\\
+ \cvevent{\scriptsize 10/15 -- 03/16}{Praxissemester -- Abteilung \textit{Fahrerarssistenzsysteme}}{Firma XY Electronics}{Gaimersheim\color{backBlue}}{Objekterkennung aus 3D-Daten mithilfe der \textit{Point Cloud Library}. Evaluierung des Ansatzes mit \textit{Kinect} Sensor (\texttt{C++})}{asdf.png}
+ \\
+\\
+\cvevent{\scriptsize 08/15 -- 09/15}{Sommerwerkstudent -- Fertigung im \textit{Frontend}}{Intel Technologies AG}{Heimatstadt\color{backBlue}}{Bedienung einer semi-automatischen Anlage zur \textit{Wafer}-Bearbeitung
+}{Intel.png}
+\\
+\\
+\cvevent{\scriptsize gelegentlich}{Studentische Hilfskraft -- \textit{Analysis} und \textit{Codierungstheorie}}{THX}{Heimatstadt \color{backBlue}}{Erstellung eines Vorlesungsskripts für \textit{Codierungstheorie} (Winter '20) sowie Korrektur von \textit{Analysis 1} Aufgabenblättern (10/14 -- 07/15)
+}{THXp.png}
+\end{tabular}
+
+\section*{Veröffentlichungen}
+\vspace{1em}
+\hspace{-0.3cm}
+\begin{tabular}{c| p{0.6\textwidth} c}
+	\cveventProjekt{\scriptsize 03/2024}{\href{https://www.ABCD.de/paper.php?id=1209}{SLU: A Noisy Speech Corpus for Spoken Language Understanding in the Public Transport Domain}}{veröffentlicht auf ABCD}{Erstautor}{}{ABCD.png}\\
+	\cveventProjekt{\scriptsize 02/2023}{Artificial Speech Recognition HypTHXeses for Training Robust Intent Detection Models }{unveröffentlicht}{Erstautor}{}{thi_logo_b_RGB.jpg}\\
+	\cveventProjekt{\scriptsize 11/2021}{\href{adf.de}{visual assistance for Smart Kitchen Devices}}{veröffentlicht auf ICNLSP}{Co-Autor}{}{ICNLSP.png}
+\end{tabular}
+
+\section*{Zertifikate}
+\vspace{1em}
+\hspace{0.3cm}
+\begin{tabular}{c| p{0.6\textwidth} c}
+	\cveventProjekt{\scriptsize 2026}{iSAQB® Certified Professional for Software Architecture ‑ Foundation Level}{4-Tage-Kurs mit Zertifizierung}{Certible GmbH}{}{blank_white.png}\\
+	\cveventProjekt{\scriptsize 2025}{Professional Scrum Product Owner (PSPO I)}{2-Tage-Kurs mit Zertifizierung}{Scrum.org}{}{blank_white.png}\\
+\end{tabular}
+
+
+\vspace{7em}
+%\vfill{} % Whitespace before final footer
+
+%----------------------------------------------------------------------------------------
+%	FINAL FOOTER
+%----------------------------------------------------------------------------------------
+
+\noindent 
+Heimatstadt, 11.05.2026
+
+\includegraphics[width=0.2\textwidth,height=19pt]{unterschrift.jpg} % Gegebenfalls Bildbreite und Höhe verändern
+
+\vspace{63em}
+
+\setlength{\parindent}{0pt}
+\begin{minipage}[t]{\rightcolwidth}
+\begin{center}\fontfamily{\sfdefault}\selectfont \color{black!70}%\faEnvelopeO
+{\small  \icon{\faLinkedinSquare}{backBlue}{}\href{https://www.linkedin.com/in/Vornamenachname/}{linkedin.com/in/Vornamenachname} \icon{\faAt}{backBlue}{}\href{mailto:Vorname.nachname@mail.xy.org}{Vorname.nachname@mail.xy.org}
+}
+% \icon{\faPhone}{backBlue}{} \href{tel:+49 1234567}{+49 1234567}  \icon{\faEnvelopeO}{backBlue}{} beispielstraße 40 \icon{\faMapMarker}{backBlue}{} 12345 Heimatstadt\newline
+
+\end{center}
+\end{minipage}
+% \vspace{2em}
+
+\end{paracol}
+\end{document}

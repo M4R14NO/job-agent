@@ -7,12 +7,8 @@ from datetime import datetime
 from pathlib import Path
 
 from ..schemas.search import CvCanonicalData
-from .cv_mappers.awesomecv import (
-    ALLOWED_DOC_TYPES,
-    DEFAULT_TEMPLATE_ID,
-    map_canonical_to_template,
-    map_canonical_to_template_deterministic,
-)
+from .cv_mappers import get_deterministic_mapper, get_llm_mapper
+from .cv_mappers.awesomecv import ALLOWED_DOC_TYPES, DEFAULT_TEMPLATE_ID
 from .cv_utils import extract_json
 from .lmstudio_client import chat_completion, safe_request
 
@@ -28,7 +24,11 @@ DEBUG_TEX_DIR = os.getenv("CV_DEBUG_TEX_DIR", "/tmp/job-agent-tex/debug")
 CANONICAL_SCHEMA_VERSION = "v1"
 DEFAULT_LM_TIMEOUT = float(os.getenv("LMSTUDIO_TIMEOUT", "240"))
 logger = logging.getLogger(__name__)
-CUSTOM_TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates" / "awesome_cv"
+TEMPLATE_ROOT_DIR = Path(__file__).resolve().parent.parent / "templates"
+TEMPLATE_DIRS = {
+    "awesomecv": TEMPLATE_ROOT_DIR / "awesome_cv",
+    "hipstercv": TEMPLATE_ROOT_DIR / "hipster_cv",
+}
 
 
 def _build_canonical_prompt(
@@ -62,6 +62,8 @@ def _build_canonical_prompt(
         "Return JSON only with the exact keys listed below. "
         "Do not include markdown or comments. "
         "Use stable IDs like exp_1, exp_1_bullet_1, edu_1, skill_1, etc. "
+        "For hobbies, suggest icon candidates from this allowlist only: "
+        "bicycle, book, soccer, music, code, camera, plane, heart, tree, gamepad, paint, hiking, cooking, travel, running. "
         "If a field is missing, use null or an empty list.\n\n"
         "Required JSON schema:\n"
         "{\n"
@@ -101,6 +103,12 @@ def _build_canonical_prompt(
         "    ],\n"
         "    \"interests\": [\n"
         "      {\"id\": string, \"name\": string or null}\n"
+        "    ],\n"
+        "    \"strengths\": [\n"
+        "      {\"id\": string, \"name\": string or null}\n"
+        "    ],\n"
+        "    \"hobbies\": [\n"
+        "      {\"id\": string, \"name\": string or null, \"icon\": string or null, \"icon_candidates\": [string]}\n"
         "    ],\n"
         "    \"awards\": [\n"
         "      {\"id\": string, \"title\": string or null, \"issuer\": string or null, \"year\": string or null}\n"
@@ -225,6 +233,12 @@ def parse_resume_to_canonical(
             "    ],\n"
             "    \"interests\": [\n"
             "      {\"id\": string, \"name\": string or null}\n"
+            "    ],\n"
+            "    \"strengths\": [\n"
+            "      {\"id\": string, \"name\": string or null}\n"
+            "    ],\n"
+            "    \"hobbies\": [\n"
+            "      {\"id\": string, \"name\": string or null, \"icon\": string or null, \"icon_candidates\": [string]}\n"
             "    ],\n"
             "    \"awards\": [\n"
             "      {\"id\": string, \"title\": string or null, \"issuer\": string or null, \"year\": string or null}\n"
@@ -373,7 +387,9 @@ def generate_cv_pdf(
     lm_timeout: float | None = None,
     output_language: str | None = None,
 ) -> bytes:
-    if template_id != DEFAULT_TEMPLATE_ID:
+    llm_mapper = get_llm_mapper(template_id)
+    deterministic_mapper = get_deterministic_mapper(template_id)
+    if not llm_mapper and not deterministic_mapper:
         raise ValueError(f"Unsupported template_id: {template_id}")
     if doc_type not in ALLOWED_DOC_TYPES:
         raise ValueError(f"Unsupported doc_type: {doc_type}")
@@ -384,15 +400,19 @@ def generate_cv_pdf(
         lm_timeout=lm_timeout,
         output_language=output_language,
     )
-    template_payload, _ = map_canonical_to_template(
-        canonical=canonical,
-        job_title=job_title,
-        company=company,
-        job_description=job_description,
-        model=model,
-        lm_timeout=lm_timeout,
-        output_language=output_language,
-    )
+
+    if llm_mapper:
+        template_payload, _ = llm_mapper(
+            canonical=canonical,
+            job_title=job_title,
+            company=company,
+            job_description=job_description,
+            model=model,
+            lm_timeout=lm_timeout,
+            output_language=output_language,
+        )
+    else:
+        template_payload, _ = deterministic_mapper(canonical=canonical)
 
     data = template_payload.model_dump()
     if not data.get("summary"):
@@ -404,17 +424,30 @@ def generate_cv_pdf(
     if not data.get("skills"):
         data["sections"]["skills"] = False
 
-    return render_cv_pdf_from_payload(payload=data, doc_type=doc_type)
+    return render_cv_pdf_from_payload(payload=data, doc_type=doc_type, template_id=template_id)
 
 
-def _get_renderer() -> Renderer:
-    if CUSTOM_TEMPLATE_DIR.exists():
-        return Renderer(custom_template_dir=CUSTOM_TEMPLATE_DIR)
+def _get_renderer(template_id: str) -> Renderer:
+    template_dir = TEMPLATE_DIRS.get(template_id)
+    if template_dir and template_dir.exists():
+        return Renderer(custom_template_dir=template_dir)
     return Renderer(template="awesome_cv")
 
 
-def _copy_template_assets(target_dir: Path) -> None:
-    cls_path = CUSTOM_TEMPLATE_DIR / "awesome-cv.cls"
+def _copy_template_assets(template_id: str, target_dir: Path) -> None:
+    template_dir = TEMPLATE_DIRS.get(template_id)
+    if template_dir and template_dir.exists():
+        for source_path in template_dir.rglob("*"):
+            if source_path.is_dir() or source_path.name.endswith(".j2"):
+                continue
+            relative_path = source_path.relative_to(template_dir)
+            destination = target_dir / relative_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, destination)
+        if template_id != DEFAULT_TEMPLATE_ID:
+            return
+
+    cls_path = TEMPLATE_DIRS[DEFAULT_TEMPLATE_ID] / "awesome-cv.cls"
     if cls_path.exists():
         shutil.copy2(cls_path, target_dir / "awesome-cv.cls")
         return
@@ -428,21 +461,21 @@ def _copy_template_assets(target_dir: Path) -> None:
         pass
 
 
-def render_cv_pdf_from_payload(*, payload: dict, doc_type: str) -> bytes:
+def render_cv_pdf_from_payload(*, payload: dict, doc_type: str, template_id: str = DEFAULT_TEMPLATE_ID) -> bytes:
     tmp_root = Path(DEFAULT_TMP_DIR)
     tmp_root.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory(dir=tmp_root) as tmp_dir:
         output_path = Path(tmp_dir) / "cv.pdf"
         tex_path = Path(tmp_dir) / "cv.tex"
-        renderer = _get_renderer()
+        renderer = _get_renderer(template_id)
         renderer.render(doc_type, payload, output=tex_path)
-        _copy_template_assets(Path(tmp_dir))
+        _copy_template_assets(template_id, Path(tmp_dir))
         if DEBUG_TEX:
             debug_root = Path(DEBUG_TEX_DIR)
             debug_root.mkdir(parents=True, exist_ok=True)
             timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
-            debug_path = debug_root / f"cv-{doc_type}-{timestamp}.tex"
+            debug_path = debug_root / f"cv-{template_id}-{doc_type}-{timestamp}.tex"
             debug_path.write_text(tex_path.read_text(encoding="utf-8"), encoding="utf-8")
         compiler = PDFCompiler()
         compiler.compile_file(tex_path, output=output_path)

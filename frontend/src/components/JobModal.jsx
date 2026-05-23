@@ -322,6 +322,7 @@ export function JobActionsCard({
                     onChange={(e) => setSelectedTemplate(e.target.value)}
                   >
                     <option value="awesomecv">AwesomeCV</option>
+                    <option value="hipstercv">HipsterCV</option>
                   </select>
                 </div>
                 <div>

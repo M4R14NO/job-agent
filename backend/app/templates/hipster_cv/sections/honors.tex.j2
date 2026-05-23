@@ -1,0 +1,12 @@
+((# Supported variables: honors[], section_labels.honors? #))
+((* if honors and honors | length > 0 *))
+((* set _st = (section_labels or {}).get('honors', 'Awards') *))
+\section*{((( _st | upper | latex_escape )))}
+\vspace{0.6em}
+\hspace{-0.3cm}\begin{tabular}{r| p{0.72\textwidth}}
+((* for honor in honors *))
+{\scriptsize ((( honor.date | default('') | latex_escape )))} & \textbf{((( honor.award | default('') | latex_escape )))}\\[-2pt]
+& \textsc{((( honor.event | default('') | latex_escape )))} $\cdot$ ((( honor.location | default('') | latex_escape )))\\[0.6em]
+((* endfor *))
+\end{tabular}
+((* endif *))

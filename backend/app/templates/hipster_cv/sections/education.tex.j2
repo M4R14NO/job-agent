@@ -1,0 +1,22 @@
+((# Supported variables: education[], section_labels.education? #))
+((* if education and education | length > 0 *))
+((* set _st = (section_labels or {}).get('education', 'Education') *))
+\section*{((( _st | upper | latex_escape )))}
+\vspace{0.6em}
+\hspace{-0.3cm}\begin{tabular}{r| p{0.72\textwidth}}
+((* for entry in education *))
+{\scriptsize ((( entry.period | latex_escape )))} & \textbf{\normalsize ((( entry.degree | latex_escape )))}\\[-2pt]
+& \textsc{\small ((( entry.institution | latex_escape )))} $\cdot$ {((( entry.location | latex_escape )))}\\[-2pt]
+((* if entry.details and entry.details | length > 0 *))
+& {\color{black!75}\small
+\begin{itemize}[leftmargin=1.2em, itemsep=0.2em, topsep=0.2em]
+((* for item in entry.details *))
+\item ((( item | latex_escape )))
+((* endfor *))
+\end{itemize}}\\[0.8em]
+((* else *))
+& \\[0.8em]
+((* endif *))
+((* endfor *))
+\end{tabular}
+((* endif *))

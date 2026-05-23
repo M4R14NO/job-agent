@@ -1,0 +1,23 @@
+((# Supported variables: volunteer[], section_labels.volunteer? #))
+((* if volunteer and volunteer | length > 0 *))
+((* set _st = (section_labels or {}).get('volunteer', 'Volunteer') *))
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{((( _st | latex_escape )))}\\
+\\
+\hspace{-1.2cm}\begin{minipage}[t]{1.2\leftcolwidth}
+\begin{itemize}[leftmargin=1.1em, itemsep=0.25em, topsep=0.2em]
+((* for entry in volunteer *))
+\item \textbf{((( entry.role | default('') | latex_escape )))}
+((* if entry.organization *)) {\small ((( entry.organization | latex_escape )))}((* endif *))
+((* if entry.period *)) {\small ((( entry.period | latex_escape )))}((* endif *))
+((* if entry.details and entry.details | length > 0 *))
+\begin{itemize}[leftmargin=1em, itemsep=0.15em, topsep=0.1em]
+((* for item in entry.details *))
+\item ((( item | latex_escape )))
+((* endfor *))
+\end{itemize}
+((* endif *))
+((* endfor *))
+\end{itemize}
+\end{minipage}
+\vspace{4em}
+((* endif *))

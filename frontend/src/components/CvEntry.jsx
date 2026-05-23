@@ -57,6 +57,7 @@ export default function CvEntry({
             onChange={(e) => onCvTemplateIdChange(e.target.value)}
           >
             <option value="awesomecv">AwesomeCV</option>
+            <option value="hipstercv">HipsterCV</option>
           </select>
         </div>
         <div>

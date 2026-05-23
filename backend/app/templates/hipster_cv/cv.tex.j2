@@ -1,0 +1,96 @@
+((# ============================================================ #))
+((# Template: hipster_cv/cv.tex.j2                               #))
+((# Source: adapted from user-provided hipster-cv variant         #))
+((# Supported variables: first_name, last_name, position?,        #))
+((# address?, mobile?, email?, homepage?, github?, linkedin?,     #))
+((# sections, section_order?, section_labels?, summary?,          #))
+((# experience[], education[], skills[], volunteer[],            #))
+((# languages[], interests[], honors[], certificates[],          #))
+((# writings[], strengths[]?, hobbies[]?                          #))
+((# ============================================================ #))
+%!TEX option = --shell-escape
+\documentclass[pastel]{hipstercv}
+\usepackage[utf8]{inputenc}
+\usepackage[default]{raleway}
+\usepackage[margin=1cm, a4paper]{geometry}
+\usepackage[english]{babel}
+\usepackage{enumitem}
+
+\newlength{\rightcolwidth}
+\newlength{\leftcolwidth}
+\setlength{\leftcolwidth}{0.2\textwidth}
+\setlength{\rightcolwidth}{0.8\textwidth}
+
+\author{Job Agent}
+\date{\today}
+
+\pagestyle{empty}
+
+\newcommand{\hipstercontactline}[2]{#1 & #2\\[1pt]}
+
+\begin{document}
+
+\noindent\hspace{-1cm}%
+\colorbox{backBlue}{%
+\parbox{\dimexpr\paperwidth-2cm-2\fboxsep\relax}{%
+\centering
+\vspace{1.1cm}
+{\color{white}\bfseries\fontsize{28}{30}\selectfont ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))\par}
+((* if position *))\vspace{0.2cm}{\color{white}\Large ((( position | latex_escape )))\par}((* endif *))
+\vspace{1.1cm}
+}}%
+
+\vspace{2.8em}
+
+\setlength{\columnsep}{0.5cm}
+\columnratio{0.2}[0.79]
+\begin{paracol}{2}
+\hbadness5000
+\paracolbackgroundoptions
+
+\small
+{\setasidefontcolour
+\vspace{1em}
+
+((* if email or mobile or homepage or github or linkedin *))
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{Contact}\\
+\hspace{-2.2em}\begin{tabular}{l l}
+((* if email *))
+\hipstercontactline{\icon{\faEnvelopeO}{backBlue}{}}{\href{mailto:((( email | latex_escape )))}{((( email | latex_escape )))} }
+((* endif *))
+((* if mobile *))
+\hipstercontactline{\icon{\faPhone}{backBlue}{}}{((( mobile | latex_escape )))}
+((* endif *))
+((* if linkedin *))
+\hipstercontactline{\icon{\faLinkedinSquare}{backBlue}{}}{\href{((( linkedin | latex_escape )))}{((( linkedin | latex_escape )))} }
+((* endif *))
+((* if github *))
+\hipstercontactline{\icon{\faGithub}{backBlue}{}}{\href{((( github | latex_escape )))}{((( github | latex_escape )))} }
+((* endif *))
+((* if homepage *))
+\hipstercontactline{\icon{\faGlobe}{backBlue}{}}{\href{((( homepage | latex_escape )))}{((( homepage | latex_escape )))} }
+((* endif *))
+\end{tabular}
+\vspace{4em}
+((* endif *))
+
+((* if sections.skills *))((* include "sections/skills.tex.j2" *))((* endif *))
+((* if sections.languages *))((* include "sections/languages.tex.j2" *))((* endif *))
+((* if sections.volunteer *))((* include "sections/volunteer.tex.j2" *))((* endif *))
+((* if sections.interests *))((* include "sections/interests.tex.j2" *))((* endif *))
+((* if strengths and strengths | length > 0 *))((* include "sections/strengths.tex.j2" *))((* endif *))
+((* if hobbies and hobbies | length > 0 *))((* include "sections/hobbies.tex.j2" *))((* endif *))
+}
+
+\switchcolumn
+
+\small
+((* if sections.summary *))((* include "sections/summary.tex.j2" *))((* endif *))
+((* if sections.experience *))((* include "sections/experience.tex.j2" *))((* endif *))
+((* if sections.education *))((* include "sections/education.tex.j2" *))((* endif *))
+((* if sections.writing *))((* include "sections/writing.tex.j2" *))((* endif *))
+((* if sections.certificates *))((* include "sections/certificates.tex.j2" *))((* endif *))
+((* if sections.honors *))((* include "sections/honors.tex.j2" *))((* endif *))
+
+\end{paracol}
+\end{document}

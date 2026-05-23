@@ -79,6 +79,8 @@ const emptyCanonical = {
   publications: [],
   languages: [],
   interests: [],
+  strengths: [],
+  hobbies: [],
   awards: []
 };
 
@@ -161,6 +163,16 @@ const normalizeCanonical = (data) => {
     interests: normalizeList(data.interests || [], "int").map((entry) => ({
       ...entry,
       name: entry.name || ""
+    })),
+    strengths: normalizeList(data.strengths || [], "str").map((entry) => ({
+      ...entry,
+      name: entry.name || ""
+    })),
+    hobbies: normalizeList(data.hobbies || [], "hob").map((entry) => ({
+      ...entry,
+      name: entry.name || "",
+      icon: entry.icon || null,
+      icon_candidates: Array.isArray(entry.icon_candidates) ? entry.icon_candidates : []
     })),
     awards: normalizeList(data.awards || [], "award").map((entry) => ({
       ...entry,

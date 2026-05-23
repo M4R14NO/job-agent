@@ -1,0 +1,12 @@
+((# Supported variables: certificates[], section_labels.certificates? #))
+((* if certificates and certificates | length > 0 *))
+((* set _st = (section_labels or {}).get('certificates', 'Certificates') *))
+\section*{((( _st | upper | latex_escape )))}
+\vspace{0.6em}
+\hspace{-0.3cm}\begin{tabular}{r| p{0.72\textwidth}}
+((* for cert in certificates *))
+{\scriptsize ((( cert.date | default('') | latex_escape )))} & \textbf{((( cert.title | latex_escape )))}\\[-2pt]
+& \textsc{((( cert.organization | default('') | latex_escape )))} $\cdot$ ((( cert.location | default('') | latex_escape )))\\[0.6em]
+((* endfor *))
+\end{tabular}
+((* endif *))

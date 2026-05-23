@@ -160,6 +160,18 @@ class CvCanonicalInterest(BaseModel):
     name: str | None = None
 
 
+class CvCanonicalStrength(BaseModel):
+    id: str
+    name: str | None = None
+
+
+class CvCanonicalHobby(BaseModel):
+    id: str
+    name: str | None = None
+    icon: str | None = None
+    icon_candidates: list[str] = Field(default_factory=list)
+
+
 class CvCanonicalAward(BaseModel):
     id: str
     title: str | None = None
@@ -186,6 +198,8 @@ class CvCanonicalData(BaseModel):
     publications: list[CvCanonicalPublication] = Field(default_factory=list)
     languages: list[CvCanonicalLanguage] = Field(default_factory=list)
     interests: list[CvCanonicalInterest] = Field(default_factory=list)
+    strengths: list[CvCanonicalStrength] = Field(default_factory=list)
+    hobbies: list[CvCanonicalHobby] = Field(default_factory=list)
     awards: list[CvCanonicalAward] = Field(default_factory=list)
 
 
@@ -245,6 +259,7 @@ class CvRenderRequest(BaseModel):
 
 class CvRenderTemplateRequest(BaseModel):
     payload: dict
+    template_id: str = "awesomecv"
     doc_type: str = "resume"
 
 

@@ -1,0 +1,14 @@
+((# Supported variables: interests[], section_labels.interests? #))
+((* if interests and interests | length > 0 *))
+((* set _st = (section_labels or {}).get('interests', 'Interests') *))
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{((( _st | latex_escape )))}\\
+\\
+\hspace{-1.2cm}\begin{minipage}[t]{1.2\leftcolwidth}
+\begin{itemize}[leftmargin=1.1em, itemsep=0.25em, topsep=0.2em]
+((* for interest in interests *))
+\item ((( interest.name | default('') | latex_escape )))
+((* endfor *))
+\end{itemize}
+\end{minipage}
+\vspace{4em}
+((* endif *))

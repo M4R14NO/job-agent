@@ -428,6 +428,7 @@ export default function App() {
     try {
       const { blob } = await renderCvFromTemplate({
         payload: cvPreviewPayload,
+        template_id: cvReview.templateId || "awesomecv",
         doc_type: cvReview.docType || "resume"
       });
       const url = URL.createObjectURL(blob);
@@ -445,6 +446,7 @@ export default function App() {
     try {
       const { blob, filename } = await renderCvFromTemplate({
         payload: cvPreviewPayload,
+        template_id: cvReview.templateId || "awesomecv",
         doc_type: cvReview.docType || "resume"
       });
       const url = URL.createObjectURL(blob);
