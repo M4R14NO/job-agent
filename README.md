@@ -51,7 +51,7 @@ This repo is a public prototype. It focuses on local development and assumes you
 
 <img width="1433" height="761" alt="image" src="https://github.com/user-attachments/assets/71312c36-4981-4ef2-b6e5-df281209f045" />
 
-- Example: Edit Experience Section allows to change, delete or add new roles for a given experience
+- Example: Editing the Experience section lets you change, delete, or add roles for a given experience
 
 <img width="1433" height="761" alt="image" src="https://github.com/user-attachments/assets/a084f62d-2187-4ddf-991b-ddf9064ed023" />
 
