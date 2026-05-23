@@ -57,7 +57,7 @@ This repo is a public prototype. It focuses on local development and assumes you
 
 - Live update of PDF preview available (practical for customizing Section titles or section re-orderings and any other changes)
 
-<img width="971" height="302" alt="image" src="https://github.com/user-attachments/assets/4ca1c208-08b9-461a-b260-175c7eb7af33" />
+<img width="971" height="302" alt="Live PDF preview update" src="https://github.com/user-attachments/assets/4ca1c208-08b9-461a-b260-175c7eb7af33" />
 
 - You can choose which sections to hide in the CV or add new (previously hidden) sections which are provided by the tex template
 
