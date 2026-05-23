@@ -15,7 +15,7 @@ This repo is a public prototype. It focuses on local development and assumes you
 ## Screenshots
 
 - Search for suitable jobs
-<img width="321" height="758" alt="image" src="https://github.com/user-attachments/assets/60ebf8f6-dd26-42e9-86e4-fd4a9cec71e6" />
+<img width="321" height="758" alt="Search jobs form" src="https://github.com/user-attachments/assets/60ebf8f6-dd26-42e9-86e4-fd4a9cec71e6" />
 
 - Inspect found jobs and LLM match scores
 
