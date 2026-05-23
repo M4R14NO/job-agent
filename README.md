@@ -29,7 +29,7 @@ This repo is a public prototype. It focuses on local development and assumes you
 
 - Cover letter generation
 
-<img width="1512" height="755" alt="image" src="https://github.com/user-attachments/assets/7c629791-e197-49a3-a8ae-cda7963502e0" />
+<img width="1512" height="755" alt="Cover letter generation screen" src="https://github.com/user-attachments/assets/7c629791-e197-49a3-a8ae-cda7963502e0" />
 
 - CV Generation
 
