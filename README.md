@@ -19,7 +19,7 @@ This repo is a public prototype. It focuses on local development and assumes you
 
 - Inspect found jobs and LLM match scores
 
-<img width="1487" height="766" alt="image" src="https://github.com/user-attachments/assets/32cb0245-067d-460a-89a2-92f9c31a8633" />
+<img width="1487" height="766" alt="Job results list with LLM match scores" src="https://github.com/user-attachments/assets/32cb0245-067d-460a-89a2-92f9c31a8633" />
 
 
 - Modal with Job Details and Re-ranking reason
