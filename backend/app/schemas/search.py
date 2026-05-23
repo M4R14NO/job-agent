@@ -137,6 +137,7 @@ class CvCanonicalCertificate(BaseModel):
     title: str | None = None
     issuer: str | None = None
     year: str | None = None
+    location: str | None = None
 
 
 class CvCanonicalPublication(BaseModel):
@@ -145,6 +146,7 @@ class CvCanonicalPublication(BaseModel):
     venue: str | None = None
     year: str | None = None
     notes: str | None = None
+    role: str | None = None
 
 
 class CvCanonicalLanguage(BaseModel):
@@ -163,6 +165,7 @@ class CvCanonicalAward(BaseModel):
     title: str | None = None
     issuer: str | None = None
     year: str | None = None
+    location: str | None = None
 
 
 class CvCanonicalData(BaseModel):

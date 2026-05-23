@@ -47,6 +47,19 @@ const SECTION_LABELS = {
 
 const SECTION_KEYS = Object.keys(SECTION_LABELS);
 
+const PREVIEW_SECTION_TO_CANONICAL = {
+  summary: "summary",
+  skills: "skills",
+  languages: "languages",
+  interests: "interests",
+  experience: "experience",
+  volunteer: "volunteer",
+  honors: "awards",
+  certificates: "certificates",
+  writing: "publications",
+  education: "education"
+};
+
 const emptyCanonical = {
   first_name: "",
   last_name: "",
@@ -128,14 +141,16 @@ const normalizeCanonical = (data) => {
       ...entry,
       title: entry.title || "",
       issuer: entry.issuer || "",
-      year: entry.year || ""
+      year: entry.year || "",
+      location: entry.location || ""
     })),
     publications: normalizeList(data.publications || [], "pub").map((entry) => ({
       ...entry,
       title: entry.title || "",
       venue: entry.venue || "",
       year: entry.year || "",
-      notes: entry.notes || ""
+      notes: entry.notes || "",
+      role: entry.role || ""
     })),
     languages: normalizeList(data.languages || [], "lang").map((entry) => ({
       ...entry,
@@ -150,7 +165,8 @@ const normalizeCanonical = (data) => {
       ...entry,
       title: entry.title || "",
       issuer: entry.issuer || "",
-      year: entry.year || ""
+      year: entry.year || "",
+      location: entry.location || ""
     }))
   };
 };
@@ -169,6 +185,88 @@ const textToBullets = (text, prefix) =>
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => ({ id: makeId(prefix), text: line, source_id: null }));
+
+const splitCommaList = (value) =>
+  String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const mapPreviewItemToCanonical = (section, item) => {
+  switch (section) {
+    case "skills":
+      return {
+        id: item.id || makeId("skill"),
+        category: item.category || "",
+        items: splitCommaList(item.list)
+      };
+    case "languages":
+      return {
+        id: item.id || makeId("lang"),
+        name: item.name || "",
+        level: item.level || ""
+      };
+    case "interests":
+      return {
+        id: item.id || makeId("int"),
+        name: item.name || ""
+      };
+    case "experience":
+      return {
+        id: item.id || makeId("exp"),
+        title: item.title || "",
+        organization: item.organization || "",
+        location: item.location || "",
+        period: item.period || "",
+        bullets: textToBullets((item.details || []).join("\n"), "exp_bullet")
+      };
+    case "volunteer":
+      return {
+        id: item.id || makeId("vol"),
+        role: item.role || "",
+        organization: item.organization || "",
+        location: item.location || "",
+        period: item.period || "",
+        bullets: textToBullets((item.details || []).join("\n"), "vol_bullet")
+      };
+    case "honors":
+      return {
+        id: item.id || makeId("award"),
+        title: item.award || "",
+        issuer: item.event || "",
+        year: item.date || "",
+        location: item.location || ""
+      };
+    case "certificates":
+      return {
+        id: item.id || makeId("cert"),
+        title: item.title || "",
+        issuer: item.organization || "",
+        year: item.date || "",
+        location: item.location || ""
+      };
+    case "writing":
+      return {
+        id: item.id || makeId("pub"),
+        title: item.title || "",
+        venue: item.location || "",
+        year: item.period || "",
+        notes: (item.details || []).join("\n"),
+        role: item.role || ""
+      };
+    case "education":
+      return {
+        id: item.id || makeId("edu"),
+        degree: item.degree || "",
+        institution: item.institution || "",
+        location: item.location || "",
+        period: item.period || "",
+        bullets: textToBullets((item.details || []).join("\n"), "edu_bullet")
+      };
+    default:
+      return item;
+  }
+};
 
 export default function CvReview({
   canonical,
@@ -231,11 +329,11 @@ export default function CvReview({
     return (hash >>> 0).toString(16);
   };
 
-  const buildPreviewHash = () =>
+  const buildPreviewHashFrom = (nextFormData, nextSectionOrder = sectionOrder) =>
     hashString(
       JSON.stringify({
-        data: formData,
-        section_order: sectionOrder,
+        data: nextFormData,
+        section_order: nextSectionOrder,
         job_title: jobTitle,
         company: jobCompany,
         job_description: jobDescription,
@@ -245,6 +343,8 @@ export default function CvReview({
         doc_type: docType
       })
     );
+
+  const buildPreviewHash = () => buildPreviewHashFrom(formData, sectionOrder);
 
   useEffect(() => {
     setFormData(normalizeCanonical(canonical?.data));
@@ -298,7 +398,6 @@ export default function CvReview({
   };
 
   const toggleSection = (key) => {
-    clearPreview();
     setSectionOrder((current) => {
       if (current.includes(key)) {
         return current.filter((section) => section !== key);
@@ -317,7 +416,6 @@ export default function CvReview({
   };
 
   const moveSection = (key, direction) => {
-    clearPreview();
     setSectionOrder((current) => {
       const index = current.indexOf(key);
       if (index < 0) return current;
@@ -349,19 +447,24 @@ export default function CvReview({
     });
     setDraggedSection(null);
     setDragOverKey(null);
-    clearPreview();
   };
 
   // ── Item-level drag & drop ──────────────────────────────────────────────────
 
   const movePreviewListItem = (payloadField, fromIndex, toIndex) => {
-    setPreviewPayload((prev) => {
-      if (!prev) return prev;
-      const updated = [...(prev[payloadField] || [])];
-      const [removed] = updated.splice(fromIndex, 1);
-      updated.splice(toIndex, 0, removed);
-      return { ...prev, [payloadField]: updated };
-    });
+    const currentItems = previewPayload?.[payloadField] || [];
+    const nextItems = [...currentItems];
+    const [removed] = nextItems.splice(fromIndex, 1);
+    nextItems.splice(toIndex, 0, removed);
+    setPreviewPayload((prev) => (prev ? { ...prev, [payloadField]: nextItems } : prev));
+
+    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[payloadField === "writings" ? "writing" : payloadField];
+    if (!canonicalField) return;
+    const sourceSection = payloadField === "writings" ? "writing" : payloadField;
+    const nextCanonicalItems = nextItems.map((item) => mapPreviewItemToCanonical(sourceSection, item));
+    const nextFormData = { ...formData, [canonicalField]: nextCanonicalItems };
+    setFormData(nextFormData);
+    setPreviewHash(buildPreviewHashFrom(nextFormData));
   };
 
   const handlePreviewItemDrop = (sectionKey, targetIndex) => {
@@ -643,29 +746,49 @@ export default function CvReview({
 
   const updatePreviewField = (field, value) => {
     setPreviewPayload((prev) => (prev ? { ...prev, [field]: value } : prev));
+    if (field !== "summary") return;
+    const nextFormData = { ...formData, summary: value };
+    setFormData(nextFormData);
+    setPreviewHash(buildPreviewHashFrom(nextFormData));
   };
 
   const updatePreviewListItem = (section, index, patch) => {
-    setPreviewPayload((prev) => {
-      if (!prev) return prev;
-      const updated = [...(prev[section] || [])];
-      updated[index] = { ...updated[index], ...patch };
-      return { ...prev, [section]: updated };
-    });
+    const currentItems = previewPayload?.[section] || [];
+    const nextItems = currentItems.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item));
+    setPreviewPayload((prev) => (prev ? { ...prev, [section]: nextItems } : prev));
+
+    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[section];
+    if (!canonicalField) return;
+    const nextCanonicalItems = nextItems.map((item) => mapPreviewItemToCanonical(section, item));
+    const nextFormData = { ...formData, [canonicalField]: nextCanonicalItems };
+    setFormData(nextFormData);
+    setPreviewHash(buildPreviewHashFrom(nextFormData));
   };
 
   const addPreviewListItem = (section, item) => {
-    setPreviewPayload((prev) => {
-      if (!prev) return prev;
-      return { ...prev, [section]: [...(prev[section] || []), item] };
-    });
+    const currentItems = previewPayload?.[section] || [];
+    const nextItems = [...currentItems, item];
+    setPreviewPayload((prev) => (prev ? { ...prev, [section]: nextItems } : prev));
+
+    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[section];
+    if (!canonicalField) return;
+    const nextCanonicalItems = nextItems.map((nextItem) => mapPreviewItemToCanonical(section, nextItem));
+    const nextFormData = { ...formData, [canonicalField]: nextCanonicalItems };
+    setFormData(nextFormData);
+    setPreviewHash(buildPreviewHashFrom(nextFormData));
   };
 
   const removePreviewListItem = (section, index) => {
-    setPreviewPayload((prev) => {
-      if (!prev) return prev;
-      return { ...prev, [section]: (prev[section] || []).filter((_, idx) => idx !== index) };
-    });
+    const currentItems = previewPayload?.[section] || [];
+    const nextItems = currentItems.filter((_, itemIndex) => itemIndex !== index);
+    setPreviewPayload((prev) => (prev ? { ...prev, [section]: nextItems } : prev));
+
+    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[section];
+    if (!canonicalField) return;
+    const nextCanonicalItems = nextItems.map((nextItem) => mapPreviewItemToCanonical(section, nextItem));
+    const nextFormData = { ...formData, [canonicalField]: nextCanonicalItems };
+    setFormData(nextFormData);
+    setPreviewHash(buildPreviewHashFrom(nextFormData));
   };
 
   const renderPreviewSection = (key) => {

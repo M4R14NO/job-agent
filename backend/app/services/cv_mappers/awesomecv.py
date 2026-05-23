@@ -390,7 +390,7 @@ def _fallback_payload_from_canonical(canonical: CvCanonicalData) -> dict:
             {
                 "award": entry.title or "",
                 "event": entry.issuer or "",
-                "location": "",
+                "location": entry.location or "",
                 "date": entry.year or "",
             }
         )
@@ -401,7 +401,7 @@ def _fallback_payload_from_canonical(canonical: CvCanonicalData) -> dict:
             {
                 "title": entry.title,
                 "organization": entry.issuer or "",
-                "location": "",
+                "location": entry.location or "",
                 "date": entry.year or "",
             }
         )
@@ -411,7 +411,7 @@ def _fallback_payload_from_canonical(canonical: CvCanonicalData) -> dict:
         details = [entry.notes] if entry.notes else []
         writing.append(
             {
-                "role": "Publication",
+                "role": entry.role or "Publication",
                 "title": entry.title,
                 "location": entry.venue or "",
                 "period": entry.year or "",
