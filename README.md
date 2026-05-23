@@ -24,7 +24,7 @@ This repo is a public prototype. It focuses on local development and assumes you
 
 - Modal with Job Details and Re-ranking reason
 
-<img width="731" height="758" alt="image" src="https://github.com/user-attachments/assets/23f9e4b5-2e8f-49fb-abe9-a2037e859bf9" />
+<img width="731" height="758" alt="Job details modal with reranking reason" src="https://github.com/user-attachments/assets/23f9e4b5-2e8f-49fb-abe9-a2037e859bf9" />
 
 
 - Cover letter generation
