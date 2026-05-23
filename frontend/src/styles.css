@@ -197,6 +197,25 @@ body {
   gap: 24px;
 }
 
+.create-review-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.create-review-pane {
+  min-width: 0;
+}
+
+.create-review-pane-preview,
+.create-review-pane-editor {
+  position: sticky;
+  top: 24px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
 .sidebar-backdrop {
   position: fixed;
   inset: 0;
@@ -1397,6 +1416,20 @@ select {
   height: auto;
   border-radius: 10px;
   border: 1px solid #e5e7eb;
+}
+
+@media (max-width: 1180px) {
+  .create-review-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .create-review-pane-preview,
+  .create-review-pane-editor {
+    position: static;
+    top: auto;
+    max-height: none;
+    overflow: visible;
+  }
 }
 
 @media (max-width: 720px) {
