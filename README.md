@@ -10,59 +10,56 @@ This repo is a public prototype. It focuses on local development and assumes you
 - Rerank results with an LLM to surface the best matches.
 - Inspect match reasons and scores per job.
 - Generate a cover letter for a selected job using your resume text.
+- Create and edit an AwesomeCV-based CV with live PDF preview.
+- Save CV profiles and tailor CV sections for specific applications.
 - Cache and reuse the latest search response from the UI.
 
 ## Screenshots
 
-- Search for suitable jobs
+These screenshots show the core workflow from search to application-ready documents.
 
-  <img width="321" height="758" alt="Search jobs form" src="https://github.com/user-attachments/assets/60ebf8f6-dd26-42e9-86e4-fd4a9cec71e6" />
+### 1) Find relevant jobs quickly
+Start with a focused search form and get normalized results in one place.
 
-- Inspect found jobs and LLM match scores
+<img width="321" height="758" alt="Search jobs form" src="https://github.com/user-attachments/assets/60ebf8f6-dd26-42e9-86e4-fd4a9cec71e6" />
 
-  <img width="1487" height="766" alt="Job results list with LLM match scores" src="https://github.com/user-attachments/assets/32cb0245-067d-460a-89a2-92f9c31a8633" />
+### 2) Prioritize jobs with match scores and reasons
+Review ranked results, open job details, and understand why a role is considered a good fit before investing time in applying.
 
+<img width="1487" height="766" alt="Job results list with LLM match scores" src="https://github.com/user-attachments/assets/32cb0245-067d-460a-89a2-92f9c31a8633" />
 
-- Modal with Job Details and Re-ranking reason
+<img width="731" height="758" alt="Job details modal with reranking reason" src="https://github.com/user-attachments/assets/23f9e4b5-2e8f-49fb-abe9-a2037e859bf9" />
 
-  <img width="731" height="758" alt="Job details modal with reranking reason" src="https://github.com/user-attachments/assets/23f9e4b5-2e8f-49fb-abe9-a2037e859bf9" />
+### 3) Draft cover letters faster
+Generate a tailored cover letter from your resume text and the selected job context directly in the app.
 
+<img width="1512" height="755" alt="Cover letter generation screen" src="https://github.com/user-attachments/assets/7c629791-e197-49a3-a8ae-cda7963502e0" />
 
-- Cover letter generation
+### 4) Build and refine a CV with live feedback
+Move from raw resume text to a polished PDF CV, with a side-by-side editor and live preview while you make changes.
 
-  <img width="1512" height="755" alt="Cover letter generation screen" src="https://github.com/user-attachments/assets/7c629791-e197-49a3-a8ae-cda7963502e0" />
+<img width="1512" height="755" alt="CV generation landing view" src="https://github.com/user-attachments/assets/4b23fad7-eb2b-411c-bae9-1c26dd23d48d" />
 
-- CV Generation
+<img width="1512" height="774" alt="CV editor with PDF preview" src="https://github.com/user-attachments/assets/6a7efa98-d2ca-4a14-95fc-69b6cf5dd146" />
 
-  <img width="1512" height="755" alt="image" src="https://github.com/user-attachments/assets/4b23fad7-eb2b-411c-bae9-1c26dd23d48d" />
+Use assisted rewriting for specific sections when you want to improve clarity or tone.
 
-- CV Editor with PDF-Preview: Input Resume/CV text is automatically mapped into LaTeX template
+<img width="773" height="300" alt="LLM rewrite controls in CV editor" src="https://github.com/user-attachments/assets/a395d6b4-0a6a-41b5-bbea-c524f00addb4" />
 
-  <img width="1512" height="774" alt="image" src="https://github.com/user-attachments/assets/6a7efa98-d2ca-4a14-95fc-69b6cf5dd146" />
+### 5) Keep reusable profiles and tailor each version
+Save CV profiles, edit section content in detail (for example, role history), and choose which sections should be shown for each application.
 
-- Let the LLM rewrite the CV according to your needs:
+<img width="789" height="259" alt="Save CV profile controls" src="https://github.com/user-attachments/assets/4a0b54b8-2d51-43af-bb94-de709637174a" />
 
-  <img width="773" height="300" alt="image" src="https://github.com/user-attachments/assets/a395d6b4-0a6a-41b5-bbea-c524f00addb4" />
+<img width="1433" height="761" alt="CV section editor" src="https://github.com/user-attachments/assets/71312c36-4981-4ef2-b6e5-df281209f045" />
 
-- Convenience features like saving your CV profile for future edits
+<img width="1433" height="761" alt="Experience section editing example" src="https://github.com/user-attachments/assets/a084f62d-2187-4ddf-991b-ddf9064ed023" />
 
-  <img width="789" height="259" alt="image" src="https://github.com/user-attachments/assets/4a0b54b8-2d51-43af-bb94-de709637174a" />
+<img width="971" height="302" alt="Live PDF preview update" src="https://github.com/user-attachments/assets/4ca1c208-08b9-461a-b260-175c7eb7af33" />
 
-- Make edits to different sections by clicking "Edit" or remove them if not needed.
+<img width="707" height="143" alt="Show or hide CV sections" src="https://github.com/user-attachments/assets/83624bdd-c21b-4944-b240-57b88f01c2b3" />
 
-  <img width="1433" height="761" alt="image" src="https://github.com/user-attachments/assets/71312c36-4981-4ef2-b6e5-df281209f045" />
-
-- Example: Editing the Experience section lets you change, delete, or add roles for a given experience
-
-  <img width="1433" height="761" alt="image" src="https://github.com/user-attachments/assets/a084f62d-2187-4ddf-991b-ddf9064ed023" />
-
-- Live update of PDF preview available (practical for customizing Section titles or section re-orderings and any other changes)
-
-  <img width="971" height="302" alt="Live PDF preview update" src="https://github.com/user-attachments/assets/4ca1c208-08b9-461a-b260-175c7eb7af33" />
-
-- You can choose which sections to hide in the CV or add new (previously hidden) sections provided by the TeX template
-
-  <img width="707" height="143" alt="Show or hide CV sections" src="https://github.com/user-attachments/assets/83624bdd-c21b-4944-b240-57b88f01c2b3" />
+> 🚧 Work in progress: the CV tooling is actively evolving, and more templates and customization options are planned.
 
 
 
