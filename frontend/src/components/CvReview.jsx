@@ -47,6 +47,20 @@ const SECTION_LABELS = {
 
 const SECTION_KEYS = Object.keys(SECTION_LABELS);
 
+const PREVIEW_SECTION_TO_CANONICAL = {
+  summary: "summary",
+  skills: "skills",
+  languages: "languages",
+  interests: "interests",
+  experience: "experience",
+  volunteer: "volunteer",
+  honors: "awards",
+  certificates: "certificates",
+  writing: "publications",
+  writings: "publications",
+  education: "education"
+};
+
 const emptyCanonical = {
   first_name: "",
   last_name: "",
@@ -128,14 +142,16 @@ const normalizeCanonical = (data) => {
       ...entry,
       title: entry.title || "",
       issuer: entry.issuer || "",
-      year: entry.year || ""
+      year: entry.year || "",
+      location: entry.location || ""
     })),
     publications: normalizeList(data.publications || [], "pub").map((entry) => ({
       ...entry,
       title: entry.title || "",
       venue: entry.venue || "",
       year: entry.year || "",
-      notes: entry.notes || ""
+      notes: entry.notes || "",
+      role: entry.role || ""
     })),
     languages: normalizeList(data.languages || [], "lang").map((entry) => ({
       ...entry,
@@ -150,7 +166,8 @@ const normalizeCanonical = (data) => {
       ...entry,
       title: entry.title || "",
       issuer: entry.issuer || "",
-      year: entry.year || ""
+      year: entry.year || "",
+      location: entry.location || ""
     }))
   };
 };
@@ -169,6 +186,144 @@ const textToBullets = (text, prefix) =>
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => ({ id: makeId(prefix), text: line, source_id: null }));
+
+const splitCommaList = (value) =>
+  String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const mapPreviewItemToCanonical = (section, item) => {
+  switch (section) {
+    case "skills":
+      return {
+        id: item.id || makeId("skill"),
+        category: item.category || "",
+        items: splitCommaList(item.list)
+      };
+    case "languages":
+      return {
+        id: item.id || makeId("lang"),
+        name: item.name || "",
+        level: item.level || ""
+      };
+    case "interests":
+      return {
+        id: item.id || makeId("int"),
+        name: item.name || ""
+      };
+    case "experience":
+      return {
+        id: item.id || makeId("exp"),
+        title: item.title || "",
+        organization: item.organization || "",
+        location: item.location || "",
+        period: item.period || "",
+        bullets: textToBullets((item.details || []).join("\n"), "exp_bullet")
+      };
+    case "volunteer":
+      return {
+        id: item.id || makeId("vol"),
+        role: item.role || "",
+        organization: item.organization || "",
+        location: item.location || "",
+        period: item.period || "",
+        bullets: textToBullets((item.details || []).join("\n"), "vol_bullet")
+      };
+    case "honors":
+      return {
+        id: item.id || makeId("award"),
+        title: item.award || "",
+        issuer: item.event || "",
+        year: item.date || "",
+        location: item.location || ""
+      };
+    case "certificates":
+      return {
+        id: item.id || makeId("cert"),
+        title: item.title || "",
+        issuer: item.organization || "",
+        year: item.date || "",
+        location: item.location || ""
+      };
+    case "writing":
+    case "writings":
+      return {
+        id: item.id || makeId("pub"),
+        title: item.title || "",
+        venue: item.location || "",
+        year: item.period || "",
+        notes: (item.details || []).join("\n"),
+        role: item.role || ""
+      };
+    case "education":
+      return {
+        id: item.id || makeId("edu"),
+        degree: item.degree || "",
+        institution: item.institution || "",
+        location: item.location || "",
+        period: item.period || "",
+        bullets: textToBullets((item.details || []).join("\n"), "edu_bullet")
+      };
+    default:
+      return item;
+  }
+};
+
+const hasText = (value) => Boolean(String(value || "").trim());
+
+const hasPreviewSectionContent = (section, items = []) => {
+  if (!Array.isArray(items) || items.length === 0) return false;
+  switch (section) {
+    case "skills":
+      return items.some((item) => hasText(item.category) || hasText(item.list));
+    case "languages":
+      return items.some((item) => hasText(item.name) || hasText(item.level));
+    case "interests":
+      return items.some((item) => hasText(item.name));
+    case "experience":
+      return items.some((item) =>
+        hasText(item.title) ||
+        hasText(item.organization) ||
+        hasText(item.location) ||
+        hasText(item.period) ||
+        (item.details || []).some((detail) => hasText(detail))
+      );
+    case "volunteer":
+      return items.some((item) =>
+        hasText(item.role) ||
+        hasText(item.organization) ||
+        hasText(item.location) ||
+        hasText(item.period) ||
+        (item.details || []).some((detail) => hasText(detail))
+      );
+    case "honors":
+      return items.some((item) => hasText(item.award) || hasText(item.event) || hasText(item.location) || hasText(item.date));
+    case "certificates":
+      return items.some((item) => hasText(item.title) || hasText(item.organization) || hasText(item.location) || hasText(item.date));
+    case "writing":
+    case "writings":
+      return items.some((item) =>
+        hasText(item.role) ||
+        hasText(item.title) ||
+        hasText(item.location) ||
+        hasText(item.period) ||
+        (item.details || []).some((detail) => hasText(detail))
+      );
+    case "education":
+      return items.some((item) =>
+        hasText(item.degree) ||
+        hasText(item.institution) ||
+        hasText(item.location) ||
+        hasText(item.period) ||
+        (item.details || []).some((detail) => hasText(detail))
+      );
+    default:
+      return items.length > 0;
+  }
+};
+
+const normalizePreviewSectionKey = (section) => (section === "writings" ? "writing" : section);
 
 export default function CvReview({
   canonical,
@@ -198,6 +353,8 @@ export default function CvReview({
   const [isRewriting, setIsRewriting] = useState(false);
   const [draggedSection, setDraggedSection] = useState(null);
   const [dragOverKey, setDragOverKey] = useState(null);
+  const [draggedItem, setDraggedItem] = useState(null); // { namespace, index }
+  const [dragOverItem, setDragOverItem] = useState(null); // { namespace, index }
   const [openPreviewEditors, setOpenPreviewEditors] = useState({});
   const [hiddenSectionsOpen, setHiddenSectionsOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState(() => ({
@@ -229,11 +386,11 @@ export default function CvReview({
     return (hash >>> 0).toString(16);
   };
 
-  const buildPreviewHash = () =>
+  const buildPreviewHashFrom = (nextFormData, nextSectionOrder = sectionOrder) =>
     hashString(
       JSON.stringify({
-        data: formData,
-        section_order: sectionOrder,
+        data: nextFormData,
+        section_order: nextSectionOrder,
         job_title: jobTitle,
         company: jobCompany,
         job_description: jobDescription,
@@ -243,6 +400,8 @@ export default function CvReview({
         doc_type: docType
       })
     );
+
+  const buildPreviewHash = () => buildPreviewHashFrom(formData, sectionOrder);
 
   useEffect(() => {
     setFormData(normalizeCanonical(canonical?.data));
@@ -296,7 +455,6 @@ export default function CvReview({
   };
 
   const toggleSection = (key) => {
-    clearPreview();
     setSectionOrder((current) => {
       if (current.includes(key)) {
         return current.filter((section) => section !== key);
@@ -315,7 +473,6 @@ export default function CvReview({
   };
 
   const moveSection = (key, direction) => {
-    clearPreview();
     setSectionOrder((current) => {
       const index = current.indexOf(key);
       if (index < 0) return current;
@@ -347,8 +504,102 @@ export default function CvReview({
     });
     setDraggedSection(null);
     setDragOverKey(null);
-    clearPreview();
   };
+
+  // ── Item-level drag & drop ──────────────────────────────────────────────────
+
+  const movePreviewListItem = (payloadField, fromIndex, toIndex) => {
+    const currentItems = previewPayload?.[payloadField] || [];
+    const nextItems = [...currentItems];
+    const [removed] = nextItems.splice(fromIndex, 1);
+    nextItems.splice(toIndex, 0, removed);
+    const normalizedSection = normalizePreviewSectionKey(payloadField);
+    const sectionHasContent = hasPreviewSectionContent(normalizedSection, nextItems);
+    setPreviewPayload((prev) => (
+      prev
+        ? {
+            ...prev,
+            [payloadField]: nextItems,
+            sections: {
+              ...(prev.sections || {}),
+              [normalizedSection]: sectionHasContent
+            }
+          }
+        : prev
+    ));
+
+    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[normalizedSection];
+    if (!canonicalField) return;
+    const nextCanonicalItems = nextItems.map((item) => mapPreviewItemToCanonical(normalizedSection, item));
+    const nextFormData = { ...formData, [canonicalField]: nextCanonicalItems };
+    setFormData(nextFormData);
+    setPreviewHash(buildPreviewHashFrom(nextFormData));
+  };
+
+  const handlePreviewItemDrop = (sectionKey, targetIndex) => {
+    const ns = `preview:${sectionKey}`;
+    if (!draggedItem || draggedItem.namespace !== ns || draggedItem.index === targetIndex) {
+      setDraggedItem(null);
+      setDragOverItem(null);
+      return;
+    }
+    const payloadField = sectionKey === "writing" ? "writings" : sectionKey;
+    movePreviewListItem(payloadField, draggedItem.index, targetIndex);
+    setDraggedItem(null);
+    setDragOverItem(null);
+  };
+
+  // Returns className fragments for a draggable sub-card
+  const getItemDragClass = (namespace, index) => {
+    const isDragged = draggedItem?.namespace === namespace && draggedItem?.index === index;
+    const isTarget =
+      dragOverItem?.namespace === namespace &&
+      dragOverItem?.index === index &&
+      draggedItem?.namespace === namespace &&
+      draggedItem?.index !== index;
+    const dirClass = isTarget
+      ? (draggedItem.index < index ? " is-drop-from-above" : " is-drop-from-below")
+      : "";
+    return `${isDragged ? " is-item-dragged" : ""}${dirClass}`;
+  };
+
+  // Drag events to spread onto a draggable sub-card div
+  const itemDragEvents = (namespace, index, onDrop) => ({
+    onDragOver: (e) => {
+      if (draggedItem?.namespace !== namespace) return;
+      e.preventDefault();
+      setDragOverItem({ namespace, index });
+    },
+    onDragLeave: (e) => {
+      if (!e.currentTarget.contains(e.relatedTarget)) setDragOverItem(null);
+    },
+    onDrop: (e) => {
+      if (draggedItem?.namespace !== namespace) return;
+      onDrop(index);
+    },
+  });
+
+  // Drag handle button for items (used inside sub-card headers)
+  const renderItemDragHandle = (namespace, index) => (
+    <button
+      type="button"
+      className="drag-handle item-drag-handle"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.stopPropagation();
+        setDraggedItem({ namespace, index });
+        setDragOverItem(null);
+      }}
+      onDragEnd={() => { setDraggedItem(null); setDragOverItem(null); }}
+      aria-label="Drag to reorder"
+    >
+      <span aria-hidden="true">⋮⋮</span>
+      <span aria-hidden="true">⋮⋮</span>
+    </button>
+  );
+
+  // ────────────────────────────────────────────────────────────────────────────
 
   const updateSectionLabel = (key, value) => {
     setSectionLabels((prev) => ({ ...prev, [key]: value }));
@@ -402,11 +653,14 @@ export default function CvReview({
     const isDraggable = Boolean(dragKey) && isEnabled;
     const isDragged = draggedSection === dragKey;
     const isDropTarget = dragOverKey === dragKey && draggedSection && draggedSection !== dragKey;
+    const sectionDropDir = isDropTarget
+      ? (sectionOrder.indexOf(draggedSection) < sectionOrder.indexOf(dragKey) ? " is-drop-from-above" : " is-drop-from-below")
+      : "";
     return (
       <div
-        className={`section-card ${isOpen ? "is-open" : "is-collapsed"} ${isDragged ? "is-dragged" : ""} ${isDropTarget ? "is-drop-target" : ""} ${!isEnabled ? "is-disabled" : ""}`}
-        onDragOver={dragKey ? (event) => { event.preventDefault(); setDragOverKey(dragKey); } : undefined}
-        onDragLeave={dragKey ? () => setDragOverKey(null) : undefined}
+        className={`section-card ${isOpen ? "is-open" : "is-collapsed"} ${isDragged ? "is-dragged" : ""} ${isDropTarget ? `is-drop-target${sectionDropDir}` : ""} ${!isEnabled ? "is-disabled" : ""}`}
+        onDragOver={dragKey ? (event) => { if (!draggedSection) return; event.preventDefault(); setDragOverKey(dragKey); } : undefined}
+        onDragLeave={dragKey ? (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverKey(null); } : undefined}
         onDrop={dragKey ? () => { handleDrop(dragKey); setDragOverKey(null); } : undefined}
       >
         <div className="section-header">
@@ -560,30 +814,99 @@ export default function CvReview({
   };
 
   const updatePreviewField = (field, value) => {
-    setPreviewPayload((prev) => (prev ? { ...prev, [field]: value } : prev));
+    setPreviewPayload((prev) => (
+      prev
+        ? {
+            ...prev,
+            [field]: value,
+            sections: field === "summary"
+              ? { ...(prev.sections || {}), summary: hasText(value) }
+              : prev.sections
+          }
+        : prev
+    ));
+    if (field !== "summary") return;
+    const nextFormData = { ...formData, summary: value };
+    setFormData(nextFormData);
+    setPreviewHash(buildPreviewHashFrom(nextFormData));
   };
 
   const updatePreviewListItem = (section, index, patch) => {
-    setPreviewPayload((prev) => {
-      if (!prev) return prev;
-      const updated = [...(prev[section] || [])];
-      updated[index] = { ...updated[index], ...patch };
-      return { ...prev, [section]: updated };
-    });
+    const currentItems = previewPayload?.[section] || [];
+    const nextItems = currentItems.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item));
+    const normalizedSection = normalizePreviewSectionKey(section);
+    const sectionHasContent = hasPreviewSectionContent(normalizedSection, nextItems);
+    setPreviewPayload((prev) => (
+      prev
+        ? {
+            ...prev,
+            [section]: nextItems,
+            sections: {
+              ...(prev.sections || {}),
+              [normalizedSection]: sectionHasContent
+            }
+          }
+        : prev
+    ));
+
+    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[normalizedSection];
+    if (!canonicalField) return;
+    const nextCanonicalItems = nextItems.map((item) => mapPreviewItemToCanonical(normalizedSection, item));
+    const nextFormData = { ...formData, [canonicalField]: nextCanonicalItems };
+    setFormData(nextFormData);
+    setPreviewHash(buildPreviewHashFrom(nextFormData));
   };
 
   const addPreviewListItem = (section, item) => {
-    setPreviewPayload((prev) => {
-      if (!prev) return prev;
-      return { ...prev, [section]: [...(prev[section] || []), item] };
-    });
+    const currentItems = previewPayload?.[section] || [];
+    const nextItems = [...currentItems, item];
+    const normalizedSection = normalizePreviewSectionKey(section);
+    const sectionHasContent = hasPreviewSectionContent(normalizedSection, nextItems);
+    setPreviewPayload((prev) => (
+      prev
+        ? {
+            ...prev,
+            [section]: nextItems,
+            sections: {
+              ...(prev.sections || {}),
+              [normalizedSection]: sectionHasContent
+            }
+          }
+        : prev
+    ));
+
+    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[normalizedSection];
+    if (!canonicalField) return;
+    const nextCanonicalItems = nextItems.map((nextItem) => mapPreviewItemToCanonical(normalizedSection, nextItem));
+    const nextFormData = { ...formData, [canonicalField]: nextCanonicalItems };
+    setFormData(nextFormData);
+    setPreviewHash(buildPreviewHashFrom(nextFormData));
   };
 
   const removePreviewListItem = (section, index) => {
-    setPreviewPayload((prev) => {
-      if (!prev) return prev;
-      return { ...prev, [section]: (prev[section] || []).filter((_, idx) => idx !== index) };
-    });
+    const currentItems = previewPayload?.[section] || [];
+    const nextItems = currentItems.filter((_, itemIndex) => itemIndex !== index);
+    const normalizedSection = normalizePreviewSectionKey(section);
+    const sectionHasContent = hasPreviewSectionContent(normalizedSection, nextItems);
+    setPreviewPayload((prev) => (
+      prev
+        ? {
+            ...prev,
+            [section]: nextItems,
+            sections: {
+              ...(prev.sections || {}),
+              [normalizedSection]: sectionHasContent
+            }
+          }
+        : prev
+    ));
+
+    const canonicalField = PREVIEW_SECTION_TO_CANONICAL[normalizedSection];
+    if (!canonicalField) return;
+    const nextCanonicalItems = nextItems.map((nextItem) => mapPreviewItemToCanonical(normalizedSection, nextItem));
+    const nextFormData = { ...formData, [canonicalField]: nextCanonicalItems };
+    setFormData(nextFormData);
+    setPreviewHash(buildPreviewHashFrom(nextFormData));
   };
 
   const renderPreviewSection = (key) => {
@@ -689,9 +1012,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.skills || []).map((skill, idx) => (
-              <div key={`skill-${idx}`} className="sub-card">
+              <div key={`skill-${idx}`} className={`sub-card${getItemDragClass("preview:skills", idx)}`} {...itemDragEvents("preview:skills", idx, (i) => handlePreviewItemDrop("skills", i))}>
                 <div className="sub-card-header">
-                  <strong>Skill {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:skills", idx)}
+                    <strong>Skill {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("skills", idx)}>
                     Remove
                   </button>
@@ -727,9 +1053,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.languages || []).map((lang, idx) => (
-              <div key={`lang-${idx}`} className="sub-card">
+              <div key={`lang-${idx}`} className={`sub-card${getItemDragClass("preview:languages", idx)}`} {...itemDragEvents("preview:languages", idx, (i) => handlePreviewItemDrop("languages", i))}>
                 <div className="sub-card-header">
-                  <strong>Language {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:languages", idx)}
+                    <strong>Language {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("languages", idx)}>
                     Remove
                   </button>
@@ -765,9 +1094,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.interests || []).map((interest, idx) => (
-              <div key={`interest-${idx}`} className="sub-card">
+              <div key={`interest-${idx}`} className={`sub-card${getItemDragClass("preview:interests", idx)}`} {...itemDragEvents("preview:interests", idx, (i) => handlePreviewItemDrop("interests", i))}>
                 <div className="sub-card-header">
-                  <strong>Interest {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:interests", idx)}
+                    <strong>Interest {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("interests", idx)}>
                     Remove
                   </button>
@@ -791,9 +1123,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.experience || []).map((entry, idx) => (
-              <div key={`exp-${idx}`} className="sub-card">
+              <div key={`exp-${idx}`} className={`sub-card${getItemDragClass("preview:experience", idx)}`} {...itemDragEvents("preview:experience", idx, (i) => handlePreviewItemDrop("experience", i))}>
                 <div className="sub-card-header">
-                  <strong>Role {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:experience", idx)}
+                    <strong>Role {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("experience", idx)}>
                     Remove
                   </button>
@@ -850,9 +1185,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.volunteer || []).map((entry, idx) => (
-              <div key={`vol-${idx}`} className="sub-card">
+              <div key={`vol-${idx}`} className={`sub-card${getItemDragClass("preview:volunteer", idx)}`} {...itemDragEvents("preview:volunteer", idx, (i) => handlePreviewItemDrop("volunteer", i))}>
                 <div className="sub-card-header">
-                  <strong>Volunteer {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:volunteer", idx)}
+                    <strong>Volunteer {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("volunteer", idx)}>
                     Remove
                   </button>
@@ -909,9 +1247,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.honors || []).map((honor, idx) => (
-              <div key={`honor-${idx}`} className="sub-card">
+              <div key={`honor-${idx}`} className={`sub-card${getItemDragClass("preview:honors", idx)}`} {...itemDragEvents("preview:honors", idx, (i) => handlePreviewItemDrop("honors", i))}>
                 <div className="sub-card-header">
-                  <strong>Honor {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:honors", idx)}
+                    <strong>Honor {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("honors", idx)}>
                     Remove
                   </button>
@@ -961,9 +1302,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.certificates || []).map((cert, idx) => (
-              <div key={`cert-${idx}`} className="sub-card">
+              <div key={`cert-${idx}`} className={`sub-card${getItemDragClass("preview:certificates", idx)}`} {...itemDragEvents("preview:certificates", idx, (i) => handlePreviewItemDrop("certificates", i))}>
                 <div className="sub-card-header">
-                  <strong>Certificate {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:certificates", idx)}
+                    <strong>Certificate {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("certificates", idx)}>
                     Remove
                   </button>
@@ -1013,9 +1357,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.writings || []).map((writing, idx) => (
-              <div key={`writing-${idx}`} className="sub-card">
+              <div key={`writing-${idx}`} className={`sub-card${getItemDragClass("preview:writing", idx)}`} {...itemDragEvents("preview:writing", idx, (i) => handlePreviewItemDrop("writing", i))}>
                 <div className="sub-card-header">
-                  <strong>Writing {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:writing", idx)}
+                    <strong>Writing {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("writings", idx)}>
                     Remove
                   </button>
@@ -1072,9 +1419,12 @@ export default function CvReview({
         return (
           <div className="preview-stack">
             {(previewPayload.education || []).map((entry, idx) => (
-              <div key={`edu-${idx}`} className="sub-card">
+              <div key={`edu-${idx}`} className={`sub-card${getItemDragClass("preview:education", idx)}`} {...itemDragEvents("preview:education", idx, (i) => handlePreviewItemDrop("education", i))}>
                 <div className="sub-card-header">
-                  <strong>Education {idx + 1}</strong>
+                  <div className="sub-card-title-row">
+                    {renderItemDragHandle("preview:education", idx)}
+                    <strong>Education {idx + 1}</strong>
+                  </div>
                   <button type="button" className="ghost" onClick={() => removePreviewListItem("education", idx)}>
                     Remove
                   </button>
@@ -1133,7 +1483,14 @@ export default function CvReview({
   };
 
   const togglePreviewEditor = (key) => {
-    setOpenPreviewEditors((prev) => ({ ...prev, [key]: !prev[key] }));
+    setOpenPreviewEditors((prev) => {
+      const isClosing = Boolean(prev[key]);
+      if (isClosing && previewPayload) {
+        // Push a fresh snapshot so parent consumers (PDF update) always see latest edits.
+        onPreviewPayloadChange?.({ ...previewPayload });
+      }
+      return { ...prev, [key]: !prev[key] };
+    });
   };
 
   const renderSectionActions = (key, extraActions = null) => {
@@ -1969,29 +2326,55 @@ export default function CvReview({
               <div className="preview-grid">
                 {sectionOrder
                   .filter((key) => enabledSections.has(key))
-                  .map((key) => (
-                    <div key={`preview-${key}`} id={`preview-card-${key}`} className="preview-card">
+                  .map((key) => {
+                    const isCardDragged = draggedSection === key;
+                    const isCardTarget = dragOverKey === key && draggedSection && draggedSection !== key;
+                    const cardDropDir = isCardTarget
+                      ? (sectionOrder.indexOf(draggedSection) < sectionOrder.indexOf(key) ? " is-drop-from-above" : " is-drop-from-below")
+                      : "";
+                    return (
+                    <div
+                      key={`preview-${key}`}
+                      id={`preview-card-${key}`}
+                      className={`preview-card${isCardDragged ? " is-dragged" : ""}${isCardTarget ? ` is-drop-target${cardDropDir}` : ""}`}
+                      onDragOver={(e) => { if (!draggedSection) return; e.preventDefault(); setDragOverKey(key); }}
+                      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverKey(null); }}
+                      onDrop={() => { handleDrop(key); setDragOverKey(null); }}
+                    >
                       <div className="preview-card-header">
-                        {editingLabelKey === key ? (
-                          <input
-                            className="section-label-input"
-                            value={sectionLabels[key] ?? SECTION_LABELS[key]}
-                            autoFocus
-                            onChange={(e) => updateSectionLabel(key, e.target.value)}
-                            onBlur={() => setEditingLabelKey(null)}
-                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingLabelKey(null); }}
-                          />
-                        ) : (
+                        <div className="preview-card-title">
                           <button
                             type="button"
-                            className="section-label-btn"
-                            title="Click to rename section"
-                            onClick={() => setEditingLabelKey(key)}
+                            className="drag-handle"
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, key)}
+                            onDragEnd={() => { setDraggedSection(null); setDragOverKey(null); }}
+                            aria-label="Drag to reorder section"
                           >
-                            {sectionLabels[key] ?? SECTION_LABELS[key]}
-                            <Pencil size={12} className="section-label-edit-icon" aria-hidden="true" />
+                            <span aria-hidden="true">⋮⋮</span>
+                            <span aria-hidden="true">⋮⋮</span>
                           </button>
-                        )}
+                          {editingLabelKey === key ? (
+                            <input
+                              className="section-label-input"
+                              value={sectionLabels[key] ?? SECTION_LABELS[key]}
+                              autoFocus
+                              onChange={(e) => updateSectionLabel(key, e.target.value)}
+                              onBlur={() => setEditingLabelKey(null)}
+                              onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingLabelKey(null); }}
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              className="section-label-btn"
+                              title="Click to rename section"
+                              onClick={() => setEditingLabelKey(key)}
+                            >
+                              {sectionLabels[key] ?? SECTION_LABELS[key]}
+                              <Pencil size={12} className="section-label-edit-icon" aria-hidden="true" />
+                            </button>
+                          )}
+                        </div>
                         <div className="inline-actions">
                           <button type="button" className="btn-danger" onClick={() => toggleSectionInReview(key)}>
                             <Trash2 size={13} /> Remove
@@ -2008,7 +2391,8 @@ export default function CvReview({
                         </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
               </div>
               {hiddenSectionKeys.length > 0 && (
                 <div className="hidden-sections">
