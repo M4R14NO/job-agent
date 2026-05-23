@@ -15,53 +15,54 @@ This repo is a public prototype. It focuses on local development and assumes you
 ## Screenshots
 
 - Search for suitable jobs
-<img width="321" height="758" alt="Search jobs form" src="https://github.com/user-attachments/assets/60ebf8f6-dd26-42e9-86e4-fd4a9cec71e6" />
+
+  <img width="321" height="758" alt="Search jobs form" src="https://github.com/user-attachments/assets/60ebf8f6-dd26-42e9-86e4-fd4a9cec71e6" />
 
 - Inspect found jobs and LLM match scores
 
-<img width="1487" height="766" alt="Job results list with LLM match scores" src="https://github.com/user-attachments/assets/32cb0245-067d-460a-89a2-92f9c31a8633" />
+  <img width="1487" height="766" alt="Job results list with LLM match scores" src="https://github.com/user-attachments/assets/32cb0245-067d-460a-89a2-92f9c31a8633" />
 
 
 - Modal with Job Details and Re-ranking reason
 
-<img width="731" height="758" alt="Job details modal with reranking reason" src="https://github.com/user-attachments/assets/23f9e4b5-2e8f-49fb-abe9-a2037e859bf9" />
+  <img width="731" height="758" alt="Job details modal with reranking reason" src="https://github.com/user-attachments/assets/23f9e4b5-2e8f-49fb-abe9-a2037e859bf9" />
 
 
 - Cover letter generation
 
-<img width="1512" height="755" alt="Cover letter generation screen" src="https://github.com/user-attachments/assets/7c629791-e197-49a3-a8ae-cda7963502e0" />
+  <img width="1512" height="755" alt="Cover letter generation screen" src="https://github.com/user-attachments/assets/7c629791-e197-49a3-a8ae-cda7963502e0" />
 
 - CV Generation
 
-<img width="1512" height="755" alt="image" src="https://github.com/user-attachments/assets/4b23fad7-eb2b-411c-bae9-1c26dd23d48d" />
+  <img width="1512" height="755" alt="image" src="https://github.com/user-attachments/assets/4b23fad7-eb2b-411c-bae9-1c26dd23d48d" />
 
 - CV Editor with PDF-Preview: Input Resume/CV text is automatically mapped into LaTeX template
 
-<img width="1512" height="774" alt="image" src="https://github.com/user-attachments/assets/6a7efa98-d2ca-4a14-95fc-69b6cf5dd146" />
+  <img width="1512" height="774" alt="image" src="https://github.com/user-attachments/assets/6a7efa98-d2ca-4a14-95fc-69b6cf5dd146" />
 
 - Let the LLM rewrite the CV according to your needs:
 
-<img width="773" height="300" alt="image" src="https://github.com/user-attachments/assets/a395d6b4-0a6a-41b5-bbea-c524f00addb4" />
+  <img width="773" height="300" alt="image" src="https://github.com/user-attachments/assets/a395d6b4-0a6a-41b5-bbea-c524f00addb4" />
 
 - Convenience features like saving your CV profile for future edits
 
-<img width="789" height="259" alt="image" src="https://github.com/user-attachments/assets/4a0b54b8-2d51-43af-bb94-de709637174a" />
+  <img width="789" height="259" alt="image" src="https://github.com/user-attachments/assets/4a0b54b8-2d51-43af-bb94-de709637174a" />
 
 - Make edits to different sections by clicking "Edit" or remove them if not needed.
 
-<img width="1433" height="761" alt="image" src="https://github.com/user-attachments/assets/71312c36-4981-4ef2-b6e5-df281209f045" />
+  <img width="1433" height="761" alt="image" src="https://github.com/user-attachments/assets/71312c36-4981-4ef2-b6e5-df281209f045" />
 
 - Example: Editing the Experience section lets you change, delete, or add roles for a given experience
 
-<img width="1433" height="761" alt="image" src="https://github.com/user-attachments/assets/a084f62d-2187-4ddf-991b-ddf9064ed023" />
+  <img width="1433" height="761" alt="image" src="https://github.com/user-attachments/assets/a084f62d-2187-4ddf-991b-ddf9064ed023" />
 
 - Live update of PDF preview available (practical for customizing Section titles or section re-orderings and any other changes)
 
-<img width="971" height="302" alt="Live PDF preview update" src="https://github.com/user-attachments/assets/4ca1c208-08b9-461a-b260-175c7eb7af33" />
+  <img width="971" height="302" alt="Live PDF preview update" src="https://github.com/user-attachments/assets/4ca1c208-08b9-461a-b260-175c7eb7af33" />
 
 - You can choose which sections to hide in the CV or add new (previously hidden) sections provided by the TeX template
 
-<img width="707" height="143" alt="Show or hide CV sections" src="https://github.com/user-attachments/assets/83624bdd-c21b-4944-b240-57b88f01c2b3" />
+  <img width="707" height="143" alt="Show or hide CV sections" src="https://github.com/user-attachments/assets/83624bdd-c21b-4944-b240-57b88f01c2b3" />
 
 
 
