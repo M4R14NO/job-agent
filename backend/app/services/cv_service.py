@@ -31,6 +31,16 @@ TEMPLATE_DIRS = {
 }
 
 
+def _is_pdf_valid(pdf_bytes: bytes) -> bool:
+    # Reject partial/incomplete artifacts that can exist even when xelatex exits with errors.
+    if len(pdf_bytes) < 1024:
+        return False
+    if not pdf_bytes.startswith(b"%PDF-"):
+        return False
+    required_markers = (b"startxref", b"%%EOF")
+    return all(marker in pdf_bytes for marker in required_markers)
+
+
 def _build_canonical_prompt(
     resume_text: str,
     output_language: str | None = None,
@@ -440,6 +450,11 @@ def _copy_template_assets(template_id: str, target_dir: Path) -> None:
         for source_path in template_dir.rglob("*"):
             if source_path.is_dir() or source_path.name.endswith(".j2"):
                 continue
+            if source_path.suffix == ".tex":
+                # Never copy raw .tex sources into the build dir; they can overwrite rendered output.
+                continue
+            if source_path.suffix == ".bak":
+                continue
             relative_path = source_path.relative_to(template_dir)
             destination = target_dir / relative_path
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -479,4 +494,9 @@ def render_cv_pdf_from_payload(*, payload: dict, doc_type: str, template_id: str
             debug_path.write_text(tex_path.read_text(encoding="utf-8"), encoding="utf-8")
         compiler = PDFCompiler()
         compiler.compile_file(tex_path, output=output_path)
-        return output_path.read_bytes()
+        pdf_bytes = output_path.read_bytes()
+        if not _is_pdf_valid(pdf_bytes):
+            raise RuntimeError(
+                "Generated PDF is invalid. Check the template and TeX sources for compilation errors."
+            )
+        return pdf_bytes

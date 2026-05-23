@@ -1,12 +1,7 @@
 ((# ============================================================ #))
 ((# Template: hipster_cv/cv.tex.j2                               #))
 ((# Source: adapted from user-provided hipster-cv variant         #))
-((# Supported variables: first_name, last_name, position?,        #))
-((# address?, mobile?, email?, homepage?, github?, linkedin?,     #))
-((# sections, section_order?, section_labels?, summary?,          #))
-((# experience[], education[], skills[], volunteer[],            #))
-((# languages[], interests[], honors[], certificates[],          #))
-((# writings[], strengths[]?, hobbies[]?                          #))
+((# Focused pass: header + work experience layout                 #))
 ((# ============================================================ #))
 %!TEX option = --shell-escape
 \documentclass[pastel]{hipstercv}
@@ -23,24 +18,34 @@
 
 \author{Job Agent}
 \date{\today}
-
 \pagestyle{empty}
 
 \newcommand{\hipstercontactline}[2]{#1 & #2\\[1pt]}
+\newcommand{\headernophoto}[2]{%
+\begin{tikzpicture}[remember picture,overlay]
+\node[rectangle, fill=backBlue, anchor=north, minimum width=\paperwidth, minimum height=5cm](header) at (current page.north){};
+\node[anchor=west](photo) at ($(header.west)+(3.4cm,-2.45cm)$) {};
+\draw[draw=black!60, line width=0.6pt] (photo) circle (1.35cm);
+\node[anchor=center, font=\scriptsize\color{black!70}] at (photo) {No Photo};
+\node[anchor=east](name) at ($(header.east)+(-1.8cm,-1.95cm)$) {#1};
+\node[anchor=north east] at (name.south east) {#2};
+\end{tikzpicture}%
+\vspace{1.8cm}%
+}
 
 \begin{document}
 
-\noindent\hspace{-1cm}%
-\colorbox{backBlue}{%
-\parbox{\dimexpr\paperwidth-2cm-2\fboxsep\relax}{%
-\centering
-\vspace{1.1cm}
-{\color{white}\bfseries\fontsize{28}{30}\selectfont ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))\par}
-((* if position *))\vspace{0.2cm}{\color{white}\Large ((( position | latex_escape )))\par}((* endif *))
-\vspace{1.1cm}
-}}%
+\thispagestyle{empty}
+\section*{Start}
 
-\vspace{2.8em}
+\headernophoto{
+  \bgupper{backBlue}{headerfontboxfont}{\bfseries\Huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}
+}{
+  ((* if position *))\bg{backBlue}{headerfontboxfont}{\large ((( position | latex_escape )))}((* endif *))
+}
+
+\subsection*{}
+\vspace{4em}
 
 \setlength{\columnsep}{0.5cm}
 \columnratio{0.2}[0.79]
