@@ -801,15 +801,29 @@ export default function App() {
                   />
                 </section>
                 {cvReview ? (
-                  <CvReview
-                    canonical={cvReview.canonical}
-                    job={cvReview.job}
-                    templateId={cvReview.templateId}
-                    docType={cvReview.docType}
-                    outputLanguage={cvReview.outputLanguage}
-                    model={selectedModel}
-                    lmTimeout={lmTimeout}
-                  />
+                  <div className="create-review-layout">
+                    <div className="create-review-pane create-review-pane-preview">
+                      <PdfPreviewCard
+                        pdfUrl={pdfPreviewUrl}
+                        isGenerating={isPdfGenerating}
+                        isDownloading={isPdfDownloading}
+                        onUpdate={handleUpdatePdfPreview}
+                        onDownload={handleDownloadPdf}
+                      />
+                    </div>
+                    <div className="create-review-pane create-review-pane-editor">
+                      <CvReview
+                        canonical={cvReview.canonical}
+                        job={cvReview.job}
+                        templateId={cvReview.templateId}
+                        docType={cvReview.docType}
+                        outputLanguage={cvReview.outputLanguage}
+                        model={selectedModel}
+                        lmTimeout={lmTimeout}
+                        onPreviewPayloadChange={setCvPreviewPayload}
+                      />
+                    </div>
+                  </div>
                 ) : (
                   <div className="panel-card panel-empty">
                     <p className="helper">Load a profile or create one to start editing.</p>
