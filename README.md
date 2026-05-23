@@ -43,7 +43,7 @@ This repo is a public prototype. It focuses on local development and assumes you
 
 <img width="773" height="300" alt="image" src="https://github.com/user-attachments/assets/a395d6b4-0a6a-41b5-bbea-c524f00addb4" />
 
-- Convenience functions like Saving your CV profile for future modifications
+- Convenience features like saving your CV profile for future edits
 
 <img width="789" height="259" alt="image" src="https://github.com/user-attachments/assets/4a0b54b8-2d51-43af-bb94-de709637174a" />
 
