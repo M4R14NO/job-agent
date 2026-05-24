@@ -1,0 +1,10 @@
+((# Supported variables: summary, section_labels.summary? #))
+((* if summary *))
+((* set _st = (section_labels or {}).get('summary', 'Summary') *))
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{((( _st | latex_escape )))}\\
+\\
+\hspace{-2.2em}\begin{minipage}[t]{\leftcolwidth}
+{\footnotesize\raggedright ((( summary | latex_escape )))}
+\end{minipage}
+\vspace{3em}
+((* endif *))

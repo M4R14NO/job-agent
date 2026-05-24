@@ -6,19 +6,19 @@
 \hspace{-2.2em}\begin{tabular}{@{}p{0.48\leftcolwidth}p{0.48\leftcolwidth}@{}}
 ((* for hobby in hobbies *))
 \begin{minipage}[t]{\linewidth}\centering
-((* if hobby.icon == "bicycle" *))\hobbyicon{\color{iconcolour}\faBicycle}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\iconsize}{2em}
-((* elif hobby.icon == "book" *))\hobbyicon{\color{iconcolour}\faBook}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\iconsize}{2em}
-((* elif hobby.icon == "soccer" *))\hobbyicon{\color{iconcolour}\faSoccerBallO}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\iconsize}{2em}
-((* elif hobby.icon == "music" *))\hobbyicon{\color{iconcolour}\faMusic}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\iconsize}{2em}
-((* elif hobby.icon == "code" *))\hobbyicon{\color{iconcolour}\faCode}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\iconsize}{2em}
-((* elif hobby.icon == "camera" *))\hobbyicon{\color{iconcolour}\faCamera}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\iconsize}{2em}
-((* elif hobby.icon == "plane" or hobby.icon == "travel" *))\hobbyicon{\color{iconcolour}\faPlane}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\iconsize}{2em}
-((* elif hobby.icon == "heart" *))\hobbyicon{\color{iconcolour}\faHeart}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\iconsize}{2em}
-((* elif hobby.icon == "tree" or hobby.icon == "hiking" *))\hobbyicon{\color{iconcolour}\faTree}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\iconsize}{2em}
-((* elif hobby.icon == "gamepad" *))\hobbyicon{\color{iconcolour}\faGamepad}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\iconsize}{2em}
-((* elif hobby.icon == "paint" *))\hobbyicon{\color{iconcolour}\faPaintBrush}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\iconsize}{2em}
-((* elif hobby.icon == "cooking" *))\hobbyicon{\color{iconcolour}\faCutlery}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\iconsize}{2em}
-((* elif hobby.icon == "running" *))\hobbyicon{\color{iconcolour}\faHeartbeat}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\iconsize}{2em}
+((* if hobby.icon == "bicycle" *))\hobbyicon{\textcolor{backBlue}{\large\faBicycle}}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\normalsize}{2em}
+((* elif hobby.icon == "book" *))\hobbyicon{\textcolor{backBlue}{\large\faBook}}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\normalsize}{2em}
+((* elif hobby.icon == "soccer" *))\hobbyicon{\textcolor{backBlue}{\large\faSoccerBallO}}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\normalsize}{2em}
+((* elif hobby.icon == "music" *))\hobbyicon{\textcolor{backBlue}{\large\faMusic}}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\normalsize}{2em}
+((* elif hobby.icon == "code" *))\hobbyicon{\textcolor{backBlue}{\large\faCode}}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\normalsize}{2em}
+((* elif hobby.icon == "camera" *))\hobbyicon{\textcolor{backBlue}{\large\faCamera}}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\normalsize}{2em}
+((* elif hobby.icon == "plane" or hobby.icon == "travel" *))\hobbyicon{\textcolor{backBlue}{\large\faPlane}}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\normalsize}{2em}
+((* elif hobby.icon == "heart" *))\hobbyicon{\textcolor{backBlue}{\large\faHeart}}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\normalsize}{2em}
+((* elif hobby.icon == "tree" or hobby.icon == "hiking" *))\hobbyicon{\textcolor{backBlue}{\large\faTree}}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\normalsize}{2em}
+((* elif hobby.icon == "gamepad" *))\hobbyicon{\textcolor{backBlue}{\large\faGamepad}}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\normalsize}{2em}
+((* elif hobby.icon == "paint" *))\hobbyicon{\textcolor{backBlue}{\large\faPaintBrush}}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\normalsize}{2em}
+((* elif hobby.icon == "cooking" *))\hobbyicon{\textcolor{backBlue}{\large\faCutlery}}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\normalsize}{2em}
+((* elif hobby.icon == "running" *))\hobbyicon{\textcolor{backBlue}{\large\faHeartbeat}}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\normalsize}{2em}
 ((* else *)){\small \parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}
 ((* endif *))
 \end{minipage}

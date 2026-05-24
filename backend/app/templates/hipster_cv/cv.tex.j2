@@ -13,10 +13,10 @@
 
 \newlength{\rightcolwidth}
 \newlength{\leftcolwidth}
-\setlength{\leftcolwidth}{0.2\textwidth}
-\setlength{\rightcolwidth}{0.8\textwidth}
-\newcolumntype{H}{>{\raggedleft\arraybackslash\hspace{0pt}}p{0.09\textwidth}}
-\newcolumntype{R}{>{\raggedright\arraybackslash\hspace{0pt}}p{0.77\textwidth}}
+\setlength{\leftcolwidth}{0.24\textwidth}
+\setlength{\rightcolwidth}{0.76\textwidth}
+\newcolumntype{H}{>{\raggedleft\arraybackslash\hspace{0pt}}p{0.11\linewidth}}
+\newcolumntype{R}{>{\raggedright\arraybackslash\hspace{0pt}}p{0.81\linewidth}}
 \setlength{\emergencystretch}{1em}
 
 \author{Job Agent}
@@ -51,7 +51,7 @@
 \vspace{4em}
 
 \setlength{\columnsep}{0.5cm}
-\columnratio{0.2}[0.79]
+\columnratio{0.24}[0.75]
 \begin{paracol}{2}
 \hbadness5000
 \paracolbackgroundoptions
@@ -62,7 +62,7 @@
 
 ((* if email or mobile or homepage or github or linkedin *))
 \hspace{-0.7cm}\bgUpper{backBlue}{white}{Contact}\\
-\hspace{-2.9em}{\footnotesize\begin{tabular}{@{}l p{0.142\textwidth}@{}}
+\hspace{-3.2em}{\footnotesize\begin{tabular}{@{}l >{\raggedright\arraybackslash}p{0.84\leftcolwidth}@{}}
 ((* if email *))
 \hipstercontactline{\icon{\faEnvelopeO}{backBlue}{}}{\href{mailto:((( email | latex_escape )))}{\nolinkurl{((( email | latex_escape )))}}}
 ((* endif *))
@@ -82,6 +82,8 @@
 \vspace{4em}
 ((* endif *))
 
+((* if sections.summary *))((* include "sections/summary_sidebar.tex.j2" *))((* endif *))
+
 ((* if sections.languages *))((* include "sections/languages.tex.j2" *))((* endif *))
 ((* if sections.interests *))((* include "sections/interests.tex.j2" *))((* endif *))
 ((* if strengths and strengths | length > 0 *))((* include "sections/strengths.tex.j2" *))((* endif *))
@@ -93,7 +95,6 @@
 
 \small
 \sloppy
-((* if sections.summary *))((* include "sections/summary.tex.j2" *))((* endif *))
 ((* if sections.experience *))((* include "sections/experience.tex.j2" *))((* endif *))
 ((* if sections.education *))((* include "sections/education.tex.j2" *))((* endif *))
 ((* if sections.skills *))((* include "sections/skills.tex.j2" *))((* endif *))
