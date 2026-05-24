@@ -15,8 +15,9 @@
 \newlength{\leftcolwidth}
 \setlength{\leftcolwidth}{0.2\textwidth}
 \setlength{\rightcolwidth}{0.8\textwidth}
-\newcolumntype{H}{>{\raggedleft\arraybackslash}p{0.14\textwidth}}
-\newcolumntype{R}{p{0.72\textwidth}}
+\newcolumntype{H}{>{\raggedleft\arraybackslash\hspace{0pt}}p{0.09\textwidth}}
+\newcolumntype{R}{>{\raggedright\arraybackslash\hspace{0pt}}p{0.77\textwidth}}
+\setlength{\emergencystretch}{1em}
 
 \author{Job Agent}
 \date{\today}
@@ -61,23 +62,23 @@
 
 ((* if email or mobile or homepage or github or linkedin *))
 \hspace{-0.7cm}\bgUpper{backBlue}{white}{Contact}\\
-\hspace{-2.2em}\begin{tabular}{l l}
+\hspace{-2.9em}{\footnotesize\begin{tabular}{@{}l p{0.142\textwidth}@{}}
 ((* if email *))
-\hipstercontactline{\icon{\faEnvelopeO}{backBlue}{}}{\href{mailto:((( email | latex_escape )))}{((( email | latex_escape )))} }
+\hipstercontactline{\icon{\faEnvelopeO}{backBlue}{}}{\href{mailto:((( email | latex_escape )))}{\nolinkurl{((( email | latex_escape )))}}}
 ((* endif *))
 ((* if mobile *))
 \hipstercontactline{\icon{\faPhone}{backBlue}{}}{((( mobile | latex_escape )))}
 ((* endif *))
 ((* if linkedin *))
-\hipstercontactline{\icon{\faLinkedinSquare}{backBlue}{}}{\href{((( linkedin | latex_escape )))}{((( linkedin | latex_escape )))} }
+\hipstercontactline{\icon{\faLinkedinSquare}{backBlue}{}}{\href{((( linkedin | latex_escape )))}{\nolinkurl{((( linkedin | latex_escape )))}}}
 ((* endif *))
 ((* if github *))
-\hipstercontactline{\icon{\faGithub}{backBlue}{}}{\href{((( github | latex_escape )))}{((( github | latex_escape )))} }
+\hipstercontactline{\icon{\faGithub}{backBlue}{}}{\href{((( github | latex_escape )))}{\nolinkurl{((( github | latex_escape )))}}}
 ((* endif *))
 ((* if homepage *))
-\hipstercontactline{\icon{\faGlobe}{backBlue}{}}{\href{((( homepage | latex_escape )))}{((( homepage | latex_escape )))} }
+\hipstercontactline{\icon{\faGlobe}{backBlue}{}}{\href{((( homepage | latex_escape )))}{\nolinkurl{((( homepage | latex_escape )))}}}
 ((* endif *))
-\end{tabular}
+\end{tabular}}
 \vspace{4em}
 ((* endif *))
 
@@ -85,11 +86,13 @@
 ((* if sections.interests *))((* include "sections/interests.tex.j2" *))((* endif *))
 ((* if strengths and strengths | length > 0 *))((* include "sections/strengths.tex.j2" *))((* endif *))
 ((* if hobbies and hobbies | length > 0 *))((* include "sections/hobbies.tex.j2" *))((* endif *))
+\vspace*{\fill}\null
 }
 
 \switchcolumn
 
 \small
+\sloppy
 ((* if sections.summary *))((* include "sections/summary.tex.j2" *))((* endif *))
 ((* if sections.experience *))((* include "sections/experience.tex.j2" *))((* endif *))
 ((* if sections.education *))((* include "sections/education.tex.j2" *))((* endif *))
