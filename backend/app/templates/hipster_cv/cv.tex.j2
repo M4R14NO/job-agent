@@ -70,19 +70,19 @@
 \hspace{-0.7cm}\bgUpper{backBlue}{white}{Contact}\\
 \hspace{-2.2em}{\footnotesize\begin{tabular}{@{}>{\raggedleft\arraybackslash\hspace{0pt}}p{0.11\leftcolwidth}@{\hspace{0.35em}}>{\raggedright\arraybackslash\hspace{0pt}}p{0.84\leftcolwidth}@{}}
 ((* if email *))
-\hipstercontactline{\hipstermarker{@}}{\href{mailto:((( email | latex_escape )))}{\nolinkurl{((( email | latex_escape )))}}}
+\hipstercontactline{\faEnvelope}{\href{mailto:((( email | latex_escape )))}{\nolinkurl{((( email | latex_escape )))}}}
 ((* endif *))
 ((* if mobile *))
-\hipstercontactline{\hipstermarker{tel}}{((( mobile | latex_escape )))}
+\hipstercontactline{\faPhone}{((( mobile | latex_escape )))}
 ((* endif *))
 ((* if linkedin *))
-\hipstercontactline{\hipstermarker{in}}{\href{((( linkedin | latex_escape )))}{\nolinkurl{((( linkedin | latex_escape )))}}}
+\hipstercontactline{\faLinkedin}{\href{((( linkedin | latex_escape )))}{\nolinkurl{((( linkedin | latex_escape )))}}}
 ((* endif *))
 ((* if github *))
-\hipstercontactline{\hipstermarker{gh}}{\href{((( github | latex_escape )))}{\nolinkurl{((( github | latex_escape )))}}}
+\hipstercontactline{\faGithub}{\href{((( github | latex_escape )))}{\nolinkurl{((( github | latex_escape )))}}}
 ((* endif *))
 ((* if homepage *))
-\hipstercontactline{\hipstermarker{web}}{\href{((( homepage | latex_escape )))}{\nolinkurl{((( homepage | latex_escape )))}}}
+\hipstercontactline{\faGlobe}{\href{((( homepage | latex_escape )))}{\nolinkurl{((( homepage | latex_escape )))}}}
 ((* endif *))
 \end{tabular}}
 \hipstersidebarspace
