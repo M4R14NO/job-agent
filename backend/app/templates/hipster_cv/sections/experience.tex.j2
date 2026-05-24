@@ -4,9 +4,9 @@
 \section*{((( _st | upper | latex_escape )))}
 \vspace{0.6em}
 \hspace{-0.3cm}
-\begin{tabular}{r| p{0.72\textwidth}}
+\begin{tabular}{H|R}
 ((* for entry in experience *))
-{\scriptsize ((( entry.period | default('') | latex_escape )))}
+{\scriptsize ((* if entry.period *))((( entry.period | latex_escape )))((* else *))\phantom{0000}((* endif *))}
 &
 {\textbf{\normalsize ((( entry.title | default('') | latex_escape )))}
 ((* if entry.title and entry.organization *)) -- ((* endif *))

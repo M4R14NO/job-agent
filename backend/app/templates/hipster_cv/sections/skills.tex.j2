@@ -1,14 +1,12 @@
 ((# Supported variables: skills[], section_labels.skills? #))
 ((* if skills and skills | length > 0 *))
 ((* set _st = (section_labels or {}).get('skills', 'Skills') *))
-\hspace{-0.7cm}\bgUpper{backBlue}{white}{((( _st | latex_escape )))}\\
-\begin{minipage}[t]{\leftcolwidth}
-\vspace{0.2em}
-\hspace{-1.1em}\begin{tabular}{l | l}
+\section*{((( _st | upper | latex_escape )))}
+\vspace{0.6em}
+\hspace{-0.3cm}\begin{tabular}{H|R}
 ((* for skill in skills *))
-	{\bfseries ((( skill.category | latex_escape )))} & ((( skill.list | latex_escape )))\\[4pt]
+{\scriptsize\phantom{0000}} & \textbf{((( skill.category | latex_escape )))}\\[-2pt]
+& ((( skill.list | latex_escape )))\\[0.6em]
 ((* endfor *))
 \end{tabular}
-\vspace{4em}
-\end{minipage}
 ((* endif *))
