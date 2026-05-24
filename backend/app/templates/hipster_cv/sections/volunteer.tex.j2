@@ -10,8 +10,8 @@
 {\bfseries ((( entry.role | default('') | latex_escape ))) }
 ((* if entry.organization *)) -- \textit{((( entry.organization | latex_escape )))}((* endif *))
 ((* if entry.location *))\\[0pt]{\scshape\small ((( entry.location | latex_escape ))) }((* endif *))
-((* if entry.details and entry.details | length > 0 *))\\[-2pt]
-{\color{black!75}\small
+((* if entry.details and entry.details | length > 0 *))\\[-6pt]
+{\color{black!75}\small\vspace{-0.35em}
 \begin{itemize}[leftmargin=1.2em, itemsep=0.16em, topsep=0em, partopsep=0em, parsep=0em]
 ((* for item in entry.details *))
 \item ((( item | latex_escape )))

@@ -5,10 +5,10 @@
 \vspace{0.6em}
 \hspace{-0.3cm}\begin{tabular}{H|R}
 ((* for entry in education *))
-{\scriptsize ((* if entry.period *))((( entry.period | latex_escape )))((* else *))\phantom{0000}((* endif *))} & {\parbox[t]{\linewidth}{\textbf{\normalsize ((( entry.degree | latex_escape )))}\\[0pt]\textsc{\small ((( entry.institution | latex_escape ))) $\cdot$ {((( entry.location | latex_escape )))}}
-((* if entry.details and entry.details | length > 0 *))\\[-2pt]
-{\color{black!75}\small
-\begin{itemize}[leftmargin=1.2em, itemsep=0.2em, topsep=0em, partopsep=0em, parsep=0em]
+{\scriptsize ((* if entry.period *))((( entry.period | latex_escape )))((* else *))\phantom{0000}((* endif *))} & {\parbox[t]{\linewidth}{\textbf{\normalsize ((( entry.degree | latex_escape )))}\\[0pt]\textsc{\small ((( entry.institution | latex_escape ))) $\cdot$ {((( entry.location | latex_escape )))} }
+((* if entry.details and entry.details | length > 0 *))\\[-6pt]
+{\color{black!75}\small\vspace{-0.35em}
+\begin{itemize}[leftmargin=1.2em, itemsep=0.16em, topsep=0em, partopsep=0em, parsep=0em]
 ((* for item in entry.details *))
 \item ((( item | latex_escape )))
 ((* endfor *))
