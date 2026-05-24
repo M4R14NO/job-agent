@@ -5,11 +5,11 @@
 \vspace{0.6em}
 \hspace{-0.3cm}\begin{tabular}{H|R}
 ((* for item in writings *))
-{\scriptsize ((* if item.period *))((( item.period | latex_escape )))((* else *))\phantom{0000}((* endif *))} & {\parbox[t]{\linewidth}{\textbf{((( item.title | latex_escape )))}\\[-2pt]\textsc{((( item.role | default('') | latex_escape )))} $\cdot$ ((( item.location | default('') | latex_escape )))}}
+{\scriptsize ((* if item.period *))((( item.period | latex_escape )))((* else *))\phantom{0000}((* endif *))} & {\parbox[t]{\linewidth}{\textbf{((( item.title | latex_escape )))}\\[0pt]\textsc{((( item.role | default('') | latex_escape )))} $\cdot$ ((( item.location | default('') | latex_escape )))
 ((* if item.details and item.details | length > 0 *))\\[-2pt]
-& {\color{black!75}\small ((( item.details | join(' ') | latex_escape ))) }\\[0.6em]
-((* else *))\\[0.6em]
+{\color{black!75}\small ((( item.details | join(' ') | latex_escape ))) }
 ((* endif *))
+}}\\[0.6em]
 ((* endfor *))
 \end{tabular}
 ((* endif *))

@@ -25,13 +25,18 @@
 \pagestyle{empty}
 
 \newcommand{\hipstercontactline}[2]{#1 & #2\\[1pt]}
-\newcommand{\headernophoto}[2]{%
+\newcommand{\hipstermarker}[1]{\raisebox{0.35ex}{\color{backBlue}\bfseries\footnotesize #1}}
+\newcommand{\headermaybephoto}[3]{%
 \begin{tikzpicture}[remember picture,overlay]
 \node[rectangle, fill=backBlue, anchor=north, minimum width=\paperwidth, minimum height=5cm](header) at (current page.north){};
-\node[anchor=west](photo) at ($(header.west)+(3.4cm,-2.45cm)$) {};
-\draw[draw=black!60, line width=0.6pt] (photo) circle (1.35cm);
-\node[anchor=center, font=\scriptsize\color{black!70}] at (photo) {No Photo};
-\node[anchor=east](name) at ($(header.east)+(-1.8cm,-1.95cm)$) {#1};
+\node[anchor=west](photo) at ($(header.west)+(3.5cm,-2.45cm)$) {};
+\draw[draw=black!60, line width=0.6pt] (photo) circle (2cm);
+((* if photo and photo | length > 0 *))
+\draw[path picture={\node[anchor=center] at (path picture bounding box.center){\includegraphics[height=4.3cm]{((( photo | latex_escape )))}};}] (photo) circle (2cm);
+((* else *))
+\node[anchor=center, font=\small\color{black!70}] at (photo) {No Photo};
+((* endif *))
+\node[anchor=east](name) at ($(header.east)+(-2.0cm,-1.95cm)$) {#1};
 \node[anchor=north east] at (name.south east) {#2};
 \end{tikzpicture}%
 \vspace{1.8cm}%
@@ -42,11 +47,11 @@
 \thispagestyle{empty}
 \section*{Start}
 
-\headernophoto{
+\headermaybephoto{
   \bgupper{backBlue}{headerfontboxfont}{\bfseries\Huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}
 }{
   ((* if position *))\bg{backBlue}{headerfontboxfont}{\large ((( position | latex_escape )))}((* endif *))
-}
+}{((* if photo *))((( photo | latex_escape )))((* endif *))}
 
 \subsection*{}
 \vspace{4em}
@@ -63,21 +68,21 @@
 
 ((* if email or mobile or homepage or github or linkedin *))
 \hspace{-0.7cm}\bgUpper{backBlue}{white}{Contact}\\
-\hspace{-2.6em}{\footnotesize\begin{tabular}{@{}l >{\raggedright\arraybackslash}p{0.90\leftcolwidth}@{}}
+\hspace{-2.2em}{\footnotesize\begin{tabular}{@{}>{\raggedleft\arraybackslash\hspace{0pt}}p{0.11\leftcolwidth}@{\hspace{0.35em}}>{\raggedright\arraybackslash\hspace{0pt}}p{0.84\leftcolwidth}@{}}
 ((* if email *))
-\hipstercontactline{\icon{\faEnvelopeO}{backBlue}{}}{\href{mailto:((( email | latex_escape )))}{\nolinkurl{((( email | latex_escape )))}}}
+\hipstercontactline{\hipstermarker{@}}{\href{mailto:((( email | latex_escape )))}{\nolinkurl{((( email | latex_escape )))}}}
 ((* endif *))
 ((* if mobile *))
-\hipstercontactline{\icon{\faPhone}{backBlue}{}}{((( mobile | latex_escape )))}
+\hipstercontactline{\hipstermarker{tel}}{((( mobile | latex_escape )))}
 ((* endif *))
 ((* if linkedin *))
-\hipstercontactline{\icon{\faLinkedinSquare}{backBlue}{}}{\href{((( linkedin | latex_escape )))}{\nolinkurl{((( linkedin | latex_escape )))}}}
+\hipstercontactline{\hipstermarker{in}}{\href{((( linkedin | latex_escape )))}{\nolinkurl{((( linkedin | latex_escape )))}}}
 ((* endif *))
 ((* if github *))
-\hipstercontactline{\icon{\faGithub}{backBlue}{}}{\href{((( github | latex_escape )))}{\nolinkurl{((( github | latex_escape )))}}}
+\hipstercontactline{\hipstermarker{gh}}{\href{((( github | latex_escape )))}{\nolinkurl{((( github | latex_escape )))}}}
 ((* endif *))
 ((* if homepage *))
-\hipstercontactline{\icon{\faGlobe}{backBlue}{}}{\href{((( homepage | latex_escape )))}{\nolinkurl{((( homepage | latex_escape )))}}}
+\hipstercontactline{\hipstermarker{web}}{\href{((( homepage | latex_escape )))}{\nolinkurl{((( homepage | latex_escape )))}}}
 ((* endif *))
 \end{tabular}}
 \hipstersidebarspace

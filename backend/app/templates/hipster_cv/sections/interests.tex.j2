@@ -3,7 +3,7 @@
 ((* set _st = (section_labels or {}).get('interests', 'Interests') *))
 \hspace{-0.7cm}\bgUpper{backBlue}{white}{((( _st | latex_escape )))}\\
 \\
-\hspace{-2.2em}\begin{minipage}[t]{\leftcolwidth}
+\hspace{-1.8em}\begin{minipage}[t]{0.90\leftcolwidth}
 \begin{itemize}[leftmargin=1.0em, itemsep=0.25em, topsep=0.2em]
 ((* for interest in interests *))
 \item ((( interest.name | default('') | latex_escape )))

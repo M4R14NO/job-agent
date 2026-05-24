@@ -9,18 +9,16 @@
 & {\parbox[t]{\linewidth}{
 {\bfseries ((( entry.role | default('') | latex_escape ))) }
 ((* if entry.organization *)) -- \textit{((( entry.organization | latex_escape )))}((* endif *))
-((* if entry.location *))\\[-2pt]{\scshape\small ((( entry.location | latex_escape ))) }((* endif *))
-}}\\[-2pt]
-((* if entry.details and entry.details | length > 0 *))
-& {\color{black!75}\small
-\begin{itemize}[leftmargin=1.2em, itemsep=0.16em, topsep=0.2em]
+((* if entry.location *))\\[0pt]{\scshape\small ((( entry.location | latex_escape ))) }((* endif *))
+((* if entry.details and entry.details | length > 0 *))\\[-2pt]
+{\color{black!75}\small
+\begin{itemize}[leftmargin=1.2em, itemsep=0.16em, topsep=0em, partopsep=0em, parsep=0em]
 ((* for item in entry.details *))
 \item ((( item | latex_escape )))
 ((* endfor *))
-\end{itemize}}\\[0.55em]
-((* else *))
-& \\[0.55em]
+\end{itemize}}
 ((* endif *))
+}}\\[0.55em]
 ((* endfor *))
 \end{tabular}
 ((* endif *))
