@@ -3,7 +3,7 @@
 ((* set _st = (section_labels or {}).get('strengths', 'Strengths') *))
 \hspace{-0.7cm}\bgUpper{backBlue}{white}{((( _st | latex_escape )))} \\
 \\
-\hspace{-1em}\begin{minipage}[t]{\leftcolwidth}
+\hspace{\hipstersidebarcontentoffset}\begin{minipage}[t]{\hipstersidebarcontentwidth}
 ((* for strength in strengths *))
 \bg{cvBlue4}{iconcolour}{((( strength | latex_escape )))}\hspace{0.1cm}
 ((* endfor *))

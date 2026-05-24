@@ -3,10 +3,12 @@
 ((* set _st = (section_labels or {}).get('languages', 'Languages') *))
 \hspace{-0.7cm}\bgUpper{backBlue}{white}{((( _st | latex_escape )))}\\
 \\
-\hspace{-2.2em}\begin{tabular}{l | l}
+\hspace{\hipstersidebarcontentoffset}\begin{minipage}[t]{\hipstersidebarcontentwidth}
+\begin{tabular}{@{}l | l@{}}
 ((* for language in languages *))
 	{\bfseries ((( language.name | default('') | latex_escape )))} & ((( language.level | default('') | latex_escape )))\\[1pt]
 ((* endfor *))
 \end{tabular}
+\end{minipage}
 \hipstersidebarspace
 ((* endif *))

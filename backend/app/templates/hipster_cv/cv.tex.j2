@@ -19,6 +19,8 @@
 \newcolumntype{R}{>{\raggedright\arraybackslash\hspace{0pt}}p{0.81\linewidth}}
 \setlength{\emergencystretch}{1em}
 \newcommand{\hipstersidebarspace}{\par\vspace{3.5em}}
+\newcommand{\hipstersidebarcontentoffset}{-1.8em}
+\newcommand{\hipstersidebarcontentwidth}{0.90\leftcolwidth}
 
 \author{Job Agent}
 \date{\today}
@@ -68,7 +70,8 @@
 
 ((* if email or mobile or homepage or github or linkedin *))
 \hspace{-0.7cm}\bgUpper{backBlue}{white}{Contact}\\
-\hspace{-2.2em}{\footnotesize\begin{tabular}{@{}>{\raggedleft\arraybackslash\hspace{0pt}}p{0.11\leftcolwidth}@{\hspace{0.35em}}>{\raggedright\arraybackslash\hspace{0pt}}p{0.84\leftcolwidth}@{}}
+\hspace{\hipstersidebarcontentoffset}\begin{minipage}[t]{\hipstersidebarcontentwidth}
+{\footnotesize\begin{tabular}{@{}>{\raggedright\arraybackslash\hspace{0pt}}p{0.09\linewidth}@{\hspace{0.2em}}>{\raggedright\arraybackslash\hspace{0pt}}p{0.86\linewidth}@{}}
 ((* if email *))
 \hipstercontactline{\faEnvelope}{\href{mailto:((( email | latex_escape )))}{\nolinkurl{((( email | latex_escape )))}}}
 ((* endif *))
@@ -85,6 +88,7 @@
 \hipstercontactline{\faGlobe}{\href{((( homepage | latex_escape )))}{\nolinkurl{((( homepage | latex_escape )))}}}
 ((* endif *))
 \end{tabular}}
+\end{minipage}
 \hipstersidebarspace
 ((* endif *))
 
