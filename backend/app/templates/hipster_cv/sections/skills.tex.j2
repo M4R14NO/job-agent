@@ -3,10 +3,9 @@
 ((* set _st = (section_labels or {}).get('skills', 'Skills') *))
 \section*{((( _st | upper | latex_escape )))}
 \vspace{0.6em}
-\hspace{-0.3cm}\begin{tabular}{H|R}
+\hspace{-0.3cm}\begin{tabular}{>{\raggedleft\arraybackslash\hspace{0pt}}m{0.16\linewidth}|>{\raggedright\arraybackslash\hspace{0pt}}m{0.76\linewidth}}
 ((* for skill in skills *))
-{\scriptsize\phantom{0000}} & \textbf{((( skill.category | latex_escape )))}\\[-2pt]
-& ((( skill.list | latex_escape )))\\[0.6em]
+{\scriptsize\bfseries\textcolor{((* if loop.index is odd *))black!88((* else *))black!68((* endif *))}{((( skill.category | latex_escape )))}} & ((( skill.list | latex_escape )))\\[0.9em]
 ((* endfor *))
 \end{tabular}
 ((* endif *))
