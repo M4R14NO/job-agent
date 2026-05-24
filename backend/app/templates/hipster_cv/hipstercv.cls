@@ -83,8 +83,8 @@
 \newcommand{\paracolbackgroundoptions}{
 \backgroundcolor{c[0](4pt,4pt)(0.5\columnsep,4pt)}[rgb]{0.9,0.9,0.9}
 \backgroundcolor{c[1](0.5\columnsep,4pt)(4pt,4pt)}[rgb]{1,1,1}
-\backgroundcolor{C[0](10000pt,10000pt)(0.5\columnsep,10000pt)}[rgb]{0.9,0.9,0.9}
-\backgroundcolor{C[1](0.5\columnsep,10000pt)(10000pt,10000pt)}[rgb]{1,1,1}
+\backgroundcolor{C[0](4pt,4pt)(0.5\columnsep,4pt)}[rgb]{0.9,0.9,0.9}
+\backgroundcolor{C[1](0.5\columnsep,4pt)(4pt,4pt)}[rgb]{1,1,1}
 }
 \newcommand{\setasidefontcolour}{
 \color{black}
