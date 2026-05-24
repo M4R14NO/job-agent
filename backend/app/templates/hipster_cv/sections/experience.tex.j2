@@ -7,12 +7,13 @@
 \begin{tabular}{H|R}
 ((* for entry in experience *))
 {\scriptsize ((* if entry.period *))((( entry.period | latex_escape )))((* else *))\phantom{0000}((* endif *))}
-&
-{\textbf{\normalsize ((( entry.title | default('') | latex_escape )))}
+& {\parbox[t]{\linewidth}{
+{\bfseries\normalsize ((( entry.title | default('') | latex_escape ))) }
 ((* if entry.title and entry.organization *)) -- ((* endif *))
-((* if entry.organization *))\textit{((( entry.organization | latex_escape )))}((* endif *))}\\[-3pt]
-& {\textsc{\small ((( entry.organization | default('') | latex_escape )))}
-((* if entry.location *))\;\textbar\;((( entry.location | latex_escape )))((* endif *))}\\[-2pt]
+((* if entry.organization *))\textit{((( entry.organization | latex_escape )))}((* endif *))\\[-2pt]
+{\scshape\small ((( entry.organization | default('') | latex_escape )))
+((* if entry.location *))\;\textbar\;((( entry.location | latex_escape )))((* endif *))}
+}}\\[-2pt]
 ((* if entry.details and entry.details | length > 0 *))
 & {\color{black!75}\small
 \begin{itemize}[leftmargin=1.2em, itemsep=0.16em, topsep=0.2em]

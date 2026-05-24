@@ -3,7 +3,8 @@
 ((* set _st = (section_labels or {}).get('hobbies', 'Hobbies') *))
 \hspace{-0.7cm}\bgUpper{backBlue}{white}{((( _st | latex_escape )))} \\
 \\
-\hspace{-2.2em}\begin{tabular}{@{}p{0.48\leftcolwidth}p{0.48\leftcolwidth}@{}}
+\begin{center}
+\begin{tabular}{@{}p{0.43\leftcolwidth}@{\hspace{0.6em}}p{0.43\leftcolwidth}@{}}
 ((* for hobby in hobbies *))
 \begin{minipage}[t]{\linewidth}\centering
 ((* if hobby.icon == "bicycle" *))\hobbyicon{\textcolor{backBlue}{\large\faBicycle}}{\parbox[t]{0.95\linewidth}{\centering ((( hobby.name | latex_escape )))}}{cvBlue4}{\normalsize}{2em}
@@ -26,5 +27,6 @@
 ((* endfor *))
 ((* if hobbies | length % 2 == 1 *))\\((* endif *))
 \end{tabular}
-\vspace{3em}
+\end{center}
+\hipstersidebarspace
 ((* endif *))

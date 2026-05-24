@@ -18,6 +18,7 @@
 \newcolumntype{H}{>{\raggedleft\arraybackslash\hspace{0pt}}p{0.11\linewidth}}
 \newcolumntype{R}{>{\raggedright\arraybackslash\hspace{0pt}}p{0.81\linewidth}}
 \setlength{\emergencystretch}{1em}
+\newcommand{\hipstersidebarspace}{\par\vspace{3.5em}}
 
 \author{Job Agent}
 \date{\today}
@@ -62,7 +63,7 @@
 
 ((* if email or mobile or homepage or github or linkedin *))
 \hspace{-0.7cm}\bgUpper{backBlue}{white}{Contact}\\
-\hspace{-3.2em}{\footnotesize\begin{tabular}{@{}l >{\raggedright\arraybackslash}p{0.84\leftcolwidth}@{}}
+\hspace{-2.6em}{\footnotesize\begin{tabular}{@{}l >{\raggedright\arraybackslash}p{0.90\leftcolwidth}@{}}
 ((* if email *))
 \hipstercontactline{\icon{\faEnvelopeO}{backBlue}{}}{\href{mailto:((( email | latex_escape )))}{\nolinkurl{((( email | latex_escape )))}}}
 ((* endif *))
@@ -79,7 +80,7 @@
 \hipstercontactline{\icon{\faGlobe}{backBlue}{}}{\href{((( homepage | latex_escape )))}{\nolinkurl{((( homepage | latex_escape )))}}}
 ((* endif *))
 \end{tabular}}
-\vspace{4em}
+\hipstersidebarspace
 ((* endif *))
 
 ((* if sections.summary *))((* include "sections/summary_sidebar.tex.j2" *))((* endif *))
