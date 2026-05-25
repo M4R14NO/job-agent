@@ -16,6 +16,7 @@ const SIDEBAR_WIDTH_KEY = "job-agent:sidebar-width";
 const SIDEBAR_MIN_WIDTH = 360;
 const SIDEBAR_MAX_WIDTH = 720;
 const PDF_PREVIEW_DEBOUNCE_MS = 5000;
+const CANONICAL_SCHEMA_VERSION = "v1";
 
 const EMPTY_APPLICATION_CONTEXT = {
   company: "",
@@ -55,6 +56,7 @@ export default function App() {
   const [cvProfiles, setCvProfiles] = useState([]);
   const [profilesError, setProfilesError] = useState("");
   const [profilesLoading, setProfilesLoading] = useState(false);
+  const [isCreatingProfileEntry, setIsCreatingProfileEntry] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState("");
   const [draftProfileId, setDraftProfileId] = useState("");
   const [isDraftProfileActive, setIsDraftProfileActive] = useState(false);
@@ -724,25 +726,56 @@ export default function App() {
     return safe || `profile-${Date.now()}`;
   };
 
-  const buildDraftProfileId = () => `draft-${Date.now()}`;
+  const handleCreateNewEntry = async ({ profileName } = {}) => {
+    const nextProfileId = sanitizeProfileId(profileName || "");
+    if (!nextProfileId) {
+      throw new Error("Profile name is required.");
+    }
+    const duplicate = cvProfiles.some((profile) => profile.profile_id === nextProfileId);
+    if (duplicate) {
+      throw new Error("Profile name already exists. Please choose another one.");
+    }
 
-  const handleCreateNewEntry = () => {
-    const nextDraftId = buildDraftProfileId();
-    setNewProfileId("");
-    setDraftProfileId(nextDraftId);
-    setIsDraftProfileActive(true);
-    setSelectedProfileId(nextDraftId);
-    setResumeText("");
-    setApplicationContext({ ...EMPTY_APPLICATION_CONTEXT });
-    setLoadedProfileSnapshot({
-      profile_id: nextDraftId,
-      revision: 0,
-      updated_at: null,
-      raw_resume_text: "",
-      ...EMPTY_APPLICATION_CONTEXT
-    });
+    setIsCreatingProfileEntry(true);
     setCvEntryError("");
     clearCreatePreviewState();
+    try {
+      const payload = {
+        schema_version: CANONICAL_SCHEMA_VERSION,
+        profile_id: nextProfileId,
+        revision: 0,
+        template_id: cvTemplateId || "awesomecv",
+        company: applicationContext.company || null,
+        application_status: applicationContext.application_status || null,
+        application_date: applicationContext.application_date || null,
+        job_title: applicationContext.job_title || null,
+        job_description: applicationContext.job_description || null,
+        job_url: applicationContext.job_url || null,
+        data: {},
+        section_order: [],
+        sidebar_section_order: [],
+        main_section_order: [],
+        audit: {
+          raw_resume_text: resumeText || ""
+        }
+      };
+      const saved = await saveCvProfile(nextProfileId, payload);
+      upsertCvProfileInList(saved);
+      setSelectedProfileId(saved.profile_id);
+      setIsDraftProfileActive(false);
+      setDraftProfileId("");
+      setNewProfileId(saved.profile_id);
+      setCvTemplateId(saved.template_id || "awesomecv");
+      setApplicationContext(contextFromProfile(saved));
+      setLoadedProfileSnapshot(contextSnapshotFromProfile(saved));
+      setCvEntryError(`Created profile '${saved.profile_id}'.`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to create profile";
+      setCvEntryError(message);
+      throw new Error(message);
+    } finally {
+      setIsCreatingProfileEntry(false);
+    }
   };
 
   const upsertCvProfileInList = (profile) => {
@@ -766,6 +799,7 @@ export default function App() {
       setIsDraftProfileActive(false);
       setDraftProfileId("");
       setSelectedProfileId(canonical.profile_id || profileId);
+      setNewProfileId(canonical.profile_id || profileId);
       setCvTemplateId(nextTemplateId);
       setResumeText(canonical.audit?.raw_resume_text || "");
       setApplicationContext(contextFromProfile(canonical));
@@ -1375,6 +1409,8 @@ export default function App() {
                     onRefreshProfiles={loadProfiles}
                     onUpdateProfileCvText={handleUpdateApplicationProfileData}
                     onRemapProfileCvText={handleRemapProfileCvText}
+                    onCreateNewEntry={handleCreateNewEntry}
+                    isCreatingProfileEntry={isCreatingProfileEntry}
                     isLoadingProfile={isLoadingProfile}
                     isUpdatingProfileCvText={isUpdatingProfileCvText}
                     isRemappingProfileCvText={isRemappingProfileCvText}
@@ -1389,8 +1425,6 @@ export default function App() {
                     resumeText={resumeText}
                     onResumeTextChange={setResumeText}
                     newProfileId={newProfileId}
-                    onNewProfileIdChange={setNewProfileId}
-                    onCreateNewEntry={handleCreateNewEntry}
                     draftProfileId={draftProfileId}
                     isDraftProfileActive={isDraftProfileActive}
                   />

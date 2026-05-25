@@ -184,6 +184,8 @@ export default function CvEntry({
   onRefreshProfiles,
   onUpdateProfileCvText,
   onRemapProfileCvText,
+  onCreateNewEntry,
+  isCreatingProfileEntry,
   isLoadingProfile,
   isUpdatingProfileCvText,
   isRemappingProfileCvText,
@@ -198,8 +200,6 @@ export default function CvEntry({
   resumeText,
   onResumeTextChange,
   newProfileId,
-  onNewProfileIdChange,
-  onCreateNewEntry,
   draftProfileId,
   isDraftProfileActive
 }) {
@@ -210,6 +210,9 @@ export default function CvEntry({
   const [sortDirection, setSortDirection] = useState("desc");
   const [remapDialogOpen, setRemapDialogOpen] = useState(false);
   const [remapProfileName, setRemapProfileName] = useState("");
+  const [newEntryDialogOpen, setNewEntryDialogOpen] = useState(false);
+  const [newEntryProfileName, setNewEntryProfileName] = useState("");
+  const [newEntryError, setNewEntryError] = useState("");
 
   const profilesWithDraft = useMemo(() => {
     if (!isDraftProfileActive || !draftProfileId) return cvProfiles;
@@ -291,6 +294,28 @@ export default function CvEntry({
     }
   };
 
+  const openNewEntryDialog = () => {
+    const defaultName = String(newProfileId || "").trim();
+    setNewEntryProfileName(defaultName);
+    setNewEntryError("");
+    setNewEntryDialogOpen(true);
+  };
+
+  const handleConfirmCreateEntry = async () => {
+    const requestedName = newEntryProfileName.trim();
+    if (!requestedName) {
+      setNewEntryError("Profile name is required.");
+      return;
+    }
+    try {
+      await onCreateNewEntry?.({ profileName: requestedName });
+      setNewEntryDialogOpen(false);
+      setNewEntryError("");
+    } catch (err) {
+      setNewEntryError(err instanceof Error ? err.message : "Failed to create profile");
+    }
+  };
+
   const openRemapDialog = () => {
     const suggested = hasPersistedSelectedProfile
       ? nextProfileVersionName(selectedProfile?.profile_id || selectedProfileId || "profile")
@@ -337,7 +362,7 @@ export default function CvEntry({
           <button
             type="button"
             className="secondary"
-            onClick={onCreateNewEntry}
+            onClick={openNewEntryDialog}
           >
             Create new entry
           </button>
@@ -457,9 +482,9 @@ export default function CvEntry({
                 <input
                   id="newProfileName"
                   type="text"
-                  placeholder="e.g. data-scientist-2026"
-                  value={newProfileId}
-                  onChange={(e) => onNewProfileIdChange(e.target.value)}
+                  value={newProfileId || selectedProfileId || ""}
+                  readOnly
+                  aria-readonly="true"
                 />
               </div>
               <div>
@@ -484,26 +509,6 @@ export default function CvEntry({
                   <option value="german">German</option>
                 </select>
               </div>
-            </div>
-
-            <div className="cv-entry-actions cv-entry-actions-top">
-              <button
-                type="button"
-                className="secondary cv-action-update"
-                onClick={onUpdateProfileCvText}
-                disabled={isUpdatingProfileCvText || isLoadingProfile || !hasPersistedSelectedProfile}
-              >
-                {isUpdatingProfileCvText ? "Updating profile..." : "Update application profile data"}
-              </button>
-              <button
-                type="button"
-                className="secondary cv-action-remap"
-                title="Use your CV text together with the optional job title and job description to create a tailored CV profile."
-                onClick={openRemapDialog}
-                disabled={isRemappingProfileCvText || isLoadingProfile || !resumeText.trim()}
-              >
-                {isRemappingProfileCvText ? "Tailoring profile..." : "Tailor CV using CV text + job description"}
-              </button>
             </div>
 
             <div className="field-grid">
@@ -590,6 +595,28 @@ export default function CvEntry({
             </div>
           </div>
 
+          <div className="cv-entry-cta-wrap">
+            <div className="cv-entry-actions">
+              <button
+                type="button"
+                className="secondary cv-action-update"
+                onClick={onUpdateProfileCvText}
+                disabled={isUpdatingProfileCvText || isLoadingProfile || !hasPersistedSelectedProfile}
+              >
+                {isUpdatingProfileCvText ? "Updating profile..." : "Update application profile data"}
+              </button>
+              <button
+                type="button"
+                className="secondary cv-action-remap"
+                title="Use your CV text together with the optional job title and job description to create a tailored CV profile."
+                onClick={openRemapDialog}
+                disabled={isRemappingProfileCvText || isLoadingProfile || !resumeText.trim()}
+              >
+                {isRemappingProfileCvText ? "Tailoring profile..." : "Tailor CV using CV text + job description"}
+              </button>
+            </div>
+          </div>
+
           {isRemappingProfileCvText && remapProgress ? (
             <div className="refinement-progress">
               <div className="results-loading">
@@ -648,6 +675,44 @@ export default function CvEntry({
                 disabled={!remapProfileName.trim()}
               >
                 {remapTargetExists ? "Overwrite existing profile" : "Create new profile version"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {newEntryDialogOpen && (
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="new-entry-title">
+          <div className="modal-backdrop" onClick={() => setNewEntryDialogOpen(false)} />
+          <div className="modal-card">
+            <div className="modal-header">
+              <h2 id="new-entry-title">Create new profile</h2>
+            </div>
+            <p className="helper">Choose a profile name to create and save a new entry immediately.</p>
+            <div>
+              <label htmlFor="newEntryProfileName" className="label">Profile name</label>
+              <input
+                id="newEntryProfileName"
+                type="text"
+                value={newEntryProfileName}
+                onChange={(e) => {
+                  setNewEntryProfileName(e.target.value);
+                  if (newEntryError) setNewEntryError("");
+                }}
+              />
+            </div>
+            {newEntryError ? <p className="error">{newEntryError}</p> : null}
+            <div className="inline-actions">
+              <button type="button" className="secondary" onClick={() => setNewEntryDialogOpen(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="secondary cv-action-remap"
+                onClick={handleConfirmCreateEntry}
+                disabled={isCreatingProfileEntry || !newEntryProfileName.trim()}
+              >
+                {isCreatingProfileEntry ? "Creating..." : "Create and save profile"}
               </button>
             </div>
           </div>

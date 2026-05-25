@@ -538,6 +538,13 @@ textarea:focus-visible {
   align-items: center;
 }
 
+.cv-entry-cta-wrap {
+  border: 1px solid #c7d2fe;
+  border-radius: 14px;
+  padding: 12px;
+  background: linear-gradient(180deg, #eef2ff 0%, #e0ecff 100%);
+}
+
 .cv-entry-actions .helper {
   width: 100%;
 }
