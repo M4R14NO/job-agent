@@ -10,17 +10,27 @@
 \usepackage[left=1cm,right=1cm,bottom=1cm,top=0cm,a4paper]{geometry}
 \usepackage[english]{babel}
 \usepackage{enumitem}
+\usepackage{eso-pic}
 
 \newlength{\rightcolwidth}
 \newlength{\leftcolwidth}
 \setlength{\leftcolwidth}{0.24\textwidth}
 \setlength{\rightcolwidth}{0.76\textwidth}
+\setlength{\columnsep}{0.5cm}
 \newcolumntype{H}{>{\raggedleft\arraybackslash\hspace{0pt}}p{0.11\linewidth}}
 \newcolumntype{R}{>{\raggedright\arraybackslash\hspace{0pt}}p{0.81\linewidth}}
 \setlength{\emergencystretch}{1em}
 \newcommand{\hipstersidebarspace}{\par\vspace{3.5em}}
 \newcommand{\hipstersidebarcontentoffset}{-1.8em}
 \newcommand{\hipstersidebarcontentwidth}{0.90\leftcolwidth}
+\newlength{\hipstersidebarbgwidth}
+\setlength{\hipstersidebarbgwidth}{\dimexpr1cm+\leftcolwidth+0.5\columnsep\relax}
+
+\AddToShipoutPictureBG{%
+	\AtPageLowerLeft{%
+		\color[rgb]{0.9,0.9,0.9}\rule{\hipstersidebarbgwidth}{\paperheight}%
+	}%
+}
 
 \author{Job Agent}
 \date{\today}
@@ -66,11 +76,10 @@
 \subsection*{}
 \vspace{0.08em}
 
-\setlength{\columnsep}{0.5cm}
 \columnratio{0.24}[0.75]
 \begin{paracol}{2}
 \hbadness5000
-\paracolbackgroundoptions
+% Sidebar gray background is painted at page level for consistent full-page coverage.
 
 \small
 {\setasidefontcolour
