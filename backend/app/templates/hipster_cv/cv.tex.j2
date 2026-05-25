@@ -50,11 +50,13 @@
 \thispagestyle{empty}
 
 ((* set photo_path = (photo | default("", true) | trim) *))
+((* set show_profile = (show_profile_image | default(true)) *))
 
 \noindent\hspace*{-1cm}%
 \colorbox{backBlue}{%
 \parbox[c][5.0cm][c]{\dimexpr\paperwidth-2\fboxsep\relax}{%
 \hspace*{0.35cm}%
+((* if show_profile *))
 \begin{minipage}[c]{0.24\linewidth}
 \centering
 ((* if photo_path *))
@@ -75,6 +77,13 @@
 {\color{white}\bfseries\Huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}\\[0.62em]
 ((* if position *)){\color{white}\bfseries\Large ((( position | latex_escape )))}((* endif *))
 \end{minipage}
+((* else *))
+\begin{minipage}[c]{0.95\linewidth}
+\centering
+{\color{white}\bfseries\Huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}\\[0.62em]
+((* if position *)){\color{white}\bfseries\Large ((( position | latex_escape )))}((* endif *))
+\end{minipage}
+((* endif *))
 }%
 }
 \vspace{0em}

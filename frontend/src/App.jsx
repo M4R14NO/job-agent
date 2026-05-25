@@ -45,7 +45,9 @@ const EMPTY_APPLICATION_CONTEXT = {
   job_title: "",
   job_description: "",
   job_url: "",
-  profile_image: ""
+  profile_image: "",
+  theme_color: "",
+  show_profile_image: true
 };
 
 export default function App() {
@@ -149,7 +151,8 @@ export default function App() {
   const resolveTemplateThemeColor = (templateId) => {
     const key = templateId || "awesomecv";
     const fallback = DEFAULT_TEMPLATE_THEME_COLORS[key] || DEFAULT_TEMPLATE_THEME_COLORS.awesomecv;
-    return normalizeHexColor(cvThemeColors[key], fallback);
+    const fromProfile = normalizeHexColor(applicationContext?.theme_color, null);
+    return fromProfile || normalizeHexColor(cvThemeColors[key], fallback);
   };
 
   const applyTemplateThemeToPayload = (payload, templateId) => {
@@ -158,12 +161,23 @@ export default function App() {
     if (!payload || !color) return payload;
     const hex = color.replace("#", "");
     if (key === "hipstercv") {
-      return { ...payload, accent_color_hex: hex };
+      return {
+        ...payload,
+        accent_color_hex: hex,
+        show_profile_image: applicationContext?.show_profile_image !== false
+      };
     }
     if (key === "awesomecv") {
-      return { ...payload, awesome_color_hex: hex };
+      return {
+        ...payload,
+        awesome_color_hex: hex,
+        show_profile_image: applicationContext?.show_profile_image !== false
+      };
     }
-    return payload;
+    return {
+      ...payload,
+      show_profile_image: applicationContext?.show_profile_image !== false
+    };
   };
 
   const defaultRerankTopN = (() => {
@@ -306,7 +320,9 @@ export default function App() {
     job_title: profile?.job_title || "",
     job_description: profile?.job_description || "",
     job_url: profile?.job_url || "",
-    profile_image: profile?.data?.profile_image || ""
+    profile_image: profile?.data?.profile_image || "",
+    theme_color: profile?.theme_color || "",
+    show_profile_image: profile?.show_profile_image !== false
   });
 
   const contextSnapshotFromProfile = (profile) => ({
@@ -330,7 +346,9 @@ export default function App() {
       job_title: loadedProfileSnapshot.job_title || "",
       job_description: loadedProfileSnapshot.job_description || "",
       job_url: loadedProfileSnapshot.job_url || "",
-      profile_image: loadedProfileSnapshot.profile_image || ""
+      profile_image: loadedProfileSnapshot.profile_image || "",
+      theme_color: loadedProfileSnapshot.theme_color || "",
+      show_profile_image: loadedProfileSnapshot.show_profile_image !== false
     };
 
     const config = [
@@ -341,7 +359,9 @@ export default function App() {
       ["job_title", "Job title"],
       ["job_description", "Job description"],
       ["job_url", "Job URL"],
-      ["profile_image", "Profile image"]
+      ["profile_image", "Profile image"],
+      ["theme_color", "Theme color"],
+      ["show_profile_image", "Show profile image"]
     ];
 
     const topLevelChanges = config
@@ -375,6 +395,7 @@ export default function App() {
     const structureSignature = JSON.stringify({
       sections: cvPreviewPayload.sections || {},
       photo: cvPreviewPayload.photo || null,
+      show_profile_image: applicationContext?.show_profile_image !== false,
       theme_color: activeThemeColor,
       section_order: cvPreviewPayload.section_order || [],
       sidebar_section_order: cvPreviewPayload.sidebar_section_order || [],
@@ -416,7 +437,7 @@ export default function App() {
         pdfPreviewTimerRef.current = null;
       }
     };
-  }, [cvPreviewPayload, cvReview?.templateId, cvThemeColors]);
+  }, [cvPreviewPayload, cvReview?.templateId, cvThemeColors, applicationContext?.show_profile_image, applicationContext?.theme_color]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -665,7 +686,9 @@ export default function App() {
       job_title: job?.title || "",
       job_description: job?.description || "",
       job_url: job?.job_url || "",
-      profile_image: ""
+      profile_image: "",
+      theme_color: "",
+      show_profile_image: true
     });
     setSelectedJob(job);
     setActiveJobAction("cv");
@@ -811,6 +834,8 @@ export default function App() {
         job_title: applicationContext.job_title || null,
         job_description: applicationContext.job_description || null,
         job_url: applicationContext.job_url || null,
+        theme_color: normalizeHexColor(applicationContext.theme_color, null),
+        show_profile_image: applicationContext.show_profile_image !== false,
         data: mergeProfileImageIntoData({}, applicationContext.profile_image),
         section_order: [],
         sidebar_section_order: [],
@@ -941,7 +966,9 @@ export default function App() {
         "job_title",
         "job_description",
         "job_url",
-        "profile_image"
+        "profile_image",
+        "theme_color",
+        "show_profile_image"
       ]);
       const combinedTopLevelChanges = [
         ...(cvDraftState.diff?.topLevelChanges || []).filter((change) => !contextKeys.has(change.key)),
@@ -1033,6 +1060,8 @@ export default function App() {
         job_title: applicationContext.job_title || null,
         job_description: applicationContext.job_description || null,
         job_url: applicationContext.job_url || null,
+        theme_color: normalizeHexColor(applicationContext.theme_color, null),
+        show_profile_image: applicationContext.show_profile_image !== false,
         audit: {
           ...(existing.audit || {}),
           ...(basePayload.audit || {}),
@@ -1074,6 +1103,8 @@ export default function App() {
         job_title: applicationContext.job_title || null,
         job_description: applicationContext.job_description || null,
         job_url: applicationContext.job_url || null,
+        theme_color: normalizeHexColor(applicationContext.theme_color, null),
+        show_profile_image: applicationContext.show_profile_image !== false,
         audit: {
           ...(existing.audit || {}),
           raw_resume_text: resumeText
@@ -1164,6 +1195,8 @@ export default function App() {
         job_title: effectiveJobTitle || null,
         job_description: effectiveJobDescription || null,
         job_url: effectiveJobUrl || null,
+        theme_color: normalizeHexColor(applicationContext.theme_color || existing?.theme_color, null),
+        show_profile_image: applicationContext.show_profile_image !== false,
         data: mergeProfileImageIntoData(parsed.data, applicationContext.profile_image || existing?.data?.profile_image),
         section_order: existing?.section_order || parsed.section_order || [],
         sidebar_section_order: existing?.sidebar_section_order || parsed.sidebar_section_order || [],
@@ -1212,6 +1245,17 @@ export default function App() {
     setCvThemeColors((prev) => ({
       ...prev,
       [activeTemplateId]: normalized
+    }));
+    setApplicationContext((prev) => ({
+      ...prev,
+      theme_color: normalized
+    }));
+  };
+
+  const handleShowProfileImageChange = (nextValue) => {
+    setApplicationContext((prev) => ({
+      ...prev,
+      show_profile_image: Boolean(nextValue)
     }));
   };
 
@@ -1402,6 +1446,8 @@ export default function App() {
                 onTemplateIdChange={handleTemplateIdChange}
                 themeColor={resolveTemplateThemeColor(cvReview.templateId || "awesomecv")}
                 onThemeColorChange={handleThemeColorChange}
+                showProfileImage={applicationContext.show_profile_image !== false}
+                onShowProfileImageChange={handleShowProfileImageChange}
                 onUpdate={handleUpdatePdfPreview}
                 onDownload={handleDownloadPdf}
               />
@@ -1605,6 +1651,8 @@ export default function App() {
                       onTemplateIdChange={handleTemplateIdChange}
                       themeColor={resolveTemplateThemeColor(cvReview?.templateId || cvTemplateId || "awesomecv")}
                       onThemeColorChange={handleThemeColorChange}
+                      showProfileImage={applicationContext.show_profile_image !== false}
+                      onShowProfileImageChange={handleShowProfileImageChange}
                       onUpdate={handleUpdatePdfPreview}
                       onDownload={handleDownloadPdf}
                       disabled={!cvReview}

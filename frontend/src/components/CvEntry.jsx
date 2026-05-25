@@ -637,9 +637,11 @@ export default function CvEntry({
                   <option value="german">German</option>
                 </select>
               </div>
-              {cvTemplateId === "hipstercv" ? (
+              {cvTemplateId === "hipstercv" || cvTemplateId === "awesomecv" ? (
                 <div>
-                  <label htmlFor="ctxProfileImage" className="label">Profile image (top bar)</label>
+                  <label htmlFor="ctxProfileImage" className="label">
+                    {cvTemplateId === "hipstercv" ? "Profile image (top bar)" : "Profile image"}
+                  </label>
                   <input
                     id="ctxProfileImage"
                     type="file"

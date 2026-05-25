@@ -389,7 +389,9 @@ const PROFILE_META_DIFF_CONFIG = [
   { key: "application_date", label: "Application date" },
   { key: "job_title", label: "Job title" },
   { key: "job_description", label: "Job description" },
-  { key: "job_url", label: "Job URL" }
+  { key: "job_url", label: "Job URL" },
+  { key: "theme_color", label: "Theme color" },
+  { key: "show_profile_image", label: "Show profile image" }
 ];
 
 const SECTION_DIFF_CONFIG = [
@@ -864,6 +866,8 @@ export default function CvReview({
     job_title: applicationContext?.job_title || canonical?.job_title || null,
     job_description: applicationContext?.job_description || canonical?.job_description || null,
     job_url: applicationContext?.job_url || canonical?.job_url || null,
+    theme_color: applicationContext?.theme_color || canonical?.theme_color || null,
+    show_profile_image: applicationContext?.show_profile_image !== false,
     data: formData,
     section_order: currentSectionOrder,
     sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,

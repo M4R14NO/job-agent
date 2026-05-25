@@ -60,7 +60,7 @@
 %\tComment any of the lines below if they are not required
 %-------------------------------------------------------------------------------
 % Available options: circle|rectangle,edge/noedge,left/right
-((* if photo *))
+((* if show_profile_image | default(true) and photo *))
 \photo{((( photo )))}
 ((* endif *))
 \name{((( first_name | latex_escape )))}{((( last_name | latex_escape )))}

@@ -225,6 +225,8 @@ class CvCanonicalProfile(BaseModel):
     job_title: str | None = None
     job_description: str | None = None
     job_url: str | None = None
+    theme_color: str | None = None
+    show_profile_image: bool | None = None
     section_order: list[str] | None = None
     sidebar_section_order: list[str] | None = None
     main_section_order: list[str] | None = None

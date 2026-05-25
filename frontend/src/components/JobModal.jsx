@@ -119,6 +119,8 @@ export function PdfPreviewCard({
   onTemplateIdChange,
   themeColor,
   onThemeColorChange,
+  showProfileImage,
+  onShowProfileImageChange,
   onUpdate,
   onDownload,
   disabled = false,
@@ -150,73 +152,94 @@ export function PdfPreviewCard({
           <h2>Rendered CV</h2>
         </div>
         <div className="pdf-preview-actions">
-          {onTemplateIdChange && (
-            <div className="pdf-preview-template-control">
-              <span className="pdf-preview-template-label">Switch template</span>
-              <select
-                id="pdf-preview-template-select"
-                className="pdf-preview-template-select"
-                value={templateId}
-                onChange={(event) => onTemplateIdChange(event.target.value)}
-                aria-label="Template"
-                disabled={disabled}
-                onKeyDown={handleTemplateKeyDown}
-              >
-                <option value="awesomecv">AwesomeCV</option>
-                <option value="hipstercv">HipsterCV</option>
-              </select>
-            </div>
-          )}
-          {onThemeColorChange && (
-            <div className="pdf-preview-template-control">
-              <span className="pdf-preview-template-label">Theme color</span>
-              <input
-                id="pdf-preview-theme-color"
-                className="pdf-preview-theme-color-input"
-                type="color"
-                value={themeColor || "#496E8C"}
-                onChange={(event) => onThemeColorChange(event.target.value)}
-                disabled={disabled || isGenerating}
-                aria-label="Theme color"
-              />
-              <div className="pdf-preview-color-palette" role="group" aria-label="Theme color presets">
-                {colorPresets.map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    className={`pdf-preview-color-swatch${(themeColor || "").toUpperCase() === preset.toUpperCase() ? " is-active" : ""}`}
-                    style={{ backgroundColor: preset }}
-                    onClick={() => onThemeColorChange(preset)}
-                    disabled={disabled || isGenerating}
-                    aria-label={`Set color ${preset}`}
-                    title={preset}
-                  />
-                ))}
+          <div className="pdf-preview-controls-row">
+            {onTemplateIdChange && (
+              <div className="pdf-preview-template-control">
+                <span className="pdf-preview-template-label">Switch template</span>
+                <select
+                  id="pdf-preview-template-select"
+                  className="pdf-preview-template-select"
+                  value={templateId}
+                  onChange={(event) => onTemplateIdChange(event.target.value)}
+                  aria-label="Template"
+                  disabled={disabled}
+                  onKeyDown={handleTemplateKeyDown}
+                >
+                  <option value="awesomecv">AwesomeCV</option>
+                  <option value="hipstercv">HipsterCV</option>
+                </select>
               </div>
-            </div>
-          )}
-          <button
-            id="pdf-update-preview-button"
-            type="button"
-            className="secondary btn-sm"
-            onClick={onUpdate}
-            disabled={disabled || isGenerating}
-            onKeyDown={handleUpdateKeyDown}
-          >
-            <RefreshCw size={14} />
-            {isGenerating ? "Rendering…" : "Update preview"}
-          </button>
-          <button
-            id="pdf-download-button"
-            type="button"
-            className="primary btn-sm pdf-download-button"
-            onClick={onDownload}
-            disabled={disabled || isDownloading || !pdfUrl}
-            title={disabled ? disabledReason : (!pdfUrl ? "Render a preview first" : "Download the current PDF")}
-          >
-            <Download size={14} />
-            {isDownloading ? "Downloading…" : "Download PDF"}
-          </button>
+            )}
+            {onThemeColorChange && (
+              <div className="pdf-preview-template-control">
+                <span className="pdf-preview-template-label">Theme color</span>
+                <input
+                  id="pdf-preview-theme-color"
+                  className="pdf-preview-theme-color-input"
+                  type="color"
+                  value={themeColor || "#496E8C"}
+                  onChange={(event) => onThemeColorChange(event.target.value)}
+                  disabled={disabled || isGenerating}
+                  aria-label="Theme color"
+                />
+                <div className="pdf-preview-color-palette" role="group" aria-label="Theme color presets">
+                  {colorPresets.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      className={`pdf-preview-color-swatch${(themeColor || "").toUpperCase() === preset.toUpperCase() ? " is-active" : ""}`}
+                      style={{ backgroundColor: preset }}
+                      onClick={() => onThemeColorChange(preset)}
+                      disabled={disabled || isGenerating}
+                      aria-label={`Set color ${preset}`}
+                      title={preset}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            {onShowProfileImageChange && (
+              <div className="pdf-preview-switch-control">
+                <span className="pdf-preview-template-label">Show image</span>
+                <button
+                  id="pdf-preview-show-image-toggle"
+                  type="button"
+                  className={`pdf-preview-switch${showProfileImage !== false ? " is-on" : ""}`}
+                  role="switch"
+                  aria-checked={showProfileImage !== false}
+                  aria-label="Show profile image"
+                  onClick={() => onShowProfileImageChange(showProfileImage === false)}
+                  disabled={disabled || isGenerating}
+                >
+                  <span className="pdf-preview-switch-thumb" />
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="pdf-preview-button-row">
+            <button
+              id="pdf-update-preview-button"
+              type="button"
+              className="secondary btn-sm"
+              onClick={onUpdate}
+              disabled={disabled || isGenerating}
+              onKeyDown={handleUpdateKeyDown}
+            >
+              <RefreshCw size={14} />
+              {isGenerating ? "Rendering…" : "Update preview"}
+            </button>
+            <button
+              id="pdf-download-button"
+              type="button"
+              className="primary btn-sm pdf-download-button"
+              onClick={onDownload}
+              disabled={disabled || isDownloading || !pdfUrl}
+              title={disabled ? disabledReason : (!pdfUrl ? "Render a preview first" : "Download the current PDF")}
+            >
+              <Download size={14} />
+              {isDownloading ? "Downloading…" : "Download PDF"}
+            </button>
+          </div>
         </div>
       </div>
       <div className="pdf-preview-container">
