@@ -218,6 +218,8 @@ class CvCanonicalProfile(BaseModel):
     updated_at: str | None = None
     data: CvCanonicalData
     section_order: list[str] | None = None
+    sidebar_section_order: list[str] | None = None
+    main_section_order: list[str] | None = None
     audit: CvAuditTrail | None = None
 
 
@@ -254,6 +256,8 @@ class CvRenderRequest(BaseModel):
     lm_timeout: float | None = None
     output_language: str | None = None
     section_order: list[str] | None = None
+    sidebar_section_order: list[str] | None = None
+    main_section_order: list[str] | None = None
     mapping_mode: str | None = None
 
 
@@ -275,6 +279,8 @@ class CvPreviewRequest(BaseModel):
     lm_timeout: float | None = None
     output_language: str | None = None
     section_order: list[str] | None = None
+    sidebar_section_order: list[str] | None = None
+    main_section_order: list[str] | None = None
     mapping_mode: str | None = None
 
 

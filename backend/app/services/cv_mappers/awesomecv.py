@@ -181,6 +181,8 @@ class CvAwesomePayload(BaseModel):
     writings: list[CvWriting] = Field(default_factory=list)
     sections: CvSections = Field(default_factory=CvSections)
     section_order: list[str] = Field(default_factory=list)
+    sidebar_section_order: list[str] = Field(default_factory=list)
+    main_section_order: list[str] = Field(default_factory=list)
     section_labels: dict[str, str] = Field(default_factory=dict)
 
     class Config:
@@ -446,6 +448,8 @@ def map_canonical_to_template_deterministic(
     *,
     canonical: CvCanonicalData,
     section_order: list[str] | None = None,
+    sidebar_section_order: list[str] | None = None,
+    main_section_order: list[str] | None = None,
 ) -> tuple[CvAwesomePayload, list[CvTemplateProvenance]]:
     fallback = _fallback_payload_from_canonical(canonical)
     homepage, github, linkedin = _derive_link_fields(canonical.links)
@@ -509,6 +513,8 @@ def map_canonical_to_template(
     lm_timeout: float | None = None,
     output_language: str | None = None,
     section_order: list[str] | None = None,
+    sidebar_section_order: list[str] | None = None,
+    main_section_order: list[str] | None = None,
 ) -> tuple[CvAwesomePayload, list[CvTemplateProvenance]]:
     prompt = _build_template_prompt(canonical, job_title, company, job_description, output_language=output_language)
     json_schema = CvTemplateMapping.model_json_schema()

@@ -1,5 +1,6 @@
 import json
 import os
+import pwd
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,9 +10,29 @@ from pydantic import ValidationError
 from ..schemas.search import CvCanonicalProfile
 
 
-DEFAULT_PROFILE_STORE = os.getenv("CV_PROFILE_STORE") or str(
-    Path(os.getenv("CV_TMP_DIR", "/tmp/job-agent-tex")) / "profiles" / "cv_profiles.json"
-)
+def _user_home() -> Path:
+    """Return the real home directory, bypassing the HOME env var."""
+    try:
+        return Path(pwd.getpwuid(os.getuid()).pw_dir)
+    except Exception:
+        return Path(os.path.expanduser("~"))
+
+
+def _default_profile_store() -> str:
+    if cv_store := os.getenv("CV_PROFILE_STORE"):
+        return cv_store
+    # CV_TMP_DIR is set in the sandbox startup command; use it when available
+    if cv_tmp := os.getenv("CV_TMP_DIR"):
+        return str(Path(cv_tmp) / "profiles" / "cv_profiles.json")
+    # Fallback: try the real user's home (works for non-sandbox runs)
+    home = _user_home()
+    if home != Path("/var/empty") and os.access(home, os.W_OK):
+        return str(home / ".job-agent" / "profiles" / "cv_profiles.json")
+    # Last resort: /tmp
+    return "/tmp/job-agent-tex/profiles/cv_profiles.json"
+
+
+DEFAULT_PROFILE_STORE = _default_profile_store()
 
 
 class RevisionMismatchError(Exception):

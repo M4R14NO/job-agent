@@ -47,6 +47,11 @@ const SECTION_LABELS = {
 
 const SECTION_KEYS = Object.keys(SECTION_LABELS);
 
+const HIPSTER_SIDEBAR_SECTION_KEYS = ["summary", "languages", "interests"];
+const HIPSTER_MAIN_SECTION_KEYS = ["experience", "education", "skills", "volunteer", "writing", "certificates", "honors"];
+const HIPSTER_DEFAULT_SIDEBAR_ORDER = ["summary", "languages", "interests"];
+const HIPSTER_DEFAULT_MAIN_ORDER = ["experience", "education", "skills", "volunteer", "writing", "certificates", "honors"];
+
 const PREVIEW_SECTION_TO_CANONICAL = {
   summary: "summary",
   skills: "skills",
@@ -188,6 +193,34 @@ const normalizeSectionOrder = (order) => {
   const base = Array.isArray(order) && order.length ? order : DEFAULT_SECTION_ORDER;
   const filtered = base.filter((section) => SECTION_KEYS.includes(section));
   return filtered.length ? filtered : DEFAULT_SECTION_ORDER;
+};
+
+const normalizeSubsetOrder = (order, allowedKeys, fallback) => {
+  const base = Array.isArray(order) ? order : [];
+  const filtered = base.filter((section) => allowedKeys.includes(section));
+  if (filtered.length) return filtered;
+  return fallback.filter((section) => allowedKeys.includes(section));
+};
+
+const normalizeHipsterSectionOrders = ({
+  sectionOrder,
+  sidebarSectionOrder,
+  mainSectionOrder
+}) => {
+  const normalizedSidebar = normalizeSubsetOrder(
+    sidebarSectionOrder,
+    HIPSTER_SIDEBAR_SECTION_KEYS,
+    normalizeSubsetOrder(sectionOrder, HIPSTER_SIDEBAR_SECTION_KEYS, HIPSTER_DEFAULT_SIDEBAR_ORDER)
+  );
+  const normalizedMain = normalizeSubsetOrder(
+    mainSectionOrder,
+    HIPSTER_MAIN_SECTION_KEYS,
+    normalizeSubsetOrder(sectionOrder, HIPSTER_MAIN_SECTION_KEYS, HIPSTER_DEFAULT_MAIN_ORDER)
+  );
+  return {
+    sidebar: normalizedSidebar,
+    main: normalizedMain
+  };
 };
 
 const bulletsToText = (bullets) => bullets.map((bullet) => bullet.text).join("\n");
@@ -345,12 +378,21 @@ export default function CvReview({
   outputLanguage,
   model,
   lmTimeout,
+  resumeText,
   onPreviewPayloadChange
 }) {
+  const isHipsterTemplate = templateId === "hipstercv";
   const [profileId, setProfileId] = useState(canonical?.profile_id || "default");
   const [revision, setRevision] = useState(canonical?.revision ?? 0);
   const [formData, setFormData] = useState(() => normalizeCanonical(canonical?.data));
   const [sectionOrder, setSectionOrder] = useState(() => normalizeSectionOrder(canonical?.section_order));
+  const [hipsterSectionOrders, setHipsterSectionOrders] = useState(() =>
+    normalizeHipsterSectionOrders({
+      sectionOrder: canonical?.section_order,
+      sidebarSectionOrder: canonical?.sidebar_section_order,
+      mainSectionOrder: canonical?.main_section_order
+    })
+  );
   const [sectionLabels, setSectionLabels] = useState(() => ({ ...SECTION_LABELS }));
   const [editingLabelKey, setEditingLabelKey] = useState(null);
   const [rewriteOpen, setRewriteOpen] = useState(false);
@@ -364,7 +406,9 @@ export default function CvReview({
   const [rewritePrompt, setRewritePrompt] = useState("");
   const [isRewriting, setIsRewriting] = useState(false);
   const [draggedSection, setDraggedSection] = useState(null);
+  const [draggedSectionZone, setDraggedSectionZone] = useState(null);
   const [dragOverKey, setDragOverKey] = useState(null);
+  const [dragOverZone, setDragOverZone] = useState(null);
   const [draggedItem, setDraggedItem] = useState(null); // { namespace, index }
   const [dragOverItem, setDragOverItem] = useState(null); // { namespace, index }
   const [openPreviewEditors, setOpenPreviewEditors] = useState({});
@@ -384,6 +428,9 @@ export default function CvReview({
   }));
 
   const schemaVersion = canonical?.schema_version || "v1";
+  const currentSectionOrder = isHipsterTemplate
+    ? [...hipsterSectionOrders.sidebar, ...hipsterSectionOrders.main]
+    : sectionOrder;
   const jobTitle = job?.title || "";
   const jobCompany = job?.company || "";
   const jobDescription = job?.description || "";
@@ -398,11 +445,17 @@ export default function CvReview({
     return (hash >>> 0).toString(16);
   };
 
-  const buildPreviewHashFrom = (nextFormData, nextSectionOrder = sectionOrder) =>
+  const buildPreviewHashFrom = (
+    nextFormData,
+    nextSectionOrder = currentSectionOrder,
+    nextHipsterSectionOrders = hipsterSectionOrders
+  ) =>
     hashString(
       JSON.stringify({
         data: nextFormData,
         section_order: nextSectionOrder,
+        sidebar_section_order: isHipsterTemplate ? nextHipsterSectionOrders.sidebar : undefined,
+        main_section_order: isHipsterTemplate ? nextHipsterSectionOrders.main : undefined,
         job_title: jobTitle,
         company: jobCompany,
         job_description: jobDescription,
@@ -413,11 +466,18 @@ export default function CvReview({
       })
     );
 
-  const buildPreviewHash = () => buildPreviewHashFrom(formData, sectionOrder);
+  const buildPreviewHash = () => buildPreviewHashFrom(formData, currentSectionOrder, hipsterSectionOrders);
 
   useEffect(() => {
     setFormData(normalizeCanonical(canonical?.data));
     setSectionOrder(normalizeSectionOrder(canonical?.section_order));
+    setHipsterSectionOrders(
+      normalizeHipsterSectionOrders({
+        sectionOrder: canonical?.section_order,
+        sidebarSectionOrder: canonical?.sidebar_section_order,
+        mainSectionOrder: canonical?.main_section_order
+      })
+    );
     setProfileId(canonical?.profile_id || "default");
     setRevision(canonical?.revision ?? 0);
     setPreviewPayload(null);
@@ -446,6 +506,7 @@ export default function CvReview({
     previewHash,
     formData,
     sectionOrder,
+    hipsterSectionOrders,
     jobTitle,
     jobCompany,
     jobDescription,
@@ -455,7 +516,7 @@ export default function CvReview({
     docType
   ]);
 
-  const enabledSections = useMemo(() => new Set(sectionOrder), [sectionOrder]);
+  const enabledSections = useMemo(() => new Set(currentSectionOrder), [currentSectionOrder]);
   const hiddenSectionKeys = useMemo(
     () => SECTION_KEYS.filter((key) => !enabledSections.has(key)),
     [enabledSections]
@@ -466,7 +527,34 @@ export default function CvReview({
     setPreviewHash("");
   };
 
+  const applyHipsterOrders = (nextSidebar, nextMain) => {
+    setHipsterSectionOrders({ sidebar: nextSidebar, main: nextMain });
+    setSectionOrder([...nextSidebar, ...nextMain]);
+  };
+
+  const getHipsterZoneForSection = (key) =>
+    HIPSTER_SIDEBAR_SECTION_KEYS.includes(key) ? "sidebar" : "main";
+
   const toggleSection = (key) => {
+    if (isHipsterTemplate) {
+      const zone = getHipsterZoneForSection(key);
+      const source = zone === "sidebar" ? hipsterSectionOrders.sidebar : hipsterSectionOrders.main;
+      const isEnabled = source.includes(key);
+      const nextSidebar = [...hipsterSectionOrders.sidebar];
+      const nextMain = [...hipsterSectionOrders.main];
+      if (isEnabled) {
+        if (zone === "sidebar") {
+          applyHipsterOrders(nextSidebar.filter((section) => section !== key), nextMain);
+        } else {
+          applyHipsterOrders(nextSidebar, nextMain.filter((section) => section !== key));
+        }
+      } else if (zone === "sidebar") {
+        applyHipsterOrders([...nextSidebar, key], nextMain);
+      } else {
+        applyHipsterOrders(nextSidebar, [...nextMain, key]);
+      }
+      return;
+    }
     setSectionOrder((current) => {
       if (current.includes(key)) {
         return current.filter((section) => section !== key);
@@ -476,6 +564,10 @@ export default function CvReview({
   };
 
   const toggleSectionInReview = (key) => {
+    if (isHipsterTemplate) {
+      toggleSection(key);
+      return;
+    }
     setSectionOrder((current) => {
       if (current.includes(key)) {
         return current.filter((section) => section !== key);
@@ -485,6 +577,7 @@ export default function CvReview({
   };
 
   const moveSection = (key, direction) => {
+    if (isHipsterTemplate) return;
     setSectionOrder((current) => {
       const index = current.indexOf(key);
       if (index < 0) return current;
@@ -496,14 +589,55 @@ export default function CvReview({
     });
   };
 
-  const handleDragStart = (event, key) => {
+  const handleDragStart = (event, key, zone = "single") => {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", key);
     setDraggedSection(key);
+    setDraggedSectionZone(zone);
     setDragOverKey(null);
+    setDragOverZone(null);
   };
 
-  const handleDrop = (targetKey) => {
+  const handleDrop = (targetKey, zone = "single") => {
+    if (isHipsterTemplate && zone === "single") {
+      setDraggedSection(null);
+      setDraggedSectionZone(null);
+      setDragOverKey(null);
+      setDragOverZone(null);
+      return;
+    }
+    if (isHipsterTemplate && zone !== "single") {
+      const source = zone === "sidebar" ? hipsterSectionOrders.sidebar : hipsterSectionOrders.main;
+      if (!draggedSection || draggedSectionZone !== zone || draggedSection === targetKey) {
+        setDraggedSection(null);
+        setDraggedSectionZone(null);
+        setDragOverKey(null);
+        setDragOverZone(null);
+        return;
+      }
+      const fromIndex = source.indexOf(draggedSection);
+      const toIndex = source.indexOf(targetKey);
+      if (fromIndex < 0 || toIndex < 0) {
+        setDraggedSection(null);
+        setDraggedSectionZone(null);
+        setDragOverKey(null);
+        setDragOverZone(null);
+        return;
+      }
+      const nextZoneOrder = [...source];
+      nextZoneOrder.splice(fromIndex, 1);
+      nextZoneOrder.splice(toIndex, 0, draggedSection);
+      if (zone === "sidebar") {
+        applyHipsterOrders(nextZoneOrder, hipsterSectionOrders.main);
+      } else {
+        applyHipsterOrders(hipsterSectionOrders.sidebar, nextZoneOrder);
+      }
+      setDraggedSection(null);
+      setDraggedSectionZone(null);
+      setDragOverKey(null);
+      setDragOverZone(null);
+      return;
+    }
     setSectionOrder((current) => {
       if (!draggedSection || draggedSection === targetKey) return current;
       const updated = [...current];
@@ -515,7 +649,9 @@ export default function CvReview({
       return updated;
     });
     setDraggedSection(null);
+    setDraggedSectionZone(null);
     setDragOverKey(null);
+    setDragOverZone(null);
   };
 
   // ── Item-level drag & drop ──────────────────────────────────────────────────
@@ -666,7 +802,7 @@ export default function CvReview({
     const isDragged = draggedSection === dragKey;
     const isDropTarget = dragOverKey === dragKey && draggedSection && draggedSection !== dragKey;
     const sectionDropDir = isDropTarget
-      ? (sectionOrder.indexOf(draggedSection) < sectionOrder.indexOf(dragKey) ? " is-drop-from-above" : " is-drop-from-below")
+      ? (currentSectionOrder.indexOf(draggedSection) < currentSectionOrder.indexOf(dragKey) ? " is-drop-from-above" : " is-drop-from-below")
       : "";
     return (
       <div
@@ -735,12 +871,17 @@ export default function CvReview({
     setError("");
     setIsSaving(true);
     try {
+      const existingAudit = canonical?.audit || {};
+      const rawResumeText = (resumeText && resumeText.trim()) ? resumeText : (existingAudit.raw_resume_text || null);
       const payload = {
         schema_version: schemaVersion,
         profile_id: profileId,
         revision,
         data: formData,
-        section_order: sectionOrder
+        section_order: currentSectionOrder,
+        sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
+        main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined,
+        audit: rawResumeText ? { ...existingAudit, raw_resume_text: rawResumeText } : (Object.keys(existingAudit).length ? existingAudit : undefined)
       };
       const saved = await saveCvProfile(profileId, payload);
       setRevision(saved.revision);
@@ -778,7 +919,9 @@ export default function CvReview({
         doc_type: docType,
         lm_timeout: lmTimeout,
         output_language: outputLanguage,
-        section_order: sectionOrder,
+        section_order: currentSectionOrder,
+        sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
+        main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined,
         mapping_mode: "deterministic"
       });
       setPreviewPayload(result.payload ? { ...result.payload, section_labels: sectionLabels } : null);
@@ -1507,22 +1650,24 @@ export default function CvReview({
 
   const renderSectionActions = (key, extraActions = null) => {
     const isEnabled = enabledSections.has(key);
-    const index = sectionOrder.indexOf(key);
-    const canMoveUp = isEnabled && index > 0;
-    const canMoveDown = isEnabled && index >= 0 && index < sectionOrder.length - 1;
+    const index = currentSectionOrder.indexOf(key);
+    const canMoveUp = !isHipsterTemplate && isEnabled && index > 0;
+    const canMoveDown = !isHipsterTemplate && isEnabled && index >= 0 && index < currentSectionOrder.length - 1;
     return (
       <div className="section-control-group">
         <div className="section-control-rail">
           <button
             type="button"
             className="drag-handle"
-            draggable={isEnabled}
+            draggable={isEnabled && !isHipsterTemplate}
             onDragStart={(event) => handleDragStart(event, key)}
             onDragEnd={() => {
               setDraggedSection(null);
+              setDraggedSectionZone(null);
               setDragOverKey(null);
+              setDragOverZone(null);
             }}
-            disabled={!isEnabled}
+            disabled={!isEnabled || isHipsterTemplate}
             aria-label="Drag to reorder"
           >
             <span aria-hidden="true">⋮⋮</span>
@@ -1533,7 +1678,7 @@ export default function CvReview({
               type="button"
               className="icon-button"
               onClick={() => moveSection(key, "up")}
-              disabled={!canMoveUp}
+              disabled={!canMoveUp || isHipsterTemplate}
               aria-label="Move up"
             >
               ↑
@@ -1542,7 +1687,7 @@ export default function CvReview({
               type="button"
               className="icon-button"
               onClick={() => moveSection(key, "down")}
-              disabled={!canMoveDown}
+              disabled={!canMoveDown || isHipsterTemplate}
               aria-label="Move down"
             >
               ↓
@@ -2277,6 +2422,104 @@ export default function CvReview({
     }
   };
 
+  const renderPreviewCard = (key, zone = "single") => {
+    const isCardDragged = draggedSection === key && draggedSectionZone === zone;
+    const isCardTarget =
+      dragOverKey === key &&
+      dragOverZone === zone &&
+      draggedSection &&
+      draggedSection !== key &&
+      draggedSectionZone === zone;
+    const activeOrder = zone === "sidebar"
+      ? hipsterSectionOrders.sidebar
+      : zone === "main"
+        ? hipsterSectionOrders.main
+        : currentSectionOrder;
+    const cardDropDir = isCardTarget
+      ? (activeOrder.indexOf(draggedSection) < activeOrder.indexOf(key) ? " is-drop-from-above" : " is-drop-from-below")
+      : "";
+
+    return (
+      <div
+        key={`preview-${zone}-${key}`}
+        id={`preview-card-${zone}-${key}`}
+        className={`preview-card${isCardDragged ? " is-dragged" : ""}${isCardTarget ? ` is-drop-target${cardDropDir}` : ""}`}
+        onDragOver={(e) => {
+          if (!draggedSection || draggedSectionZone !== zone) return;
+          e.preventDefault();
+          setDragOverKey(key);
+          setDragOverZone(zone);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) {
+            setDragOverKey(null);
+            setDragOverZone(null);
+          }
+        }}
+        onDrop={() => {
+          handleDrop(key, zone);
+          setDragOverKey(null);
+          setDragOverZone(null);
+        }}
+      >
+        <div className="preview-card-header">
+          <div className="preview-card-title">
+            <button
+              type="button"
+              className="drag-handle"
+              draggable
+              onDragStart={(e) => handleDragStart(e, key, zone)}
+              onDragEnd={() => {
+                setDraggedSection(null);
+                setDraggedSectionZone(null);
+                setDragOverKey(null);
+                setDragOverZone(null);
+              }}
+              aria-label="Drag to reorder section"
+            >
+              <span aria-hidden="true">⋮⋮</span>
+              <span aria-hidden="true">⋮⋮</span>
+            </button>
+            {editingLabelKey === key ? (
+              <input
+                className="section-label-input"
+                value={sectionLabels[key] ?? SECTION_LABELS[key]}
+                autoFocus
+                onChange={(e) => updateSectionLabel(key, e.target.value)}
+                onBlur={() => setEditingLabelKey(null)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingLabelKey(null); }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="section-label-btn"
+                title="Click to rename section"
+                onClick={() => setEditingLabelKey(key)}
+              >
+                {sectionLabels[key] ?? SECTION_LABELS[key]}
+                <Pencil size={12} className="section-label-edit-icon" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          <div className="inline-actions">
+            <button type="button" className="btn-danger" onClick={() => toggleSectionInReview(key)}>
+              <Trash2 size={13} /> Remove
+            </button>
+            <button type="button" className="secondary btn-sm" onClick={() => togglePreviewEditor(key)}>
+              {openPreviewEditors[key] ? <><X size={13} /> Close</> : <><Pencil size={13} /> Edit</>}
+            </button>
+          </div>
+        </div>
+        {renderPreviewSection(key) || <p className="helper">No entries.</p>}
+        {openPreviewEditors[key] && (
+          <div className="preview-editor">
+            {renderPreviewEditorSection(key)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="panel-card cv-editor">
       <div className="panel-header">
@@ -2335,76 +2578,27 @@ export default function CvReview({
           </div>
           {previewPayload ? (
             <>
-              <div className="preview-grid">
-                {sectionOrder
-                  .filter((key) => enabledSections.has(key))
-                  .map((key) => {
-                    const isCardDragged = draggedSection === key;
-                    const isCardTarget = dragOverKey === key && draggedSection && draggedSection !== key;
-                    const cardDropDir = isCardTarget
-                      ? (sectionOrder.indexOf(draggedSection) < sectionOrder.indexOf(key) ? " is-drop-from-above" : " is-drop-from-below")
-                      : "";
-                    return (
-                    <div
-                      key={`preview-${key}`}
-                      id={`preview-card-${key}`}
-                      className={`preview-card${isCardDragged ? " is-dragged" : ""}${isCardTarget ? ` is-drop-target${cardDropDir}` : ""}`}
-                      onDragOver={(e) => { if (!draggedSection) return; e.preventDefault(); setDragOverKey(key); }}
-                      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverKey(null); }}
-                      onDrop={() => { handleDrop(key); setDragOverKey(null); }}
-                    >
-                      <div className="preview-card-header">
-                        <div className="preview-card-title">
-                          <button
-                            type="button"
-                            className="drag-handle"
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, key)}
-                            onDragEnd={() => { setDraggedSection(null); setDragOverKey(null); }}
-                            aria-label="Drag to reorder section"
-                          >
-                            <span aria-hidden="true">⋮⋮</span>
-                            <span aria-hidden="true">⋮⋮</span>
-                          </button>
-                          {editingLabelKey === key ? (
-                            <input
-                              className="section-label-input"
-                              value={sectionLabels[key] ?? SECTION_LABELS[key]}
-                              autoFocus
-                              onChange={(e) => updateSectionLabel(key, e.target.value)}
-                              onBlur={() => setEditingLabelKey(null)}
-                              onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingLabelKey(null); }}
-                            />
-                          ) : (
-                            <button
-                              type="button"
-                              className="section-label-btn"
-                              title="Click to rename section"
-                              onClick={() => setEditingLabelKey(key)}
-                            >
-                              {sectionLabels[key] ?? SECTION_LABELS[key]}
-                              <Pencil size={12} className="section-label-edit-icon" aria-hidden="true" />
-                            </button>
-                          )}
-                        </div>
-                        <div className="inline-actions">
-                          <button type="button" className="btn-danger" onClick={() => toggleSectionInReview(key)}>
-                            <Trash2 size={13} /> Remove
-                          </button>
-                          <button type="button" className="secondary btn-sm" onClick={() => togglePreviewEditor(key)}>
-                            {openPreviewEditors[key] ? <><X size={13} /> Close</> : <><Pencil size={13} /> Edit</>}
-                          </button>
-                        </div>
-                      </div>
-                      {renderPreviewSection(key) || <p className="helper">No entries.</p>}
-                      {openPreviewEditors[key] && (
-                        <div className="preview-editor">
-                          {renderPreviewEditorSection(key)}
-                        </div>
-                      )}
+              <div className={`preview-grid${isHipsterTemplate ? " is-split" : ""}`}>
+                {isHipsterTemplate ? (
+                  <>
+                    <div className="preview-column">
+                      <h4 className="preview-column-title">Sidebar</h4>
+                      {hipsterSectionOrders.sidebar
+                        .filter((key) => enabledSections.has(key))
+                        .map((key) => renderPreviewCard(key, "sidebar"))}
                     </div>
-                    );
-                  })}
+                    <div className="preview-column">
+                      <h4 className="preview-column-title">Main content</h4>
+                      {hipsterSectionOrders.main
+                        .filter((key) => enabledSections.has(key))
+                        .map((key) => renderPreviewCard(key, "main"))}
+                    </div>
+                  </>
+                ) : (
+                  currentSectionOrder
+                    .filter((key) => enabledSections.has(key))
+                    .map((key) => renderPreviewCard(key, "single"))
+                )}
               </div>
               {hiddenSectionKeys.length > 0 && (
                 <div className="hidden-sections">

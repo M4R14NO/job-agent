@@ -190,6 +190,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (activeView === "create") {
+      loadProfiles();
+    }
+  }, [activeView]);
+
+  useEffect(() => {
     if (!cvPreviewPayload || !cvReview) return;
     if (pdfPreviewUrl) return;
     handleUpdatePdfPreview();
@@ -513,6 +519,9 @@ export default function App() {
     setIsLoadingProfile(true);
     try {
       const canonical = await getCvProfile(selectedProfileId);
+      if (canonical.audit?.raw_resume_text) {
+        setResumeText(canonical.audit.raw_resume_text);
+      }
       handleStartCvEditor({ canonical });
     } catch (err) {
       setCvEntryError(err instanceof Error ? err.message : "Failed to load profile");
@@ -822,6 +831,7 @@ export default function App() {
                         outputLanguage={cvReview.outputLanguage}
                         model={selectedModel}
                         lmTimeout={lmTimeout}
+                        resumeText={resumeText}
                         onPreviewPayloadChange={setCvPreviewPayload}
                       />
                     </div>

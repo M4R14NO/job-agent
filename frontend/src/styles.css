@@ -1202,6 +1202,24 @@ select {
   gap: 12px;
 }
 
+.preview-grid.is-split {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.preview-column {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.preview-column-title {
+  margin: 0;
+  font-size: 13px;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .preview-card {
   border: 1px solid #ececec;
   border-radius: 12px;
@@ -1228,6 +1246,12 @@ select {
 
 .preview-grid + .section-card {
   margin-top: 12px;
+}
+
+@media (max-width: 960px) {
+  .preview-grid.is-split {
+    grid-template-columns: 1fr;
+  }
 }
 
 .modal-header {

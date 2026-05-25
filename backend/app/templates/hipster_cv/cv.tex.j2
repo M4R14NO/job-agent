@@ -92,10 +92,17 @@
 \hipstersidebarspace
 ((* endif *))
 
+((* if sidebar_section_order and sidebar_section_order | length > 0 *))
+((* for section in sidebar_section_order *))
+((* if section == "summary" and sections.summary *))((* include "sections/summary_sidebar.tex.j2" *))((* endif *))
+((* if section == "languages" and sections.languages *))((* include "sections/languages.tex.j2" *))((* endif *))
+((* if section == "interests" and sections.interests *))((* include "sections/interests.tex.j2" *))((* endif *))
+((* endfor *))
+((* else *))
 ((* if sections.summary *))((* include "sections/summary_sidebar.tex.j2" *))((* endif *))
-
 ((* if sections.languages *))((* include "sections/languages.tex.j2" *))((* endif *))
 ((* if sections.interests *))((* include "sections/interests.tex.j2" *))((* endif *))
+((* endif *))
 ((* if strengths and strengths | length > 0 *))((* include "sections/strengths.tex.j2" *))((* endif *))
 ((* if hobbies and hobbies | length > 0 *))((* include "sections/hobbies.tex.j2" *))((* endif *))
 \vspace*{\fill}\null
@@ -105,6 +112,17 @@
 
 \small
 \sloppy
+((* if main_section_order and main_section_order | length > 0 *))
+((* for section in main_section_order *))
+((* if section == "experience" and sections.experience *))((* include "sections/experience.tex.j2" *))((* endif *))
+((* if section == "education" and sections.education *))((* include "sections/education.tex.j2" *))((* endif *))
+((* if section == "skills" and sections.skills *))((* include "sections/skills.tex.j2" *))((* endif *))
+((* if section == "volunteer" and sections.volunteer *))((* include "sections/volunteer.tex.j2" *))((* endif *))
+((* if section == "writing" and sections.writing *))((* include "sections/writing.tex.j2" *))((* endif *))
+((* if section == "certificates" and sections.certificates *))((* include "sections/certificates.tex.j2" *))((* endif *))
+((* if section == "honors" and sections.honors *))((* include "sections/honors.tex.j2" *))((* endif *))
+((* endfor *))
+((* else *))
 ((* if sections.experience *))((* include "sections/experience.tex.j2" *))((* endif *))
 ((* if sections.education *))((* include "sections/education.tex.j2" *))((* endif *))
 ((* if sections.skills *))((* include "sections/skills.tex.j2" *))((* endif *))
@@ -112,6 +130,7 @@
 ((* if sections.writing *))((* include "sections/writing.tex.j2" *))((* endif *))
 ((* if sections.certificates *))((* include "sections/certificates.tex.j2" *))((* endif *))
 ((* if sections.honors *))((* include "sections/honors.tex.j2" *))((* endif *))
+((* endif *))
 
 \switchcolumn*
 \vspace*{\fill}\null

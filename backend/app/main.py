@@ -333,6 +333,8 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
                 lm_timeout=payload.lm_timeout,
                 output_language=output_language,
                 section_order=payload.section_order,
+                sidebar_section_order=payload.sidebar_section_order,
+                main_section_order=payload.main_section_order,
             )
         else:
             if not deterministic_mapper:
@@ -340,6 +342,8 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
             template_payload, _ = deterministic_mapper(
                 canonical=payload.data,
                 section_order=payload.section_order,
+                sidebar_section_order=payload.sidebar_section_order,
+                main_section_order=payload.main_section_order,
             )
         pdf_bytes = render_cv_pdf_from_payload(payload=template_payload.model_dump(), doc_type=payload.doc_type)
     except RuntimeError as exc:
@@ -382,6 +386,8 @@ def preview_cv_mapping(payload: CvPreviewRequest) -> CvPreviewResponse:
                 lm_timeout=payload.lm_timeout,
                 output_language=output_language,
                 section_order=payload.section_order,
+                sidebar_section_order=payload.sidebar_section_order,
+                main_section_order=payload.main_section_order,
             )
         else:
             if not deterministic_mapper:
@@ -389,6 +395,8 @@ def preview_cv_mapping(payload: CvPreviewRequest) -> CvPreviewResponse:
             template_payload, _ = deterministic_mapper(
                 canonical=payload.data,
                 section_order=payload.section_order,
+                sidebar_section_order=payload.sidebar_section_order,
+                main_section_order=payload.main_section_order,
             )
     except RuntimeError as exc:
         message = str(exc)
