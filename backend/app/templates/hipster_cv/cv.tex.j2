@@ -32,24 +32,24 @@
 \begin{document}
 
 \thispagestyle{empty}
-\section*{}
 
 ((* set photo_path = (photo | default("", true) | trim) *))
 
-\noindent
+\vspace*{-1.6cm}
+\noindent\hspace*{-1cm}%
 \colorbox{backBlue}{%
-\parbox{\dimexpr\textwidth-2\fboxsep\relax}{%
-\vspace{0.9em}
+\parbox[c][5.4cm][c]{\dimexpr\paperwidth-2\fboxsep\relax}{%
+\hspace*{1cm}%
+\hspace*{0.43\textwidth}%
 \raggedleft
 {\color{white}\bfseries\LARGE ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}\\[0.3em]
 ((* if position *)){\color{white}\normalsize ((( position | latex_escape )))}((* endif *))
-\vspace{0.8em}
 }%
 }
-\vspace{1.2em}
+\vspace{0.35em}
 
 \subsection*{}
-\vspace{4em}
+\vspace{1.1em}
 
 \setlength{\columnsep}{0.5cm}
 \columnratio{0.24}[0.75]
