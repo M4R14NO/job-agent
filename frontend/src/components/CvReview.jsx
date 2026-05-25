@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -6,18 +6,19 @@ import {
   Eye,
   EyeOff,
   Pencil,
-  Plus,
   Save,
   Sparkles,
   Trash2,
   X
 } from "lucide-react";
 import {
+  getCvProfile,
   deleteCvProfile,
   previewCvMapping,
   rewriteCvCanonical,
   saveCvProfile
 } from "../api/llm";
+import OverwriteConfirmationModal from "./OverwriteConfirmationModal";
 
 const DEFAULT_SECTION_ORDER = [
   "summary",
@@ -46,6 +47,11 @@ const SECTION_LABELS = {
 };
 
 const SECTION_KEYS = Object.keys(SECTION_LABELS);
+
+const HIPSTER_SIDEBAR_SECTION_KEYS = ["summary", "languages", "interests"];
+const HIPSTER_MAIN_SECTION_KEYS = ["experience", "education", "skills", "volunteer", "writing", "certificates", "honors"];
+const HIPSTER_DEFAULT_SIDEBAR_ORDER = ["summary", "languages", "interests"];
+const HIPSTER_DEFAULT_MAIN_ORDER = ["experience", "education", "skills", "volunteer", "writing", "certificates", "honors"];
 
 const PREVIEW_SECTION_TO_CANONICAL = {
   summary: "summary",
@@ -79,6 +85,8 @@ const emptyCanonical = {
   publications: [],
   languages: [],
   interests: [],
+  strengths: [],
+  hobbies: [],
   awards: []
 };
 
@@ -162,6 +170,16 @@ const normalizeCanonical = (data) => {
       ...entry,
       name: entry.name || ""
     })),
+    strengths: normalizeList(data.strengths || [], "str").map((entry) => ({
+      ...entry,
+      name: entry.name || ""
+    })),
+    hobbies: normalizeList(data.hobbies || [], "hob").map((entry) => ({
+      ...entry,
+      name: entry.name || "",
+      icon: entry.icon || null,
+      icon_candidates: Array.isArray(entry.icon_candidates) ? entry.icon_candidates : []
+    })),
     awards: normalizeList(data.awards || [], "award").map((entry) => ({
       ...entry,
       title: entry.title || "",
@@ -176,6 +194,34 @@ const normalizeSectionOrder = (order) => {
   const base = Array.isArray(order) && order.length ? order : DEFAULT_SECTION_ORDER;
   const filtered = base.filter((section) => SECTION_KEYS.includes(section));
   return filtered.length ? filtered : DEFAULT_SECTION_ORDER;
+};
+
+const normalizeSubsetOrder = (order, allowedKeys, fallback) => {
+  const base = Array.isArray(order) ? order : [];
+  const filtered = base.filter((section) => allowedKeys.includes(section));
+  if (filtered.length) return filtered;
+  return fallback.filter((section) => allowedKeys.includes(section));
+};
+
+const normalizeHipsterSectionOrders = ({
+  sectionOrder,
+  sidebarSectionOrder,
+  mainSectionOrder
+}) => {
+  const normalizedSidebar = normalizeSubsetOrder(
+    sidebarSectionOrder,
+    HIPSTER_SIDEBAR_SECTION_KEYS,
+    normalizeSubsetOrder(sectionOrder, HIPSTER_SIDEBAR_SECTION_KEYS, HIPSTER_DEFAULT_SIDEBAR_ORDER)
+  );
+  const normalizedMain = normalizeSubsetOrder(
+    mainSectionOrder,
+    HIPSTER_MAIN_SECTION_KEYS,
+    normalizeSubsetOrder(sectionOrder, HIPSTER_MAIN_SECTION_KEYS, HIPSTER_DEFAULT_MAIN_ORDER)
+  );
+  return {
+    sidebar: normalizedSidebar,
+    main: normalizedMain
+  };
 };
 
 const bulletsToText = (bullets) => bullets.map((bullet) => bullet.text).join("\n");
@@ -325,6 +371,371 @@ const hasPreviewSectionContent = (section, items = []) => {
 
 const normalizePreviewSectionKey = (section) => (section === "writings" ? "writing" : section);
 
+const FIELD_DIFF_CONFIG = [
+  { key: "first_name", label: "First name" },
+  { key: "last_name", label: "Last name" },
+  { key: "headline", label: "Headline" },
+  { key: "summary", label: "Summary" },
+  { key: "email", label: "Email" },
+  { key: "phone", label: "Phone" },
+  { key: "location", label: "Location" }
+];
+
+const PROFILE_META_DIFF_CONFIG = [
+  { key: "company", label: "Company" },
+  { key: "application_status", label: "Application status" },
+  { key: "application_date", label: "Application date" },
+  { key: "job_title", label: "Job title" },
+  { key: "job_description", label: "Job description" },
+  { key: "job_url", label: "Job URL" }
+];
+
+const SECTION_DIFF_CONFIG = [
+  {
+    key: "experience",
+    label: "Experience",
+    summarize: (item) => `${item.title || "Role"} @ ${item.organization || "Organization"} ${item.period ? `(${item.period})` : ""}`.trim()
+  },
+  {
+    key: "education",
+    label: "Education",
+    summarize: (item) => `${item.degree || "Degree"} - ${item.institution || "Institution"} ${item.period ? `(${item.period})` : ""}`.trim()
+  },
+  {
+    key: "skills",
+    label: "Skills",
+    summarize: (item) => `${item.category || "Category"}: ${(item.items || []).join(", ")}`.trim()
+  },
+  {
+    key: "volunteer",
+    label: "Volunteer",
+    summarize: (item) => `${item.role || "Role"} @ ${item.organization || "Organization"} ${item.period ? `(${item.period})` : ""}`.trim()
+  },
+  {
+    key: "certificates",
+    label: "Certificates",
+    summarize: (item) => `${item.title || "Certificate"} - ${item.issuer || "Issuer"} ${item.year ? `(${item.year})` : ""}`.trim()
+  },
+  {
+    key: "publications",
+    label: "Publications",
+    summarize: (item) => `${item.title || "Publication"} ${item.venue ? `- ${item.venue}` : ""} ${item.year ? `(${item.year})` : ""}`.trim()
+  },
+  {
+    key: "languages",
+    label: "Languages",
+    summarize: (item) => `${item.name || "Language"}${item.level ? ` - ${item.level}` : ""}`.trim()
+  },
+  {
+    key: "interests",
+    label: "Interests",
+    summarize: (item) => item.name || "Interest"
+  },
+  {
+    key: "awards",
+    label: "Honors & Awards",
+    summarize: (item) => `${item.title || "Award"} ${item.issuer ? `- ${item.issuer}` : ""} ${item.year ? `(${item.year})` : ""}`.trim()
+  }
+];
+
+const PREVIEW_DEBOUNCE_MS = 10000;
+
+const compactText = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
+
+const truncateValue = (value, max = 140) => {
+  const normalized = compactText(value);
+  if (!normalized) return "(empty)";
+  return normalized.length > max ? `${normalized.slice(0, max - 1)}...` : normalized;
+};
+
+const fieldLabel = (key) =>
+  String(key || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const profileValuePreview = (value) => {
+  if (Array.isArray(value)) {
+    if (!value.length) return "(empty)";
+    return truncateValue(value.join(", "));
+  }
+  return truncateValue(value);
+};
+
+const stripInternalIds = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => stripInternalIds(entry));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const cleaned = {};
+  Object.entries(value).forEach(([key, entryValue]) => {
+    if (key === "id" || key === "source_id") return;
+    cleaned[key] = stripInternalIds(entryValue);
+  });
+  return cleaned;
+};
+
+const normalizedComparable = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizedComparable(entry));
+  }
+  if (!value || typeof value !== "object") {
+    if (typeof value === "string") return compactText(value);
+    return value;
+  }
+  const normalized = {};
+  Object.entries(value).forEach(([key, entryValue]) => {
+    normalized[key] = normalizedComparable(entryValue);
+  });
+  return normalized;
+};
+
+const changedItemFields = (oldItem, newItem) => {
+  const before = normalizedComparable(stripInternalIds(oldItem));
+  const after = normalizedComparable(stripInternalIds(newItem));
+  const allKeys = new Set([
+    ...Object.keys(before || {}),
+    ...Object.keys(after || {})
+  ]);
+
+  const changes = [];
+  allKeys.forEach((key) => {
+    const oldValue = before?.[key];
+    const newValue = after?.[key];
+    if (JSON.stringify(oldValue) === JSON.stringify(newValue)) return;
+    changes.push({
+      field: fieldLabel(key),
+      oldValue: truncateValue(profileValuePreview(oldValue), 220),
+      newValue: truncateValue(profileValuePreview(newValue), 220)
+    });
+  });
+  return changes;
+};
+
+const itemIdentifier = (item, index, summarize) => {
+  if (item?.id) return `id:${item.id}`;
+  const signature = truncateValue(summarize(item), 180);
+  return `sig:${signature || index}`;
+};
+
+const buildSectionDiff = ({ key, label, summarize, oldItems = [], newItems = [] }) => {
+  const existing = Array.isArray(oldItems) ? oldItems : [];
+  const pending = Array.isArray(newItems) ? newItems : [];
+
+  const beforeRows = existing.map((item, index) => ({
+    idKey: itemIdentifier(item, index, summarize),
+    text: truncateValue(summarize(item)),
+    status: "normal"
+  }));
+
+  const afterRows = pending.map((item, index) => ({
+    idKey: itemIdentifier(item, index, summarize),
+    text: truncateValue(summarize(item)),
+    status: "normal"
+  }));
+
+  const oldPool = existing.map((item, index) => ({
+    item,
+    index,
+    used: false,
+    idKey: itemIdentifier(item, index, summarize),
+    semanticKey: JSON.stringify(normalizedComparable(stripInternalIds(item))),
+    summary: truncateValue(summarize(item))
+  }));
+
+  const added = [];
+  const removed = [];
+  const updated = [];
+
+  pending.forEach((item, index) => {
+    const idKey = itemIdentifier(item, index, summarize);
+    const semanticKey = JSON.stringify(normalizedComparable(stripInternalIds(item)));
+    const summary = truncateValue(summarize(item));
+
+    let matched = oldPool.find((candidate) => !candidate.used && candidate.idKey === idKey);
+    if (!matched) {
+      matched = oldPool.find((candidate) => !candidate.used && candidate.semanticKey === semanticKey);
+    }
+    if (!matched) {
+      matched = oldPool.find((candidate) => !candidate.used && candidate.summary === summary);
+    }
+
+    if (!matched) {
+      added.push(summary);
+      afterRows[index].status = "added";
+      return;
+    }
+
+    matched.used = true;
+    if (matched.semanticKey !== semanticKey) {
+      const changes = changedItemFields(matched.item, item);
+      if (!changes.length) {
+        return;
+      }
+      updated.push({
+        title: summary,
+        oldValue: matched.summary,
+        newValue: summary,
+        changes
+      });
+      const beforeText = compactText(matched.summary);
+      const afterText = compactText(summary);
+      if (beforeText !== afterText) {
+        beforeRows[matched.index].status = "updated";
+        afterRows[index].status = "updated";
+      }
+    }
+  });
+
+  oldPool.forEach((candidate) => {
+    if (!candidate.used) {
+      removed.push(candidate.summary);
+      beforeRows[candidate.index].status = "removed";
+    }
+  });
+
+  if (!added.length && !removed.length && !updated.length) {
+    return null;
+  }
+
+  return { key, label, added, removed, updated, beforeRows, afterRows };
+};
+
+const nextProfileSuggestion = (targetProfileId) => {
+  const normalized = targetProfileId.trim();
+  if (!normalized) return "profile-v2";
+  const match = normalized.match(/^(.*?)-v(\d+)$/);
+  if (match) {
+    const next = Number(match[2]) + 1;
+    return `${match[1]}-v${next}`;
+  }
+  return `${normalized}-v2`;
+};
+
+const buildOverwriteDiff = ({ existingProfile, pendingPayload, targetProfileId }) => {
+  const topLevelChanges = [];
+  FIELD_DIFF_CONFIG.forEach(({ key, label }) => {
+    const before = existingProfile?.data?.[key];
+    const after = pendingPayload?.data?.[key];
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      topLevelChanges.push({
+        key,
+        label,
+        oldValue: profileValuePreview(before),
+        newValue: profileValuePreview(after)
+      });
+    }
+  });
+
+  const existingLinks = existingProfile?.data?.links || [];
+  const pendingLinks = pendingPayload?.data?.links || [];
+  if (JSON.stringify(existingLinks) !== JSON.stringify(pendingLinks)) {
+    topLevelChanges.push({
+      key: "links",
+      label: "Links",
+      oldValue: profileValuePreview(existingLinks),
+      newValue: profileValuePreview(pendingLinks)
+    });
+  }
+
+  PROFILE_META_DIFF_CONFIG.forEach(({ key, label }) => {
+    const before = existingProfile?.[key];
+    const after = pendingPayload?.[key];
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      topLevelChanges.push({
+        key,
+        label,
+        oldValue: profileValuePreview(before),
+        newValue: profileValuePreview(after)
+      });
+    }
+  });
+
+  if ((existingProfile?.template_id || "awesomecv") !== (pendingPayload?.template_id || "awesomecv")) {
+    topLevelChanges.push({
+      key: "template_id",
+      label: "Template",
+      oldValue: existingProfile?.template_id || "awesomecv",
+      newValue: pendingPayload?.template_id || "awesomecv"
+    });
+  }
+
+  const existingSectionOrder = existingProfile?.section_order || [];
+  const pendingSectionOrder = pendingPayload?.section_order || [];
+  if (JSON.stringify(existingSectionOrder) !== JSON.stringify(pendingSectionOrder)) {
+    topLevelChanges.push({
+      key: "section_order",
+      label: "Section order",
+      oldValue: profileValuePreview(existingSectionOrder),
+      newValue: profileValuePreview(pendingSectionOrder)
+    });
+  }
+
+  const existingSectionSet = new Set(existingSectionOrder);
+  const pendingSectionSet = new Set(pendingSectionOrder);
+  const removedSections = existingSectionOrder.filter((section) => !pendingSectionSet.has(section));
+  const addedSections = pendingSectionOrder.filter((section) => !existingSectionSet.has(section));
+  if (removedSections.length || addedSections.length) {
+    topLevelChanges.push({
+      key: "enabled_sections",
+      label: "Enabled sections",
+      oldValue: removedSections.length ? `Includes: ${removedSections.join(", ")}` : "No removed sections",
+      newValue: addedSections.length ? `Added: ${addedSections.join(", ")}` : "No added sections"
+    });
+  }
+
+  const existingSidebarOrder = existingProfile?.sidebar_section_order || [];
+  const pendingSidebarOrder = pendingPayload?.sidebar_section_order || [];
+  if (JSON.stringify(existingSidebarOrder) !== JSON.stringify(pendingSidebarOrder)) {
+    topLevelChanges.push({
+      key: "sidebar_section_order",
+      label: "Sidebar section order",
+      oldValue: profileValuePreview(existingSidebarOrder),
+      newValue: profileValuePreview(pendingSidebarOrder)
+    });
+  }
+
+  const existingMainOrder = existingProfile?.main_section_order || [];
+  const pendingMainOrder = pendingPayload?.main_section_order || [];
+  if (JSON.stringify(existingMainOrder) !== JSON.stringify(pendingMainOrder)) {
+    topLevelChanges.push({
+      key: "main_section_order",
+      label: "Main section order",
+      oldValue: profileValuePreview(existingMainOrder),
+      newValue: profileValuePreview(pendingMainOrder)
+    });
+  }
+
+  const sectionChanges = SECTION_DIFF_CONFIG
+    .map((config) => buildSectionDiff({
+      ...config,
+      oldItems: existingProfile?.data?.[config.key] || [],
+      newItems: pendingPayload?.data?.[config.key] || []
+    }))
+    .filter(Boolean);
+
+  const totals = sectionChanges.reduce(
+    (acc, section) => {
+      acc.added += section.added.length;
+      acc.removed += section.removed.length;
+      acc.updated += section.updated.length;
+      return acc;
+    },
+    { added: 0, removed: 0, updated: topLevelChanges.length }
+  );
+
+  return {
+    targetProfileId,
+    existingRevision: existingProfile?.revision ?? 0,
+    existingUpdatedAt: existingProfile?.updated_at || null,
+    topLevelChanges,
+    sectionChanges,
+    totals,
+    hasChanges: totals.added + totals.removed + totals.updated > 0
+  };
+};
+
 export default function CvReview({
   canonical,
   job,
@@ -333,12 +744,26 @@ export default function CvReview({
   outputLanguage,
   model,
   lmTimeout,
+  initialProfileId,
+  applicationContext,
+  onDraftStateChange,
   onPreviewPayloadChange
 }) {
-  const [profileId, setProfileId] = useState(canonical?.profile_id || "default");
+  const isHipsterTemplate = templateId === "hipstercv";
+  const resolvedInitialProfileId = canonical?.profile_id || initialProfileId || "default";
+  const [profileId, setProfileId] = useState(resolvedInitialProfileId);
+  const [loadedProfileId, setLoadedProfileId] = useState(resolvedInitialProfileId);
+  const [loadedRevision, setLoadedRevision] = useState(canonical?.revision ?? 0);
   const [revision, setRevision] = useState(canonical?.revision ?? 0);
   const [formData, setFormData] = useState(() => normalizeCanonical(canonical?.data));
   const [sectionOrder, setSectionOrder] = useState(() => normalizeSectionOrder(canonical?.section_order));
+  const [hipsterSectionOrders, setHipsterSectionOrders] = useState(() =>
+    normalizeHipsterSectionOrders({
+      sectionOrder: canonical?.section_order,
+      sidebarSectionOrder: canonical?.sidebar_section_order,
+      mainSectionOrder: canonical?.main_section_order
+    })
+  );
   const [sectionLabels, setSectionLabels] = useState(() => ({ ...SECTION_LABELS }));
   const [editingLabelKey, setEditingLabelKey] = useState(null);
   const [rewriteOpen, setRewriteOpen] = useState(false);
@@ -352,11 +777,13 @@ export default function CvReview({
   const [rewritePrompt, setRewritePrompt] = useState("");
   const [isRewriting, setIsRewriting] = useState(false);
   const [draggedSection, setDraggedSection] = useState(null);
+  const [draggedSectionZone, setDraggedSectionZone] = useState(null);
   const [dragOverKey, setDragOverKey] = useState(null);
+  const [dragOverZone, setDragOverZone] = useState(null);
   const [draggedItem, setDraggedItem] = useState(null); // { namespace, index }
   const [dragOverItem, setDragOverItem] = useState(null); // { namespace, index }
   const [openPreviewEditors, setOpenPreviewEditors] = useState({});
-  const [hiddenSectionsOpen, setHiddenSectionsOpen] = useState(false);
+  const [hipsterPreviewTab, setHipsterPreviewTab] = useState("sidebar");
   const [expandedSections, setExpandedSections] = useState(() => ({
     basics: true,
     summary: false,
@@ -370,8 +797,22 @@ export default function CvReview({
     writing: false,
     education: false
   }));
-
+  const [overwriteDialog, setOverwriteDialog] = useState({
+    isOpen: false,
+    diff: null,
+    suggestedProfileId: "",
+    pendingPayload: null,
+    pendingTargetProfileId: "",
+    pendingTargetRevision: 0,
+    error: ""
+  });
+  const previewDebounceRef = useRef(null);
+  const previousTemplateIdRef = useRef(templateId);
+  const forceImmediatePreviewRef = useRef(true);
   const schemaVersion = canonical?.schema_version || "v1";
+  const currentSectionOrder = isHipsterTemplate
+    ? [...hipsterSectionOrders.sidebar, ...hipsterSectionOrders.main]
+    : sectionOrder;
   const jobTitle = job?.title || "";
   const jobCompany = job?.company || "";
   const jobDescription = job?.description || "";
@@ -386,11 +827,17 @@ export default function CvReview({
     return (hash >>> 0).toString(16);
   };
 
-  const buildPreviewHashFrom = (nextFormData, nextSectionOrder = sectionOrder) =>
+  const buildPreviewHashFrom = (
+    nextFormData,
+    nextSectionOrder = currentSectionOrder,
+    nextHipsterSectionOrders = hipsterSectionOrders
+  ) =>
     hashString(
       JSON.stringify({
         data: nextFormData,
         section_order: nextSectionOrder,
+        sidebar_section_order: isHipsterTemplate ? nextHipsterSectionOrders.sidebar : undefined,
+        main_section_order: isHipsterTemplate ? nextHipsterSectionOrders.main : undefined,
         job_title: jobTitle,
         company: jobCompany,
         job_description: jobDescription,
@@ -401,39 +848,178 @@ export default function CvReview({
       })
     );
 
-  const buildPreviewHash = () => buildPreviewHashFrom(formData, sectionOrder);
+  const buildPreviewHash = () => buildPreviewHashFrom(formData, currentSectionOrder, hipsterSectionOrders);
+
+  const draftProfileId = profileId.trim() || loadedProfileId || canonical?.profile_id || "default";
+  const draftPayload = {
+    schema_version: schemaVersion,
+    profile_id: draftProfileId,
+    revision,
+    template_id: templateId,
+    company: applicationContext?.company || canonical?.company || null,
+    application_status: applicationContext?.application_status || canonical?.application_status || null,
+    application_date: applicationContext?.application_date || canonical?.application_date || null,
+    job_title: applicationContext?.job_title || canonical?.job_title || null,
+    job_description: applicationContext?.job_description || canonical?.job_description || null,
+    job_url: applicationContext?.job_url || canonical?.job_url || null,
+    data: formData,
+    section_order: currentSectionOrder,
+    sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
+    main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined
+  };
+
+  const draftDiff = buildOverwriteDiff({
+    existingProfile: {
+      ...canonical,
+      profile_id: canonical?.profile_id || draftProfileId,
+      template_id: canonical?.template_id || templateId,
+      company: canonical?.company || null,
+      application_status: canonical?.application_status || null,
+      application_date: canonical?.application_date || null,
+      job_title: canonical?.job_title || null,
+      job_description: canonical?.job_description || null,
+      job_url: canonical?.job_url || null,
+      section_order: canonical?.section_order,
+      sidebar_section_order: canonical?.sidebar_section_order,
+      main_section_order: canonical?.main_section_order,
+      data: canonical?.data || emptyCanonical
+    },
+    pendingPayload: draftPayload,
+    targetProfileId: draftProfileId
+  });
+
+  const hasProfileIdChange = draftProfileId !== (canonical?.profile_id || "default");
+  const hasUnsavedDraftChanges = hasProfileIdChange || draftDiff.hasChanges;
+
+  const scheduleNextPreview = ({ immediate = false } = {}) => {
+    if (immediate) {
+      forceImmediatePreviewRef.current = true;
+      if (previewDebounceRef.current) {
+        clearTimeout(previewDebounceRef.current);
+        previewDebounceRef.current = null;
+      }
+      return;
+    }
+    forceImmediatePreviewRef.current = false;
+  };
+
+  const cancelScheduledPreview = () => {
+    if (previewDebounceRef.current) {
+      clearTimeout(previewDebounceRef.current);
+      previewDebounceRef.current = null;
+    }
+  };
 
   useEffect(() => {
     setFormData(normalizeCanonical(canonical?.data));
     setSectionOrder(normalizeSectionOrder(canonical?.section_order));
-    setProfileId(canonical?.profile_id || "default");
+    setHipsterSectionOrders(
+      normalizeHipsterSectionOrders({
+        sectionOrder: canonical?.section_order,
+        sidebarSectionOrder: canonical?.sidebar_section_order,
+        mainSectionOrder: canonical?.main_section_order
+      })
+    );
+    const nextInitialProfileId = canonical?.profile_id || initialProfileId || "default";
+    setProfileId(nextInitialProfileId);
+    setLoadedProfileId(nextInitialProfileId);
+    setLoadedRevision(canonical?.revision ?? 0);
     setRevision(canonical?.revision ?? 0);
     setPreviewPayload(null);
     setPreviewHash("");
     setRewritePrompt("");
     setIsRewriting(false);
     setOpenPreviewEditors({});
+    setHipsterPreviewTab("sidebar");
     setSectionLabels({ ...SECTION_LABELS });
     setEditingLabelKey(null);
     setHiddenPersonalFields(new Set());
+    hiddenPersonalFieldValuesRef.current = {};
     setSaveProfileOpen(false);
-  }, [canonical]);
+    previousTemplateIdRef.current = templateId;
+    forceImmediatePreviewRef.current = true;
+  }, [canonical, initialProfileId]);
 
   useEffect(() => {
-    onPreviewPayloadChange?.(previewPayload);
-  }, [previewPayload]);
+    if (isHipsterTemplate) {
+      setHipsterPreviewTab("sidebar");
+    }
+  }, [isHipsterTemplate]);
 
   useEffect(() => {
-    if (isPreviewing) return;
+    const sourceProfileId = canonical?.profile_id || initialProfileId || "default";
+    if (!previewPayload) {
+      onPreviewPayloadChange?.(null);
+      return;
+    }
+    onPreviewPayloadChange?.({
+      ...previewPayload,
+      __source_profile_id: sourceProfileId
+    });
+  }, [previewPayload, canonical?.profile_id, initialProfileId, onPreviewPayloadChange]);
+
+  useEffect(() => {
+    onDraftStateChange?.({
+      isDirty: hasUnsavedDraftChanges,
+      diff: draftDiff,
+      payload: draftPayload,
+      sourceProfileId: canonical?.profile_id || draftProfileId,
+      targetProfileId: draftProfileId,
+      revision,
+      updatedAt: canonical?.updated_at || null
+    });
+  }, [
+    onDraftStateChange,
+    hasUnsavedDraftChanges,
+    draftDiff,
+    draftPayload,
+    canonical?.profile_id,
+    canonical?.updated_at,
+    draftProfileId,
+    revision
+  ]);
+
+  useEffect(() => {
+    if (isPreviewing) return undefined;
     const nextHash = buildPreviewHash();
-    if (previewPayload && previewHash === nextHash) return;
-    handlePreview();
+    if (previewPayload && previewHash === nextHash) return undefined;
+
+    const templateChanged = previousTemplateIdRef.current !== templateId;
+    previousTemplateIdRef.current = templateId;
+
+    const shouldRenderImmediately = templateChanged || forceImmediatePreviewRef.current;
+
+    if (shouldRenderImmediately) {
+      forceImmediatePreviewRef.current = false;
+      if (previewDebounceRef.current) {
+        clearTimeout(previewDebounceRef.current);
+        previewDebounceRef.current = null;
+      }
+      handlePreview({ force: true });
+      return undefined;
+    }
+
+    if (previewDebounceRef.current) {
+      clearTimeout(previewDebounceRef.current);
+    }
+
+    previewDebounceRef.current = setTimeout(() => {
+      handlePreview();
+    }, PREVIEW_DEBOUNCE_MS);
+
+    return () => {
+      if (previewDebounceRef.current) {
+        clearTimeout(previewDebounceRef.current);
+        previewDebounceRef.current = null;
+      }
+    };
   }, [
     isPreviewing,
     previewPayload,
     previewHash,
     formData,
     sectionOrder,
+    hipsterSectionOrders,
     jobTitle,
     jobCompany,
     jobDescription,
@@ -443,18 +1029,54 @@ export default function CvReview({
     docType
   ]);
 
-  const enabledSections = useMemo(() => new Set(sectionOrder), [sectionOrder]);
+  const enabledSections = useMemo(() => new Set(currentSectionOrder), [currentSectionOrder]);
   const hiddenSectionKeys = useMemo(
     () => SECTION_KEYS.filter((key) => !enabledSections.has(key)),
     [enabledSections]
   );
+
+  const hiddenSectionKeysForCurrentView = useMemo(() => {
+    if (!isHipsterTemplate) return hiddenSectionKeys;
+    const tabKeys = hipsterPreviewTab === "sidebar"
+      ? HIPSTER_SIDEBAR_SECTION_KEYS
+      : HIPSTER_MAIN_SECTION_KEYS;
+    return tabKeys.filter((key) => !enabledSections.has(key));
+  }, [enabledSections, hiddenSectionKeys, hipsterPreviewTab, isHipsterTemplate]);
 
   const clearPreview = () => {
     setPreviewPayload(null);
     setPreviewHash("");
   };
 
+  const applyHipsterOrders = (nextSidebar, nextMain) => {
+    setHipsterSectionOrders({ sidebar: nextSidebar, main: nextMain });
+    setSectionOrder([...nextSidebar, ...nextMain]);
+  };
+
+  const getHipsterZoneForSection = (key) =>
+    HIPSTER_SIDEBAR_SECTION_KEYS.includes(key) ? "sidebar" : "main";
+
   const toggleSection = (key) => {
+    scheduleNextPreview({ immediate: true });
+    if (isHipsterTemplate) {
+      const zone = getHipsterZoneForSection(key);
+      const source = zone === "sidebar" ? hipsterSectionOrders.sidebar : hipsterSectionOrders.main;
+      const isEnabled = source.includes(key);
+      const nextSidebar = [...hipsterSectionOrders.sidebar];
+      const nextMain = [...hipsterSectionOrders.main];
+      if (isEnabled) {
+        if (zone === "sidebar") {
+          applyHipsterOrders(nextSidebar.filter((section) => section !== key), nextMain);
+        } else {
+          applyHipsterOrders(nextSidebar, nextMain.filter((section) => section !== key));
+        }
+      } else if (zone === "sidebar") {
+        applyHipsterOrders([...nextSidebar, key], nextMain);
+      } else {
+        applyHipsterOrders(nextSidebar, [...nextMain, key]);
+      }
+      return;
+    }
     setSectionOrder((current) => {
       if (current.includes(key)) {
         return current.filter((section) => section !== key);
@@ -464,6 +1086,11 @@ export default function CvReview({
   };
 
   const toggleSectionInReview = (key) => {
+    scheduleNextPreview({ immediate: true });
+    if (isHipsterTemplate) {
+      toggleSection(key);
+      return;
+    }
     setSectionOrder((current) => {
       if (current.includes(key)) {
         return current.filter((section) => section !== key);
@@ -473,6 +1100,7 @@ export default function CvReview({
   };
 
   const moveSection = (key, direction) => {
+    if (isHipsterTemplate) return;
     setSectionOrder((current) => {
       const index = current.indexOf(key);
       if (index < 0) return current;
@@ -484,14 +1112,55 @@ export default function CvReview({
     });
   };
 
-  const handleDragStart = (event, key) => {
+  const handleDragStart = (event, key, zone = "single") => {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", key);
     setDraggedSection(key);
+    setDraggedSectionZone(zone);
     setDragOverKey(null);
+    setDragOverZone(null);
   };
 
-  const handleDrop = (targetKey) => {
+  const handleDrop = (targetKey, zone = "single") => {
+    if (isHipsterTemplate && zone === "single") {
+      setDraggedSection(null);
+      setDraggedSectionZone(null);
+      setDragOverKey(null);
+      setDragOverZone(null);
+      return;
+    }
+    if (isHipsterTemplate && zone !== "single") {
+      const source = zone === "sidebar" ? hipsterSectionOrders.sidebar : hipsterSectionOrders.main;
+      if (!draggedSection || draggedSectionZone !== zone || draggedSection === targetKey) {
+        setDraggedSection(null);
+        setDraggedSectionZone(null);
+        setDragOverKey(null);
+        setDragOverZone(null);
+        return;
+      }
+      const fromIndex = source.indexOf(draggedSection);
+      const toIndex = source.indexOf(targetKey);
+      if (fromIndex < 0 || toIndex < 0) {
+        setDraggedSection(null);
+        setDraggedSectionZone(null);
+        setDragOverKey(null);
+        setDragOverZone(null);
+        return;
+      }
+      const nextZoneOrder = [...source];
+      nextZoneOrder.splice(fromIndex, 1);
+      nextZoneOrder.splice(toIndex, 0, draggedSection);
+      if (zone === "sidebar") {
+        applyHipsterOrders(nextZoneOrder, hipsterSectionOrders.main);
+      } else {
+        applyHipsterOrders(hipsterSectionOrders.sidebar, nextZoneOrder);
+      }
+      setDraggedSection(null);
+      setDraggedSectionZone(null);
+      setDragOverKey(null);
+      setDragOverZone(null);
+      return;
+    }
     setSectionOrder((current) => {
       if (!draggedSection || draggedSection === targetKey) return current;
       const updated = [...current];
@@ -503,12 +1172,15 @@ export default function CvReview({
       return updated;
     });
     setDraggedSection(null);
+    setDraggedSectionZone(null);
     setDragOverKey(null);
+    setDragOverZone(null);
   };
 
   // ── Item-level drag & drop ──────────────────────────────────────────────────
 
   const movePreviewListItem = (payloadField, fromIndex, toIndex) => {
+    cancelScheduledPreview();
     const currentItems = previewPayload?.[payloadField] || [];
     const nextItems = [...currentItems];
     const [removed] = nextItems.splice(fromIndex, 1);
@@ -602,6 +1274,7 @@ export default function CvReview({
   // ────────────────────────────────────────────────────────────────────────────
 
   const updateSectionLabel = (key, value) => {
+    cancelScheduledPreview();
     setSectionLabels((prev) => ({ ...prev, [key]: value }));
     setPreviewPayload((prev) => prev ? { ...prev, section_labels: { ...(prev.section_labels || {}), [key]: value } } : prev);
   };
@@ -632,7 +1305,7 @@ export default function CvReview({
   }, [previewPayload?.homepage, previewPayload?.github, previewPayload?.linkedin]);
 
   const updateField = (field, value) => {
-    clearPreview();
+    scheduleNextPreview({ immediate: false });
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -654,7 +1327,7 @@ export default function CvReview({
     const isDragged = draggedSection === dragKey;
     const isDropTarget = dragOverKey === dragKey && draggedSection && draggedSection !== dragKey;
     const sectionDropDir = isDropTarget
-      ? (sectionOrder.indexOf(draggedSection) < sectionOrder.indexOf(dragKey) ? " is-drop-from-above" : " is-drop-from-below")
+      ? (currentSectionOrder.indexOf(draggedSection) < currentSectionOrder.indexOf(dragKey) ? " is-drop-from-above" : " is-drop-from-below")
       : "";
     return (
       <div
@@ -674,12 +1347,10 @@ export default function CvReview({
           <div className="section-actions">
             <button
               type="button"
-              className="ghost icon-button"
+              className="ghost icon-button section-collapse-button"
               onClick={() => toggleExpandedSection(key)}
             >
-              <span className="icon" aria-hidden="true">
-                {isOpen ? "▾" : "▸"}
-              </span>
+              {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
               <span>{isOpen ? "Collapse" : "Expand"}</span>
             </button>
           </div>
@@ -690,7 +1361,7 @@ export default function CvReview({
   };
 
   const updateListItem = (section, index, patch) => {
-    clearPreview();
+    scheduleNextPreview({ immediate: false });
     setFormData((prev) => {
       const updated = [...prev[section]];
       updated[index] = { ...updated[index], ...patch };
@@ -699,17 +1370,17 @@ export default function CvReview({
   };
 
   const addListItem = (section, item) => {
-    clearPreview();
+    scheduleNextPreview({ immediate: true });
     setFormData((prev) => ({ ...prev, [section]: [...prev[section], item] }));
   };
 
   const removeListItem = (section, index) => {
-    clearPreview();
+    scheduleNextPreview({ immediate: true });
     setFormData((prev) => ({ ...prev, [section]: prev[section].filter((_, idx) => idx !== index) }));
   };
 
   const moveListItem = (section, index, direction) => {
-    clearPreview();
+    scheduleNextPreview({ immediate: false });
     setFormData((prev) => {
       const updated = [...prev[section]];
       const nextIndex = direction === "up" ? index - 1 : index + 1;
@@ -721,19 +1392,146 @@ export default function CvReview({
 
   const handleSave = async () => {
     setError("");
+    setOverwriteDialog((prev) => ({ ...prev, error: "" }));
+    const targetProfileId = profileId.trim();
+    if (!targetProfileId) {
+      setError("Profile ID is required.");
+      return;
+    }
+
+    const payload = {
+      schema_version: schemaVersion,
+      profile_id: targetProfileId,
+      revision,
+      template_id: templateId,
+      data: formData,
+      section_order: currentSectionOrder,
+      sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
+      main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined
+    };
+
+    setIsSaving(true);
+    try {
+      let existingTarget = null;
+      let targetRevision = 0;
+      try {
+        existingTarget = await getCvProfile(targetProfileId);
+        targetRevision = existingTarget?.revision ?? 0;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        if (!message.includes("status 404")) {
+          throw err;
+        }
+      }
+
+      if (existingTarget) {
+        const diff = buildOverwriteDiff({
+          existingProfile: existingTarget,
+          pendingPayload: payload,
+          targetProfileId
+        });
+
+        if (diff.hasChanges) {
+          setOverwriteDialog({
+            isOpen: true,
+            diff,
+            suggestedProfileId: nextProfileSuggestion(targetProfileId),
+            pendingPayload: payload,
+            pendingTargetProfileId: targetProfileId,
+            pendingTargetRevision: targetRevision,
+            error: ""
+          });
+          return;
+        }
+      }
+
+      payload.revision = targetRevision;
+      const saved = await saveCvProfile(targetProfileId, payload);
+      setProfileId(saved.profile_id);
+      setRevision(saved.revision);
+      setLoadedProfileId(saved.profile_id);
+      setLoadedRevision(saved.revision);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const closeOverwriteDialog = () => {
+    setOverwriteDialog({
+      isOpen: false,
+      diff: null,
+      suggestedProfileId: "",
+      pendingPayload: null,
+      pendingTargetProfileId: "",
+      pendingTargetRevision: 0,
+      error: ""
+    });
+  };
+
+  const handleConfirmOverwrite = async () => {
+    if (!overwriteDialog.pendingPayload || !overwriteDialog.pendingTargetProfileId) return;
+    setOverwriteDialog((prev) => ({ ...prev, error: "" }));
     setIsSaving(true);
     try {
       const payload = {
-        schema_version: schemaVersion,
-        profile_id: profileId,
-        revision,
-        data: formData,
-        section_order: sectionOrder
+        ...overwriteDialog.pendingPayload,
+        revision: overwriteDialog.pendingTargetRevision,
+        profile_id: overwriteDialog.pendingTargetProfileId
       };
-      const saved = await saveCvProfile(profileId, payload);
+      const saved = await saveCvProfile(overwriteDialog.pendingTargetProfileId, payload);
+      setProfileId(saved.profile_id);
       setRevision(saved.revision);
+      setLoadedProfileId(saved.profile_id);
+      setLoadedRevision(saved.revision);
+      closeOverwriteDialog();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      const message = err instanceof Error ? err.message : "Overwrite failed";
+      setOverwriteDialog((prev) => ({ ...prev, error: message }));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveAsNewFromDialog = async () => {
+    const nextId = overwriteDialog.suggestedProfileId.trim();
+    if (!nextId || !overwriteDialog.pendingPayload) {
+      setOverwriteDialog((prev) => ({ ...prev, error: "Enter a new profile name." }));
+      return;
+    }
+
+    setIsSaving(true);
+    setOverwriteDialog((prev) => ({ ...prev, error: "" }));
+    try {
+      try {
+        await getCvProfile(nextId);
+        setOverwriteDialog((prev) => ({
+          ...prev,
+          error: "That profile name already exists. Choose a different one."
+        }));
+        return;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        if (!message.includes("status 404")) {
+          throw err;
+        }
+      }
+
+      const payload = {
+        ...overwriteDialog.pendingPayload,
+        profile_id: nextId,
+        revision: 0
+      };
+      const saved = await saveCvProfile(nextId, payload);
+      setProfileId(saved.profile_id);
+      setRevision(saved.revision);
+      setLoadedProfileId(saved.profile_id);
+      setLoadedRevision(saved.revision);
+      closeOverwriteDialog();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Save as new profile failed";
+      setOverwriteDialog((prev) => ({ ...prev, error: message }));
     } finally {
       setIsSaving(false);
     }
@@ -766,7 +1564,9 @@ export default function CvReview({
         doc_type: docType,
         lm_timeout: lmTimeout,
         output_language: outputLanguage,
-        section_order: sectionOrder,
+        section_order: currentSectionOrder,
+        sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
+        main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined,
         mapping_mode: "deterministic"
       });
       setPreviewPayload(result.payload ? { ...result.payload, section_labels: sectionLabels } : null);
@@ -814,6 +1614,7 @@ export default function CvReview({
   };
 
   const updatePreviewField = (field, value) => {
+    cancelScheduledPreview();
     setPreviewPayload((prev) => (
       prev
         ? {
@@ -832,6 +1633,7 @@ export default function CvReview({
   };
 
   const updatePreviewListItem = (section, index, patch) => {
+    cancelScheduledPreview();
     const currentItems = previewPayload?.[section] || [];
     const nextItems = currentItems.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item));
     const normalizedSection = normalizePreviewSectionKey(section);
@@ -858,6 +1660,7 @@ export default function CvReview({
   };
 
   const addPreviewListItem = (section, item) => {
+    cancelScheduledPreview();
     const currentItems = previewPayload?.[section] || [];
     const nextItems = [...currentItems, item];
     const normalizedSection = normalizePreviewSectionKey(section);
@@ -884,6 +1687,7 @@ export default function CvReview({
   };
 
   const removePreviewListItem = (section, index) => {
+    cancelScheduledPreview();
     const currentItems = previewPayload?.[section] || [];
     const nextItems = currentItems.filter((_, itemIndex) => itemIndex !== index);
     const normalizedSection = normalizePreviewSectionKey(section);
@@ -1495,22 +2299,24 @@ export default function CvReview({
 
   const renderSectionActions = (key, extraActions = null) => {
     const isEnabled = enabledSections.has(key);
-    const index = sectionOrder.indexOf(key);
-    const canMoveUp = isEnabled && index > 0;
-    const canMoveDown = isEnabled && index >= 0 && index < sectionOrder.length - 1;
+    const index = currentSectionOrder.indexOf(key);
+    const canMoveUp = !isHipsterTemplate && isEnabled && index > 0;
+    const canMoveDown = !isHipsterTemplate && isEnabled && index >= 0 && index < currentSectionOrder.length - 1;
     return (
       <div className="section-control-group">
         <div className="section-control-rail">
           <button
             type="button"
             className="drag-handle"
-            draggable={isEnabled}
+            draggable={isEnabled && !isHipsterTemplate}
             onDragStart={(event) => handleDragStart(event, key)}
             onDragEnd={() => {
               setDraggedSection(null);
+              setDraggedSectionZone(null);
               setDragOverKey(null);
+              setDragOverZone(null);
             }}
-            disabled={!isEnabled}
+            disabled={!isEnabled || isHipsterTemplate}
             aria-label="Drag to reorder"
           >
             <span aria-hidden="true">⋮⋮</span>
@@ -1521,7 +2327,7 @@ export default function CvReview({
               type="button"
               className="icon-button"
               onClick={() => moveSection(key, "up")}
-              disabled={!canMoveUp}
+              disabled={!canMoveUp || isHipsterTemplate}
               aria-label="Move up"
             >
               ↑
@@ -1530,7 +2336,7 @@ export default function CvReview({
               type="button"
               className="icon-button"
               onClick={() => moveSection(key, "down")}
-              disabled={!canMoveDown}
+              disabled={!canMoveDown || isHipsterTemplate}
               aria-label="Move down"
             >
               ↓
@@ -1611,14 +2417,18 @@ export default function CvReview({
     }
   };
 
-  // Helper: toggle a personal field's visibility in the CV (hidden → null in previewPayload)
+  const hiddenPersonalFieldValuesRef = useRef({});
+
+  // Helper: toggle a personal field's visibility in the CV (hidden -> null in previewPayload)
   const togglePersonalField = (previewKey, restoreValue) => {
     setHiddenPersonalFields((prev) => {
       const next = new Set(prev);
       if (next.has(previewKey)) {
         next.delete(previewKey);
-        setPreviewPayload((p) => p ? { ...p, [previewKey]: restoreValue || null } : p);
+        const restored = hiddenPersonalFieldValuesRef.current[previewKey] ?? restoreValue ?? null;
+        setPreviewPayload((p) => p ? { ...p, [previewKey]: restored } : p);
       } else {
+        hiddenPersonalFieldValuesRef.current[previewKey] = restoreValue ?? null;
         next.add(previewKey);
         setPreviewPayload((p) => p ? { ...p, [previewKey]: null } : p);
       }
@@ -1629,7 +2439,10 @@ export default function CvReview({
   // Renders a personal info field row with label, input and optional visibility toggle
   const renderPersonalField = ({ label, previewKey, canonicalField, previewFieldMap, type = "text", placeholder, canHide = false }) => {
     const isHidden = hiddenPersonalFields.has(previewKey);
-    const rawValue = previewPayload ? (previewPayload[previewKey] ?? "") : (formData[canonicalField] ?? "");
+    const payloadValue = previewPayload?.[previewKey];
+    const canonicalValue = canonicalField ? (formData[canonicalField] ?? "") : "";
+    const stashedValue = hiddenPersonalFieldValuesRef.current[previewKey] ?? "";
+    const rawValue = payloadValue ?? (canonicalValue || stashedValue || "");
     const displayValue = isHidden ? "" : rawValue;
     return (
       <div key={previewKey} className={`personal-field-row${isHidden ? " field-hidden" : ""}`}>
@@ -2265,6 +3078,120 @@ export default function CvReview({
     }
   };
 
+  const renderPreviewCard = (key, zone = "single") => {
+    const isEnabled = enabledSections.has(key);
+    const isCardDragged = isEnabled && draggedSection === key && draggedSectionZone === zone;
+    const isCardTarget =
+      isEnabled &&
+      dragOverKey === key &&
+      dragOverZone === zone &&
+      draggedSection &&
+      draggedSection !== key &&
+      draggedSectionZone === zone;
+    const activeOrder = zone === "sidebar"
+      ? hipsterSectionOrders.sidebar
+      : zone === "main"
+        ? hipsterSectionOrders.main
+        : currentSectionOrder;
+    const cardDropDir = isCardTarget
+      ? (activeOrder.indexOf(draggedSection) < activeOrder.indexOf(key) ? " is-drop-from-above" : " is-drop-from-below")
+      : "";
+
+    return (
+      <div
+        key={`preview-${zone}-${key}`}
+        id={`preview-card-${zone}-${key}`}
+        className={`preview-card${isCardDragged ? " is-dragged" : ""}${isCardTarget ? ` is-drop-target${cardDropDir}` : ""}${!isEnabled ? " is-section-hidden" : ""}`}
+        onDragOver={(e) => {
+          if (!isEnabled || !draggedSection || draggedSectionZone !== zone) return;
+          e.preventDefault();
+          setDragOverKey(key);
+          setDragOverZone(zone);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) {
+            setDragOverKey(null);
+            setDragOverZone(null);
+          }
+        }}
+        onDrop={() => {
+          if (!isEnabled) return;
+          handleDrop(key, zone);
+          setDragOverKey(null);
+          setDragOverZone(null);
+        }}
+      >
+        <div className="preview-card-header">
+          <div className="preview-card-title">
+            <button
+              type="button"
+              className="drag-handle"
+              draggable={isEnabled}
+              onDragStart={(e) => {
+                if (!isEnabled) return;
+                handleDragStart(e, key, zone);
+              }}
+              onDragEnd={() => {
+                setDraggedSection(null);
+                setDraggedSectionZone(null);
+                setDragOverKey(null);
+                setDragOverZone(null);
+              }}
+              aria-label="Drag to reorder section"
+              disabled={!isEnabled}
+            >
+              <span aria-hidden="true">⋮⋮</span>
+              <span aria-hidden="true">⋮⋮</span>
+            </button>
+            {editingLabelKey === key ? (
+              <input
+                className="section-label-input"
+                value={sectionLabels[key] ?? SECTION_LABELS[key]}
+                autoFocus
+                onChange={(e) => updateSectionLabel(key, e.target.value)}
+                onBlur={() => setEditingLabelKey(null)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingLabelKey(null); }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="section-label-btn"
+                title="Click to rename section"
+                onClick={() => setEditingLabelKey(key)}
+              >
+                {sectionLabels[key] ?? SECTION_LABELS[key]}
+                <Pencil size={12} className="section-label-edit-icon" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          <div className="inline-actions">
+            <button
+              type="button"
+              className={`secondary btn-sm preview-visibility-button${isEnabled ? " is-visible" : " is-hidden"}`}
+              onClick={() => toggleSectionInReview(key)}
+            >
+              {isEnabled ? <><EyeOff size={13} /> Hide</> : <><Eye size={13} /> Show</>}
+            </button>
+            <button
+              type="button"
+              className={`secondary btn-sm preview-edit-button${openPreviewEditors[key] ? " is-open" : ""}`}
+              onClick={() => togglePreviewEditor(key)}
+              disabled={!isEnabled}
+            >
+              {openPreviewEditors[key] ? <><X size={13} /> Close</> : <><Pencil size={13} /> Edit</>}
+            </button>
+          </div>
+        </div>
+        {isEnabled ? (renderPreviewSection(key) || <p className="helper">No entries.</p>) : <p className="helper">This section is hidden from the generated CV.</p>}
+        {openPreviewEditors[key] && isEnabled && (
+          <div className="preview-editor">
+            {renderPreviewEditorSection(key)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="panel-card cv-editor">
       <div className="panel-header">
@@ -2280,16 +3207,15 @@ export default function CvReview({
             <p className="helper">No job context provided. Preview will be generic.</p>
           )}
 
-          {renderBasics()}
-
           <div className="sub-card">
             <div className="sub-card-header">
               <strong className="sub-card-title"><Sparkles size={15} /> Rewrite with AI (optional)</strong>
               <button
                 type="button"
-                className="ghost icon-button"
+                className="ghost icon-button section-collapse-button"
                 onClick={() => setRewriteOpen((prev) => !prev)}
                 aria-expanded={rewriteOpen}
+                title="Open the AI rewrite panel to update wording across your full CV."
               >
                 {rewriteOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                 <span>{rewriteOpen ? "Collapse" : "Expand"}</span>
@@ -2309,9 +3235,10 @@ export default function CvReview({
                 <div className="inline-actions">
                   <button
                     type="button"
-                    className="secondary"
+                    className="secondary llm-action-button"
                     onClick={handleRewrite}
                     disabled={isRewriting}
+                    title="Use AI to rewrite the full CV with your instructions while keeping the current structure."
                   >
                     <Sparkles size={14} />
                     {isRewriting ? "Rewriting..." : "Rewrite with AI"}
@@ -2321,103 +3248,49 @@ export default function CvReview({
               </>
             )}
           </div>
+
+          {renderBasics()}
           {previewPayload ? (
             <>
               <div className="preview-grid">
-                {sectionOrder
-                  .filter((key) => enabledSections.has(key))
-                  .map((key) => {
-                    const isCardDragged = draggedSection === key;
-                    const isCardTarget = dragOverKey === key && draggedSection && draggedSection !== key;
-                    const cardDropDir = isCardTarget
-                      ? (sectionOrder.indexOf(draggedSection) < sectionOrder.indexOf(key) ? " is-drop-from-above" : " is-drop-from-below")
-                      : "";
-                    return (
-                    <div
-                      key={`preview-${key}`}
-                      id={`preview-card-${key}`}
-                      className={`preview-card${isCardDragged ? " is-dragged" : ""}${isCardTarget ? ` is-drop-target${cardDropDir}` : ""}`}
-                      onDragOver={(e) => { if (!draggedSection) return; e.preventDefault(); setDragOverKey(key); }}
-                      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverKey(null); }}
-                      onDrop={() => { handleDrop(key); setDragOverKey(null); }}
-                    >
-                      <div className="preview-card-header">
-                        <div className="preview-card-title">
-                          <button
-                            type="button"
-                            className="drag-handle"
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, key)}
-                            onDragEnd={() => { setDraggedSection(null); setDragOverKey(null); }}
-                            aria-label="Drag to reorder section"
-                          >
-                            <span aria-hidden="true">⋮⋮</span>
-                            <span aria-hidden="true">⋮⋮</span>
-                          </button>
-                          {editingLabelKey === key ? (
-                            <input
-                              className="section-label-input"
-                              value={sectionLabels[key] ?? SECTION_LABELS[key]}
-                              autoFocus
-                              onChange={(e) => updateSectionLabel(key, e.target.value)}
-                              onBlur={() => setEditingLabelKey(null)}
-                              onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingLabelKey(null); }}
-                            />
-                          ) : (
-                            <button
-                              type="button"
-                              className="section-label-btn"
-                              title="Click to rename section"
-                              onClick={() => setEditingLabelKey(key)}
-                            >
-                              {sectionLabels[key] ?? SECTION_LABELS[key]}
-                              <Pencil size={12} className="section-label-edit-icon" aria-hidden="true" />
-                            </button>
-                          )}
-                        </div>
-                        <div className="inline-actions">
-                          <button type="button" className="btn-danger" onClick={() => toggleSectionInReview(key)}>
-                            <Trash2 size={13} /> Remove
-                          </button>
-                          <button type="button" className="secondary btn-sm" onClick={() => togglePreviewEditor(key)}>
-                            {openPreviewEditors[key] ? <><X size={13} /> Close</> : <><Pencil size={13} /> Edit</>}
-                          </button>
-                        </div>
-                      </div>
-                      {renderPreviewSection(key) || <p className="helper">No entries.</p>}
-                      {openPreviewEditors[key] && (
-                        <div className="preview-editor">
-                          {renderPreviewEditorSection(key)}
-                        </div>
-                      )}
+                {isHipsterTemplate ? (
+                  <>
+                    <div className="hipster-preview-tabs" role="tablist" aria-label="HipsterCV section tabs">
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={hipsterPreviewTab === "sidebar"}
+                        className={`hipster-preview-tab${hipsterPreviewTab === "sidebar" ? " is-active" : ""}`}
+                        onClick={() => setHipsterPreviewTab("sidebar")}
+                      >
+                        Sidebar
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={hipsterPreviewTab === "main"}
+                        className={`hipster-preview-tab${hipsterPreviewTab === "main" ? " is-active" : ""}`}
+                        onClick={() => setHipsterPreviewTab("main")}
+                      >
+                        Main content
+                      </button>
                     </div>
-                    );
-                  })}
+                    <div className="preview-column">
+                      <h4 className="preview-column-title">
+                        {hipsterPreviewTab === "sidebar" ? "Sidebar" : "Main content"}
+                      </h4>
+                      {(hipsterPreviewTab === "sidebar" ? hipsterSectionOrders.sidebar : hipsterSectionOrders.main)
+                        .map((key) => renderPreviewCard(key, hipsterPreviewTab))}
+                      {hiddenSectionKeysForCurrentView.map((key) => renderPreviewCard(key, hipsterPreviewTab))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {currentSectionOrder.map((key) => renderPreviewCard(key, "single"))}
+                    {hiddenSectionKeysForCurrentView.map((key) => renderPreviewCard(key, "single"))}
+                  </>
+                )}
               </div>
-              {hiddenSectionKeys.length > 0 && (
-                <div className="hidden-sections">
-                  <button
-                    type="button"
-                    className="ghost"
-                    onClick={() => setHiddenSectionsOpen((prev) => !prev)}
-                  >
-                    {hiddenSectionsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    {hiddenSectionsOpen ? "Hide" : "Show"} available sections ({hiddenSectionKeys.length})
-                  </button>
-                  {hiddenSectionsOpen && (
-                    <div className="hidden-sections-list">
-                      {hiddenSectionKeys.map((key) => (
-                        <div key={`review-hidden-${key}`} className="hidden-section-item">
-                          <span>{sectionLabels[key] ?? SECTION_LABELS[key]}</span>
-                          <button type="button" className="secondary btn-sm" onClick={() => toggleSectionInReview(key)}>
-                            <Plus size={13} /> Add
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
             </>
           ) : (
             <p className="helper">Generating the preview. This can take a moment.</p>
@@ -2429,7 +3302,7 @@ export default function CvReview({
               <strong className="sub-card-title"><Save size={15} /> Save profile (optional)</strong>
               <button
                 type="button"
-                className="ghost icon-button"
+                className="ghost icon-button section-collapse-button"
                 onClick={() => setSaveProfileOpen((prev) => !prev)}
                 aria-expanded={saveProfileOpen}
               >
@@ -2449,7 +3322,15 @@ export default function CvReview({
                     id="profileId"
                     value={profileId}
                     placeholder="e.g. default, software-engineer-2025"
-                    onChange={(e) => setProfileId(e.target.value)}
+                    onChange={(e) => {
+                      const nextProfileId = e.target.value;
+                      setProfileId(nextProfileId);
+                      if (nextProfileId.trim() === loadedProfileId.trim()) {
+                        setRevision(loadedRevision);
+                      } else {
+                        setRevision(0);
+                      }
+                    }}
                   />
                 </div>
                 <div className="inline-actions" style={{ marginTop: 8 }}>
@@ -2473,6 +3354,23 @@ export default function CvReview({
       </div>
 
       {error && <p className="error">{error}</p>}
+
+      <OverwriteConfirmationModal
+        isOpen={overwriteDialog.isOpen}
+        targetProfileId={overwriteDialog.pendingTargetProfileId}
+        existingRevision={overwriteDialog.diff?.existingRevision ?? 0}
+        existingUpdatedAt={overwriteDialog.diff?.existingUpdatedAt}
+        totals={overwriteDialog.diff?.totals || { added: 0, removed: 0, updated: 0 }}
+        topLevelChanges={overwriteDialog.diff?.topLevelChanges || []}
+        sectionChanges={overwriteDialog.diff?.sectionChanges || []}
+        suggestedProfileId={overwriteDialog.suggestedProfileId}
+        onSuggestedProfileIdChange={(value) => setOverwriteDialog((prev) => ({ ...prev, suggestedProfileId: value }))}
+        onConfirmOverwrite={handleConfirmOverwrite}
+        onSaveAsNew={handleSaveAsNewFromDialog}
+        onCancel={closeOverwriteDialog}
+        isBusy={isSaving}
+        error={overwriteDialog.error}
+      />
     </div>
   );
 }

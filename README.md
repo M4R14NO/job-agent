@@ -11,6 +11,7 @@ This repo is a public prototype. It focuses on local development and assumes you
 - Inspect match reasons and scores per job.
 - Generate a cover letter for a selected job using your resume text.
 - Create and edit an AwesomeCV-based CV with live PDF preview.
+- Create and edit CVs with AwesomeCV and HipsterCV-inspired templates.
 - Save CV profiles and tailor CV sections for specific applications.
 - Cache and reuse the latest search response from the UI.
 
@@ -136,9 +137,14 @@ Canonical normalized job fields used by the UI:
 - `POST /cover-letter` accepts resume text and the selected job details.
 - The response is plain text and shown in the job modal.
 
-## CV Generation (AwesomeCV)
+## CV Generation
 
 The CV feature renders AwesomeCV templates via `awesomecv-jinja` and streams the PDF back to the browser. End users download the file directly, so server-side file permissions are not exposed to them.
+
+Template IDs currently supported by the backend:
+
+- `awesomecv` (original AwesomeCV layout)
+- `hipstercv` (adapted, logo-free template based on a HipsterCV-style layout)
 
 CV profiles are stored locally under the CV temp directory (default: `/tmp/job-agent-tex/profiles/cv_profiles.json`). The CV editor lets users reorder sections, and that order is persisted per profile.
 

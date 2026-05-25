@@ -1,0 +1,139 @@
+((# ============================================================ #))
+((# Template: hipster_cv/cv.tex.j2                               #))
+((# Source: adapted from user-provided hipster-cv variant         #))
+((# Focused pass: header + work experience layout                 #))
+((# ============================================================ #))
+%!TEX option = --shell-escape
+\documentclass[pastel]{hipstercv}
+\usepackage[utf8]{inputenc}
+\usepackage[default]{raleway}
+\usepackage[margin=1cm, a4paper]{geometry}
+\usepackage[english]{babel}
+\usepackage{enumitem}
+
+\newlength{\rightcolwidth}
+\newlength{\leftcolwidth}
+\setlength{\leftcolwidth}{0.24\textwidth}
+\setlength{\rightcolwidth}{0.76\textwidth}
+\newcolumntype{H}{>{\raggedleft\arraybackslash\hspace{0pt}}p{0.11\linewidth}}
+\newcolumntype{R}{>{\raggedright\arraybackslash\hspace{0pt}}p{0.81\linewidth}}
+\setlength{\emergencystretch}{1em}
+\newcommand{\hipstersidebarspace}{\par\vspace{3.5em}}
+\newcommand{\hipstersidebarcontentoffset}{-1.8em}
+\newcommand{\hipstersidebarcontentwidth}{0.90\leftcolwidth}
+
+\author{Job Agent}
+\date{\today}
+\pagestyle{empty}
+
+\newcommand{\hipstercontactline}[2]{#1 & #2\\[1pt]}
+\newcommand{\hipstermarker}[1]{\raisebox{0.35ex}{\color{backBlue}\bfseries\footnotesize #1}}
+\newcommand{\headermaybephoto}[3]{%
+\begin{tikzpicture}[remember picture,overlay]
+\node[rectangle, fill=backBlue, anchor=north, minimum width=\paperwidth, minimum height=5cm](header) at (current page.north){};
+\node[anchor=west](photo) at ($(header.west)+(3.5cm,-2.45cm)$) {};
+\draw[draw=black!60, line width=0.6pt] (photo) circle (2cm);
+((* if photo and photo | length > 0 *))
+\draw[path picture={\node[anchor=center] at (path picture bounding box.center){\includegraphics[height=4.3cm]{((( photo | latex_escape )))}};}] (photo) circle (2cm);
+((* else *))
+\node[anchor=center, font=\small\color{black!70}] at (photo) {No Photo};
+((* endif *))
+\node[anchor=east](name) at ($(header.east)+(-2.0cm,-1.95cm)$) {#1};
+\node[anchor=north east] at (name.south east) {#2};
+\end{tikzpicture}%
+\vspace{1.8cm}%
+}
+
+\begin{document}
+
+\thispagestyle{empty}
+\section*{Start}
+
+\headermaybephoto{
+  \bgupper{backBlue}{headerfontboxfont}{\bfseries\Huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}
+}{
+  ((* if position *))\bg{backBlue}{headerfontboxfont}{\large ((( position | latex_escape )))}((* endif *))
+}{((* if photo *))((( photo | latex_escape )))((* endif *))}
+
+\subsection*{}
+\vspace{4em}
+
+\setlength{\columnsep}{0.5cm}
+\columnratio{0.24}[0.75]
+\begin{paracol}{2}
+\hbadness5000
+\paracolbackgroundoptions
+
+\small
+{\setasidefontcolour
+\vspace{1em}
+
+((* if email or mobile or homepage or github or linkedin *))
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{Contact}\\
+\hspace{\hipstersidebarcontentoffset}\begin{minipage}[t]{\hipstersidebarcontentwidth}
+{\footnotesize\begin{tabular}{@{}>{\raggedright\arraybackslash\hspace{0pt}}p{0.09\linewidth}@{\hspace{0.2em}}>{\raggedright\arraybackslash\hspace{0pt}}p{0.86\linewidth}@{}}
+((* if email *))
+\hipstercontactline{\faEnvelope}{\href{mailto:((( email | latex_escape )))}{\nolinkurl{((( email | latex_escape )))}}}
+((* endif *))
+((* if mobile *))
+\hipstercontactline{\faPhone}{((( mobile | latex_escape )))}
+((* endif *))
+((* if linkedin *))
+\hipstercontactline{\faLinkedin}{\href{((( linkedin | latex_escape )))}{\nolinkurl{((( linkedin | latex_escape )))}}}
+((* endif *))
+((* if github *))
+\hipstercontactline{\faGithub}{\href{((( github | latex_escape )))}{\nolinkurl{((( github | latex_escape )))}}}
+((* endif *))
+((* if homepage *))
+\hipstercontactline{\faGlobe}{\href{((( homepage | latex_escape )))}{\nolinkurl{((( homepage | latex_escape )))}}}
+((* endif *))
+\end{tabular}}
+\end{minipage}
+\hipstersidebarspace
+((* endif *))
+
+((* if sidebar_section_order and sidebar_section_order | length > 0 *))
+((* for section in sidebar_section_order *))
+((* if section == "summary" and sections.summary *))((* include "sections/summary_sidebar.tex.j2" *))((* endif *))
+((* if section == "languages" and sections.languages *))((* include "sections/languages.tex.j2" *))((* endif *))
+((* if section == "interests" and sections.interests *))((* include "sections/interests.tex.j2" *))((* endif *))
+((* endfor *))
+((* else *))
+((* if sections.summary *))((* include "sections/summary_sidebar.tex.j2" *))((* endif *))
+((* if sections.languages *))((* include "sections/languages.tex.j2" *))((* endif *))
+((* if sections.interests *))((* include "sections/interests.tex.j2" *))((* endif *))
+((* endif *))
+((* if strengths and strengths | length > 0 *))((* include "sections/strengths.tex.j2" *))((* endif *))
+((* if hobbies and hobbies | length > 0 *))((* include "sections/hobbies.tex.j2" *))((* endif *))
+\vspace*{\fill}\null
+}
+
+\switchcolumn
+
+\small
+\sloppy
+((* if main_section_order and main_section_order | length > 0 *))
+((* for section in main_section_order *))
+((* if section == "experience" and sections.experience *))((* include "sections/experience.tex.j2" *))((* endif *))
+((* if section == "education" and sections.education *))((* include "sections/education.tex.j2" *))((* endif *))
+((* if section == "skills" and sections.skills *))((* include "sections/skills.tex.j2" *))((* endif *))
+((* if section == "volunteer" and sections.volunteer *))((* include "sections/volunteer.tex.j2" *))((* endif *))
+((* if section == "writing" and sections.writing *))((* include "sections/writing.tex.j2" *))((* endif *))
+((* if section == "certificates" and sections.certificates *))((* include "sections/certificates.tex.j2" *))((* endif *))
+((* if section == "honors" and sections.honors *))((* include "sections/honors.tex.j2" *))((* endif *))
+((* endfor *))
+((* else *))
+((* if sections.experience *))((* include "sections/experience.tex.j2" *))((* endif *))
+((* if sections.education *))((* include "sections/education.tex.j2" *))((* endif *))
+((* if sections.skills *))((* include "sections/skills.tex.j2" *))((* endif *))
+((* if sections.volunteer *))((* include "sections/volunteer.tex.j2" *))((* endif *))
+((* if sections.writing *))((* include "sections/writing.tex.j2" *))((* endif *))
+((* if sections.certificates *))((* include "sections/certificates.tex.j2" *))((* endif *))
+((* if sections.honors *))((* include "sections/honors.tex.j2" *))((* endif *))
+((* endif *))
+
+\switchcolumn*
+\vspace*{\fill}\null
+
+\end{paracol}
+\end{document}

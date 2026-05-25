@@ -1,0 +1,10 @@
+((# Supported variables: summary, section_labels.summary? #))
+((* if summary *))
+((* set _st = (section_labels or {}).get('summary', 'Summary') *))
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{((( _st | latex_escape )))}\\
+\\
+\hspace{\hipstersidebarcontentoffset}\begin{minipage}[t]{\hipstersidebarcontentwidth}
+{\footnotesize\raggedright ((( summary | latex_escape )))}
+\end{minipage}
+\hipstersidebarspace
+((* endif *))

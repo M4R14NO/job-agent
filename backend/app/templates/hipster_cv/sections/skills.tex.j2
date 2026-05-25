@@ -1,0 +1,11 @@
+((# Supported variables: skills[], section_labels.skills? #))
+((* if skills and skills | length > 0 *))
+((* set _st = (section_labels or {}).get('skills', 'Skills') *))
+\section*{((( _st | upper | latex_escape )))}
+\vspace{0.6em}
+\hspace{-0.3cm}\begin{tabular}{>{\raggedleft\arraybackslash\hspace{0pt}}m{0.16\linewidth}|>{\raggedright\arraybackslash\hspace{0pt}}m{0.76\linewidth}}
+((* for skill in skills *))
+{\scriptsize\bfseries\linespread{0.3}\selectfont\textcolor{((* if loop.index is odd *))black!88((* else *))black!60((* endif *))}{((( skill.category | latex_escape )))}} & {\textcolor{((* if loop.index is odd *))black!88((* else *))black!68((* endif *))}{((( skill.list | latex_escape )))}}\\[0.45em]
+((* endfor *))
+\end{tabular}
+((* endif *))

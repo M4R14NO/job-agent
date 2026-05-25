@@ -1,0 +1,8 @@
+((# Supported variables: summary, section_labels.summary? #))
+((* if summary *))
+((* set _st = (section_labels or {}).get('summary', 'Summary') *))
+\section*{((( _st | upper | latex_escape )))}
+\vspace{0.6em}
+((( summary | latex_escape )))
+\vspace{1.2em}
+((* endif *))

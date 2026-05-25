@@ -35,7 +35,6 @@ from .services.cv_service import (
     render_cv_pdf_from_payload,
     rewrite_canonical_with_prompt,
 )
-from .services.cv_mappers.awesomecv import CvAwesomePayload
 from .services.cv_storage import RevisionMismatchError, get_profile_store
 from .services.lmstudio_client import chat_completion, list_models, safe_request
 from .services.search_service import fetch_jobs
@@ -334,6 +333,8 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
                 lm_timeout=payload.lm_timeout,
                 output_language=output_language,
                 section_order=payload.section_order,
+                sidebar_section_order=payload.sidebar_section_order,
+                main_section_order=payload.main_section_order,
             )
         else:
             if not deterministic_mapper:
@@ -341,6 +342,8 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
             template_payload, _ = deterministic_mapper(
                 canonical=payload.data,
                 section_order=payload.section_order,
+                sidebar_section_order=payload.sidebar_section_order,
+                main_section_order=payload.main_section_order,
             )
         pdf_bytes = render_cv_pdf_from_payload(payload=template_payload.model_dump(), doc_type=payload.doc_type)
     except RuntimeError as exc:
@@ -383,6 +386,8 @@ def preview_cv_mapping(payload: CvPreviewRequest) -> CvPreviewResponse:
                 lm_timeout=payload.lm_timeout,
                 output_language=output_language,
                 section_order=payload.section_order,
+                sidebar_section_order=payload.sidebar_section_order,
+                main_section_order=payload.main_section_order,
             )
         else:
             if not deterministic_mapper:
@@ -390,6 +395,8 @@ def preview_cv_mapping(payload: CvPreviewRequest) -> CvPreviewResponse:
             template_payload, _ = deterministic_mapper(
                 canonical=payload.data,
                 section_order=payload.section_order,
+                sidebar_section_order=payload.sidebar_section_order,
+                main_section_order=payload.main_section_order,
             )
     except RuntimeError as exc:
         message = str(exc)
@@ -431,14 +438,16 @@ def rewrite_cv(payload: CvRewriteRequest) -> CvRewriteResponse:
 
 @app.post("/cv/render-template")
 def render_cv_from_template(payload: CvRenderTemplateRequest) -> Response:
+    if not get_deterministic_mapper(payload.template_id) and not get_llm_mapper(payload.template_id):
+        raise HTTPException(status_code=400, detail="Unsupported template_id")
     if payload.doc_type not in ALLOWED_DOC_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported doc_type")
 
     try:
-        validated_payload = CvAwesomePayload.model_validate(payload.payload)
         pdf_bytes = render_cv_pdf_from_payload(
-            payload=validated_payload.model_dump(),
+            payload=payload.payload,
             doc_type=payload.doc_type,
+            template_id=payload.template_id,
         )
     except RuntimeError as exc:
         message = str(exc)

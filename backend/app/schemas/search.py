@@ -160,6 +160,18 @@ class CvCanonicalInterest(BaseModel):
     name: str | None = None
 
 
+class CvCanonicalStrength(BaseModel):
+    id: str
+    name: str | None = None
+
+
+class CvCanonicalHobby(BaseModel):
+    id: str
+    name: str | None = None
+    icon: str | None = None
+    icon_candidates: list[str] = Field(default_factory=list)
+
+
 class CvCanonicalAward(BaseModel):
     id: str
     title: str | None = None
@@ -186,6 +198,8 @@ class CvCanonicalData(BaseModel):
     publications: list[CvCanonicalPublication] = Field(default_factory=list)
     languages: list[CvCanonicalLanguage] = Field(default_factory=list)
     interests: list[CvCanonicalInterest] = Field(default_factory=list)
+    strengths: list[CvCanonicalStrength] = Field(default_factory=list)
+    hobbies: list[CvCanonicalHobby] = Field(default_factory=list)
     awards: list[CvCanonicalAward] = Field(default_factory=list)
 
 
@@ -202,8 +216,17 @@ class CvCanonicalProfile(BaseModel):
     revision: int
     created_at: str | None = None
     updated_at: str | None = None
+    template_id: str = "awesomecv"
     data: CvCanonicalData
+    company: str | None = None
+    application_status: str | None = None
+    application_date: str | None = None
+    job_title: str | None = None
+    job_description: str | None = None
+    job_url: str | None = None
     section_order: list[str] | None = None
+    sidebar_section_order: list[str] | None = None
+    main_section_order: list[str] | None = None
     audit: CvAuditTrail | None = None
 
 
@@ -240,11 +263,14 @@ class CvRenderRequest(BaseModel):
     lm_timeout: float | None = None
     output_language: str | None = None
     section_order: list[str] | None = None
+    sidebar_section_order: list[str] | None = None
+    main_section_order: list[str] | None = None
     mapping_mode: str | None = None
 
 
 class CvRenderTemplateRequest(BaseModel):
     payload: dict
+    template_id: str = "awesomecv"
     doc_type: str = "resume"
 
 
@@ -260,6 +286,8 @@ class CvPreviewRequest(BaseModel):
     lm_timeout: float | None = None
     output_language: str | None = None
     section_order: list[str] | None = None
+    sidebar_section_order: list[str] | None = None
+    main_section_order: list[str] | None = None
     mapping_mode: str | None = None
 
 

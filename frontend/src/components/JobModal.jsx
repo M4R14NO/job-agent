@@ -111,30 +111,74 @@ export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defa
   );
 }
 
-export function PdfPreviewCard({ pdfUrl, isGenerating, isDownloading, onUpdate, onDownload }) {
+export function PdfPreviewCard({
+  pdfUrl,
+  isGenerating,
+  isDownloading,
+  templateId,
+  onTemplateIdChange,
+  onUpdate,
+  onDownload,
+  disabled = false,
+  disabledReason = ""
+}) {
+  const handleTemplateKeyDown = (event) => {
+    if (event.key === "Tab" && !event.shiftKey && !disabled && !isGenerating) {
+      event.preventDefault();
+      document.getElementById("pdf-update-preview-button")?.focus();
+    }
+  };
+
+  const handleUpdateKeyDown = (event) => {
+    if (event.key === "Tab" && !event.shiftKey && !disabled && !isGenerating) {
+      event.preventDefault();
+      document.getElementById("pdf-download-button")?.focus();
+    }
+  };
+
   return (
-    <div className="panel-card pdf-preview-card">
+    <div className={`panel-card pdf-preview-card${disabled ? " is-disabled" : ""}`}>
       <div className="panel-header">
         <div>
           <p className="eyebrow">PDF preview</p>
           <h2>Rendered CV</h2>
         </div>
         <div className="pdf-preview-actions">
+          {onTemplateIdChange && (
+            <div className="pdf-preview-template-control">
+              <span className="pdf-preview-template-label">Switch template</span>
+              <select
+                id="pdf-preview-template-select"
+                className="pdf-preview-template-select"
+                value={templateId}
+                onChange={(event) => onTemplateIdChange(event.target.value)}
+                aria-label="Template"
+                disabled={disabled}
+                onKeyDown={handleTemplateKeyDown}
+              >
+                <option value="awesomecv">AwesomeCV</option>
+                <option value="hipstercv">HipsterCV</option>
+              </select>
+            </div>
+          )}
           <button
+            id="pdf-update-preview-button"
             type="button"
             className="secondary btn-sm"
             onClick={onUpdate}
-            disabled={isGenerating}
+            disabled={disabled || isGenerating}
+            onKeyDown={handleUpdateKeyDown}
           >
             <RefreshCw size={14} />
             {isGenerating ? "Rendering…" : "Update preview"}
           </button>
           <button
+            id="pdf-download-button"
             type="button"
-            className="primary btn-sm"
+            className="primary btn-sm pdf-download-button"
             onClick={onDownload}
-            disabled={isDownloading || !pdfUrl}
-            title={!pdfUrl ? "Render a preview first" : "Download the current PDF"}
+            disabled={disabled || isDownloading || !pdfUrl}
+            title={disabled ? disabledReason : (!pdfUrl ? "Render a preview first" : "Download the current PDF")}
           >
             <Download size={14} />
             {isDownloading ? "Downloading…" : "Download PDF"}
@@ -142,7 +186,11 @@ export function PdfPreviewCard({ pdfUrl, isGenerating, isDownloading, onUpdate, 
         </div>
       </div>
       <div className="pdf-preview-container">
-        {pdfUrl ? (
+        {disabled ? (
+          <div className="pdf-preview-placeholder">
+            <p className="helper">{disabledReason || "Preview is disabled until CV form data exists."}</p>
+          </div>
+        ) : pdfUrl ? (
           <iframe
             src={pdfUrl}
             title="CV PDF preview"
@@ -280,7 +328,12 @@ export function JobActionsCard({
                   <option value="german">German</option>
                 </select>
               </div>
-              <button className="secondary" onClick={handleGenerate} disabled={isGenerating}>
+              <button
+                className="secondary llm-action-button"
+                onClick={handleGenerate}
+                disabled={isGenerating}
+                title="Use AI to draft a cover letter for this role using your resume text and the job description."
+              >
                 {isGenerating ? "Drafting..." : "Generate"}
               </button>
             </div>
@@ -322,6 +375,7 @@ export function JobActionsCard({
                     onChange={(e) => setSelectedTemplate(e.target.value)}
                   >
                     <option value="awesomecv">AwesomeCV</option>
+                    <option value="hipstercv">HipsterCV</option>
                   </select>
                 </div>
                 <div>
@@ -349,7 +403,12 @@ export function JobActionsCard({
                 }}
               />
               <div className="cv-generate-row">
-                <button className="primary cv-generate-button" onClick={handleGenerateCv} disabled={isGeneratingCv}>
+                <button
+                  className="primary cv-generate-button llm-action-button"
+                  onClick={handleGenerateCv}
+                  disabled={isGeneratingCv}
+                  title="Use AI to create a structured CV draft from your source text and the selected template settings."
+                >
                   {isGeneratingCv ? (
                     <>
                       <Spinner size="sm" color="currentColor" />

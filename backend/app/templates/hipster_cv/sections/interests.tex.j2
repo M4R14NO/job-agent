@@ -1,0 +1,14 @@
+((# Supported variables: interests[], section_labels.interests? #))
+((* if interests and interests | length > 0 *))
+((* set _st = (section_labels or {}).get('interests', 'Interests') *))
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{((( _st | latex_escape )))}\\
+\\
+\hspace{\hipstersidebarcontentoffset}\begin{minipage}[t]{\hipstersidebarcontentwidth}
+\begin{itemize}[leftmargin=0.72em, labelsep=0.28em, itemsep=0.25em, topsep=0.2em, partopsep=0em, parsep=0em]
+((* for interest in interests *))
+\item ((( interest.name | default('') | latex_escape )))
+((* endfor *))
+\end{itemize}
+\end{minipage}
+\hipstersidebarspace
+((* endif *))
