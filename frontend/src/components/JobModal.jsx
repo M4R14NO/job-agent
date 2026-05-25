@@ -129,15 +129,18 @@ export function PdfPreviewCard({
         </div>
         <div className="pdf-preview-actions">
           {onTemplateIdChange && (
-            <select
-              className="pdf-preview-template-select"
-              value={templateId}
-              onChange={(event) => onTemplateIdChange(event.target.value)}
-              aria-label="Template"
-            >
-              <option value="awesomecv">AwesomeCV</option>
-              <option value="hipstercv">HipsterCV</option>
-            </select>
+            <div className="pdf-preview-template-control">
+              <span className="pdf-preview-template-label">Switch template</span>
+              <select
+                className="pdf-preview-template-select"
+                value={templateId}
+                onChange={(event) => onTemplateIdChange(event.target.value)}
+                aria-label="Template"
+              >
+                <option value="awesomecv">AwesomeCV</option>
+                <option value="hipstercv">HipsterCV</option>
+              </select>
+            </div>
           )}
           <button
             type="button"

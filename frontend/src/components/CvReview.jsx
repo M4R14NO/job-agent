@@ -758,6 +758,7 @@ export default function CvReview({
   const [draggedItem, setDraggedItem] = useState(null); // { namespace, index }
   const [dragOverItem, setDragOverItem] = useState(null); // { namespace, index }
   const [openPreviewEditors, setOpenPreviewEditors] = useState({});
+  const [hipsterPreviewTab, setHipsterPreviewTab] = useState("sidebar");
   const [hiddenSectionsOpen, setHiddenSectionsOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState(() => ({
     basics: true,
@@ -783,6 +784,7 @@ export default function CvReview({
   });
   const previewDebounceRef = useRef(null);
   const previousTemplateIdRef = useRef(templateId);
+  const forceImmediatePreviewRef = useRef(true);
   const schemaVersion = canonical?.schema_version || "v1";
   const currentSectionOrder = isHipsterTemplate
     ? [...hipsterSectionOrders.sidebar, ...hipsterSectionOrders.main]
@@ -824,6 +826,25 @@ export default function CvReview({
 
   const buildPreviewHash = () => buildPreviewHashFrom(formData, currentSectionOrder, hipsterSectionOrders);
 
+  const scheduleNextPreview = ({ immediate = false } = {}) => {
+    if (immediate) {
+      forceImmediatePreviewRef.current = true;
+      if (previewDebounceRef.current) {
+        clearTimeout(previewDebounceRef.current);
+        previewDebounceRef.current = null;
+      }
+      return;
+    }
+    forceImmediatePreviewRef.current = false;
+  };
+
+  const cancelScheduledPreview = () => {
+    if (previewDebounceRef.current) {
+      clearTimeout(previewDebounceRef.current);
+      previewDebounceRef.current = null;
+    }
+  };
+
   useEffect(() => {
     setFormData(normalizeCanonical(canonical?.data));
     setSectionOrder(normalizeSectionOrder(canonical?.section_order));
@@ -843,12 +864,20 @@ export default function CvReview({
     setRewritePrompt("");
     setIsRewriting(false);
     setOpenPreviewEditors({});
+    setHipsterPreviewTab("sidebar");
     setSectionLabels({ ...SECTION_LABELS });
     setEditingLabelKey(null);
     setHiddenPersonalFields(new Set());
     setSaveProfileOpen(false);
     previousTemplateIdRef.current = templateId;
+    forceImmediatePreviewRef.current = true;
   }, [canonical]);
+
+  useEffect(() => {
+    if (isHipsterTemplate) {
+      setHipsterPreviewTab("sidebar");
+    }
+  }, [isHipsterTemplate]);
 
   useEffect(() => {
     onPreviewPayloadChange?.(previewPayload);
@@ -862,7 +891,10 @@ export default function CvReview({
     const templateChanged = previousTemplateIdRef.current !== templateId;
     previousTemplateIdRef.current = templateId;
 
-    if (templateChanged || !previewPayload) {
+    const shouldRenderImmediately = templateChanged || forceImmediatePreviewRef.current;
+
+    if (shouldRenderImmediately) {
+      forceImmediatePreviewRef.current = false;
       if (previewDebounceRef.current) {
         clearTimeout(previewDebounceRef.current);
         previewDebounceRef.current = null;
@@ -907,6 +939,14 @@ export default function CvReview({
     [enabledSections]
   );
 
+  const hiddenSectionKeysForCurrentView = useMemo(() => {
+    if (!isHipsterTemplate) return hiddenSectionKeys;
+    const tabKeys = hipsterPreviewTab === "sidebar"
+      ? HIPSTER_SIDEBAR_SECTION_KEYS
+      : HIPSTER_MAIN_SECTION_KEYS;
+    return tabKeys.filter((key) => !enabledSections.has(key));
+  }, [enabledSections, hiddenSectionKeys, hipsterPreviewTab, isHipsterTemplate]);
+
   const clearPreview = () => {
     setPreviewPayload(null);
     setPreviewHash("");
@@ -921,6 +961,7 @@ export default function CvReview({
     HIPSTER_SIDEBAR_SECTION_KEYS.includes(key) ? "sidebar" : "main";
 
   const toggleSection = (key) => {
+    scheduleNextPreview({ immediate: true });
     if (isHipsterTemplate) {
       const zone = getHipsterZoneForSection(key);
       const source = zone === "sidebar" ? hipsterSectionOrders.sidebar : hipsterSectionOrders.main;
@@ -949,6 +990,7 @@ export default function CvReview({
   };
 
   const toggleSectionInReview = (key) => {
+    scheduleNextPreview({ immediate: true });
     if (isHipsterTemplate) {
       toggleSection(key);
       return;
@@ -1042,6 +1084,7 @@ export default function CvReview({
   // ── Item-level drag & drop ──────────────────────────────────────────────────
 
   const movePreviewListItem = (payloadField, fromIndex, toIndex) => {
+    cancelScheduledPreview();
     const currentItems = previewPayload?.[payloadField] || [];
     const nextItems = [...currentItems];
     const [removed] = nextItems.splice(fromIndex, 1);
@@ -1135,6 +1178,7 @@ export default function CvReview({
   // ────────────────────────────────────────────────────────────────────────────
 
   const updateSectionLabel = (key, value) => {
+    cancelScheduledPreview();
     setSectionLabels((prev) => ({ ...prev, [key]: value }));
     setPreviewPayload((prev) => prev ? { ...prev, section_labels: { ...(prev.section_labels || {}), [key]: value } } : prev);
   };
@@ -1165,7 +1209,7 @@ export default function CvReview({
   }, [previewPayload?.homepage, previewPayload?.github, previewPayload?.linkedin]);
 
   const updateField = (field, value) => {
-    clearPreview();
+    scheduleNextPreview({ immediate: false });
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -1223,7 +1267,7 @@ export default function CvReview({
   };
 
   const updateListItem = (section, index, patch) => {
-    clearPreview();
+    scheduleNextPreview({ immediate: false });
     setFormData((prev) => {
       const updated = [...prev[section]];
       updated[index] = { ...updated[index], ...patch };
@@ -1232,17 +1276,17 @@ export default function CvReview({
   };
 
   const addListItem = (section, item) => {
-    clearPreview();
+    scheduleNextPreview({ immediate: true });
     setFormData((prev) => ({ ...prev, [section]: [...prev[section], item] }));
   };
 
   const removeListItem = (section, index) => {
-    clearPreview();
+    scheduleNextPreview({ immediate: true });
     setFormData((prev) => ({ ...prev, [section]: prev[section].filter((_, idx) => idx !== index) }));
   };
 
   const moveListItem = (section, index, direction) => {
-    clearPreview();
+    scheduleNextPreview({ immediate: false });
     setFormData((prev) => {
       const updated = [...prev[section]];
       const nextIndex = direction === "up" ? index - 1 : index + 1;
@@ -1476,6 +1520,7 @@ export default function CvReview({
   };
 
   const updatePreviewField = (field, value) => {
+    cancelScheduledPreview();
     setPreviewPayload((prev) => (
       prev
         ? {
@@ -1494,6 +1539,7 @@ export default function CvReview({
   };
 
   const updatePreviewListItem = (section, index, patch) => {
+    cancelScheduledPreview();
     const currentItems = previewPayload?.[section] || [];
     const nextItems = currentItems.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item));
     const normalizedSection = normalizePreviewSectionKey(section);
@@ -1520,6 +1566,7 @@ export default function CvReview({
   };
 
   const addPreviewListItem = (section, item) => {
+    cancelScheduledPreview();
     const currentItems = previewPayload?.[section] || [];
     const nextItems = [...currentItems, item];
     const normalizedSection = normalizePreviewSectionKey(section);
@@ -1546,6 +1593,7 @@ export default function CvReview({
   };
 
   const removePreviewListItem = (section, index) => {
+    cancelScheduledPreview();
     const currentItems = previewPayload?.[section] || [];
     const nextItems = currentItems.filter((_, itemIndex) => itemIndex !== index);
     const normalizedSection = normalizePreviewSectionKey(section);
@@ -3085,20 +3133,36 @@ export default function CvReview({
           </div>
           {previewPayload ? (
             <>
-              <div className={`preview-grid${isHipsterTemplate ? " is-split" : ""}`}>
+              <div className="preview-grid">
                 {isHipsterTemplate ? (
                   <>
-                    <div className="preview-column">
-                      <h4 className="preview-column-title">Sidebar</h4>
-                      {hipsterSectionOrders.sidebar
-                        .filter((key) => enabledSections.has(key))
-                        .map((key) => renderPreviewCard(key, "sidebar"))}
+                    <div className="hipster-preview-tabs" role="tablist" aria-label="HipsterCV section tabs">
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={hipsterPreviewTab === "sidebar"}
+                        className={`hipster-preview-tab${hipsterPreviewTab === "sidebar" ? " is-active" : ""}`}
+                        onClick={() => setHipsterPreviewTab("sidebar")}
+                      >
+                        Sidebar
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={hipsterPreviewTab === "main"}
+                        className={`hipster-preview-tab${hipsterPreviewTab === "main" ? " is-active" : ""}`}
+                        onClick={() => setHipsterPreviewTab("main")}
+                      >
+                        Main content
+                      </button>
                     </div>
                     <div className="preview-column">
-                      <h4 className="preview-column-title">Main content</h4>
-                      {hipsterSectionOrders.main
+                      <h4 className="preview-column-title">
+                        {hipsterPreviewTab === "sidebar" ? "Sidebar" : "Main content"}
+                      </h4>
+                      {(hipsterPreviewTab === "sidebar" ? hipsterSectionOrders.sidebar : hipsterSectionOrders.main)
                         .filter((key) => enabledSections.has(key))
-                        .map((key) => renderPreviewCard(key, "main"))}
+                        .map((key) => renderPreviewCard(key, hipsterPreviewTab))}
                     </div>
                   </>
                 ) : (
@@ -3107,19 +3171,14 @@ export default function CvReview({
                     .map((key) => renderPreviewCard(key, "single"))
                 )}
               </div>
-              {hiddenSectionKeys.length > 0 && (
-                <div className="hidden-sections">
-                  <button
-                    type="button"
-                    className="ghost"
-                    onClick={() => setHiddenSectionsOpen((prev) => !prev)}
-                  >
-                    {hiddenSectionsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    {hiddenSectionsOpen ? "Hide" : "Show"} available sections ({hiddenSectionKeys.length})
-                  </button>
-                  {hiddenSectionsOpen && (
+              {isHipsterTemplate ? (
+                hiddenSectionKeysForCurrentView.length > 0 && (
+                  <div className="hidden-sections">
+                    <p className="helper">
+                      Hidden sections in {hipsterPreviewTab === "sidebar" ? "Sidebar" : "Main content"}
+                    </p>
                     <div className="hidden-sections-list">
-                      {hiddenSectionKeys.map((key) => (
+                      {hiddenSectionKeysForCurrentView.map((key) => (
                         <div key={`review-hidden-${key}`} className="hidden-section-item">
                           <span>{sectionLabels[key] ?? SECTION_LABELS[key]}</span>
                           <button type="button" className="secondary btn-sm" onClick={() => toggleSectionInReview(key)}>
@@ -3128,8 +3187,33 @@ export default function CvReview({
                         </div>
                       ))}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )
+              ) : (
+                hiddenSectionKeysForCurrentView.length > 0 && (
+                  <div className="hidden-sections">
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => setHiddenSectionsOpen((prev) => !prev)}
+                    >
+                      {hiddenSectionsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      {hiddenSectionsOpen ? "Hide" : "Show"} available sections ({hiddenSectionKeysForCurrentView.length})
+                    </button>
+                    {hiddenSectionsOpen && (
+                      <div className="hidden-sections-list">
+                        {hiddenSectionKeysForCurrentView.map((key) => (
+                          <div key={`review-hidden-${key}`} className="hidden-section-item">
+                            <span>{sectionLabels[key] ?? SECTION_LABELS[key]}</span>
+                            <button type="button" className="secondary btn-sm" onClick={() => toggleSectionInReview(key)}>
+                              <Plus size={13} /> Add
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
               )}
             </>
           ) : (

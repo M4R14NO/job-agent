@@ -1619,6 +1619,33 @@ body.modal-open .pdf-preview-iframe {
   gap: 12px;
 }
 
+.hipster-preview-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  width: fit-content;
+}
+
+.hipster-preview-tab {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+  background: transparent;
+  cursor: pointer;
+}
+
+.hipster-preview-tab.is-active {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
 .preview-grid.is-split {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -2003,6 +2030,25 @@ body.modal-open .pdf-preview-iframe {
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.pdf-preview-template-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pdf-preview-template-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.pdf-preview-template-select {
+  min-width: 156px;
 }
 
 .pdf-preview-container {

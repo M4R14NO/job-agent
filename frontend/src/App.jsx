@@ -70,6 +70,7 @@ export default function App() {
   const pdfPreviewTimerRef = useRef(null);
   const pdfPreviewTemplateRef = useRef("");
   const hasRenderedPdfPreviewRef = useRef(false);
+  const pdfPreviewStructureRef = useRef("");
   const isResizingSidebarRef = useRef(false);
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(SIDEBAR_MIN_WIDTH);
@@ -203,8 +204,27 @@ export default function App() {
     if (!cvPreviewPayload || !cvReview) return undefined;
     const activeTemplateId = cvReview.templateId || "awesomecv";
     const templateChanged = Boolean(pdfPreviewTemplateRef.current) && pdfPreviewTemplateRef.current !== activeTemplateId;
-    const shouldRenderImmediately = !hasRenderedPdfPreviewRef.current || templateChanged;
+
+    const structureSignature = JSON.stringify({
+      sections: cvPreviewPayload.sections || {},
+      section_order: cvPreviewPayload.section_order || [],
+      sidebar_section_order: cvPreviewPayload.sidebar_section_order || [],
+      main_section_order: cvPreviewPayload.main_section_order || [],
+      experience_len: (cvPreviewPayload.experience || []).length,
+      education_len: (cvPreviewPayload.education || []).length,
+      skills_len: (cvPreviewPayload.skills || []).length,
+      volunteer_len: (cvPreviewPayload.volunteer || []).length,
+      honors_len: (cvPreviewPayload.honors || []).length,
+      certificates_len: (cvPreviewPayload.certificates || []).length,
+      writings_len: (cvPreviewPayload.writings || []).length,
+      languages_len: (cvPreviewPayload.languages || []).length,
+      interests_len: (cvPreviewPayload.interests || []).length
+    });
+    const structureChanged = Boolean(pdfPreviewStructureRef.current) && pdfPreviewStructureRef.current !== structureSignature;
+
+    const shouldRenderImmediately = !hasRenderedPdfPreviewRef.current || templateChanged || structureChanged;
     pdfPreviewTemplateRef.current = activeTemplateId;
+    pdfPreviewStructureRef.current = structureSignature;
 
     if (pdfPreviewTimerRef.current) {
       clearTimeout(pdfPreviewTimerRef.current);
@@ -452,6 +472,7 @@ export default function App() {
     setPdfPreviewUrl(null);
     hasRenderedPdfPreviewRef.current = false;
     pdfPreviewTemplateRef.current = templateId || "awesomecv";
+    pdfPreviewStructureRef.current = "";
   };
 
   const handleUpdatePdfPreview = async () => {
@@ -514,6 +535,7 @@ export default function App() {
     setPdfPreviewUrl(null);
     hasRenderedPdfPreviewRef.current = false;
     pdfPreviewTemplateRef.current = templateId || cvTemplateId || "awesomecv";
+    pdfPreviewStructureRef.current = "";
   };
 
   const handleCreateCvFromResume = async () => {
@@ -578,6 +600,7 @@ export default function App() {
     setPdfPreviewUrl(null);
     hasRenderedPdfPreviewRef.current = false;
     pdfPreviewTemplateRef.current = "";
+    pdfPreviewStructureRef.current = "";
   };
 
   const handleBackToResults = () => {
@@ -589,6 +612,7 @@ export default function App() {
     setPdfPreviewUrl(null);
     hasRenderedPdfPreviewRef.current = false;
     pdfPreviewTemplateRef.current = "";
+    pdfPreviewStructureRef.current = "";
   };
 
   const handleSetView = (view) => {
