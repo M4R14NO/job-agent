@@ -216,6 +216,7 @@ class CvCanonicalProfile(BaseModel):
     revision: int
     created_at: str | None = None
     updated_at: str | None = None
+    template_id: str = "awesomecv"
     data: CvCanonicalData
     section_order: list[str] | None = None
     sidebar_section_order: list[str] | None = None

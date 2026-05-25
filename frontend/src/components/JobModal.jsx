@@ -111,7 +111,15 @@ export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defa
   );
 }
 
-export function PdfPreviewCard({ pdfUrl, isGenerating, isDownloading, onUpdate, onDownload }) {
+export function PdfPreviewCard({
+  pdfUrl,
+  isGenerating,
+  isDownloading,
+  templateId,
+  onTemplateIdChange,
+  onUpdate,
+  onDownload
+}) {
   return (
     <div className="panel-card pdf-preview-card">
       <div className="panel-header">
@@ -120,6 +128,17 @@ export function PdfPreviewCard({ pdfUrl, isGenerating, isDownloading, onUpdate, 
           <h2>Rendered CV</h2>
         </div>
         <div className="pdf-preview-actions">
+          {onTemplateIdChange && (
+            <select
+              className="pdf-preview-template-select"
+              value={templateId}
+              onChange={(event) => onTemplateIdChange(event.target.value)}
+              aria-label="Template"
+            >
+              <option value="awesomecv">AwesomeCV</option>
+              <option value="hipstercv">HipsterCV</option>
+            </select>
+          )}
           <button
             type="button"
             className="secondary btn-sm"

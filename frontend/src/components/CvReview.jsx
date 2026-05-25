@@ -13,6 +13,7 @@ import {
   X
 } from "lucide-react";
 import {
+  getCvProfile,
   deleteCvProfile,
   previewCvMapping,
   rewriteCvCanonical,
@@ -378,11 +379,12 @@ export default function CvReview({
   outputLanguage,
   model,
   lmTimeout,
-  resumeText,
   onPreviewPayloadChange
 }) {
   const isHipsterTemplate = templateId === "hipstercv";
   const [profileId, setProfileId] = useState(canonical?.profile_id || "default");
+  const [loadedProfileId, setLoadedProfileId] = useState(canonical?.profile_id || "default");
+  const [loadedRevision, setLoadedRevision] = useState(canonical?.revision ?? 0);
   const [revision, setRevision] = useState(canonical?.revision ?? 0);
   const [formData, setFormData] = useState(() => normalizeCanonical(canonical?.data));
   const [sectionOrder, setSectionOrder] = useState(() => normalizeSectionOrder(canonical?.section_order));
@@ -426,7 +428,6 @@ export default function CvReview({
     writing: false,
     education: false
   }));
-
   const schemaVersion = canonical?.schema_version || "v1";
   const currentSectionOrder = isHipsterTemplate
     ? [...hipsterSectionOrders.sidebar, ...hipsterSectionOrders.main]
@@ -479,6 +480,8 @@ export default function CvReview({
       })
     );
     setProfileId(canonical?.profile_id || "default");
+    setLoadedProfileId(canonical?.profile_id || "default");
+    setLoadedRevision(canonical?.revision ?? 0);
     setRevision(canonical?.revision ?? 0);
     setPreviewPayload(null);
     setPreviewHash("");
@@ -871,20 +874,39 @@ export default function CvReview({
     setError("");
     setIsSaving(true);
     try {
-      const existingAudit = canonical?.audit || {};
-      const rawResumeText = (resumeText && resumeText.trim()) ? resumeText : (existingAudit.raw_resume_text || null);
+      const targetProfileId = profileId.trim();
+      let targetRevision = revision;
+
+      // If the user changed the profile ID, resolve whether it already exists.
+      // Existing IDs must use their current revision to overwrite cleanly.
+      if (targetProfileId !== loadedProfileId.trim()) {
+        try {
+          const existingTarget = await getCvProfile(targetProfileId);
+          targetRevision = existingTarget?.revision ?? 0;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "";
+          if (!message.includes("status 404")) {
+            throw err;
+          }
+          targetRevision = 0;
+        }
+      }
+
       const payload = {
         schema_version: schemaVersion,
-        profile_id: profileId,
-        revision,
+        profile_id: targetProfileId,
+        revision: targetRevision,
+        template_id: templateId,
         data: formData,
         section_order: currentSectionOrder,
         sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
-        main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined,
-        audit: rawResumeText ? { ...existingAudit, raw_resume_text: rawResumeText } : (Object.keys(existingAudit).length ? existingAudit : undefined)
+        main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined
       };
-      const saved = await saveCvProfile(profileId, payload);
+      const saved = await saveCvProfile(targetProfileId, payload);
+      setProfileId(saved.profile_id);
       setRevision(saved.revision);
+      setLoadedProfileId(saved.profile_id);
+      setLoadedRevision(saved.revision);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -2655,7 +2677,15 @@ export default function CvReview({
                     id="profileId"
                     value={profileId}
                     placeholder="e.g. default, software-engineer-2025"
-                    onChange={(e) => setProfileId(e.target.value)}
+                    onChange={(e) => {
+                      const nextProfileId = e.target.value;
+                      setProfileId(nextProfileId);
+                      if (nextProfileId.trim() === loadedProfileId.trim()) {
+                        setRevision(loadedRevision);
+                      } else {
+                        setRevision(0);
+                      }
+                    }}
                   />
                 </div>
                 <div className="inline-actions" style={{ marginTop: 8 }}>

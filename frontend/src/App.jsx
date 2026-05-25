@@ -197,9 +197,8 @@ export default function App() {
 
   useEffect(() => {
     if (!cvPreviewPayload || !cvReview) return;
-    if (pdfPreviewUrl) return;
     handleUpdatePdfPreview();
-  }, [cvPreviewPayload]);
+  }, [cvPreviewPayload, cvReview?.templateId]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -470,11 +469,11 @@ export default function App() {
     }
   };
 
-  const handleStartCvEditor = ({ canonical }) => {
+  const handleStartCvEditor = ({ canonical, templateId }) => {
     setCvReview({
       canonical,
       job: { title: "", company: "", description: "", job_url: "" },
-      templateId: cvTemplateId,
+      templateId: templateId || cvTemplateId,
       docType: cvDocType,
       outputLanguage: cvOutputLanguage
     });
@@ -502,7 +501,7 @@ export default function App() {
         lm_timeout: lmTimeout,
         output_language: cvOutputLanguage
       });
-      handleStartCvEditor({ canonical });
+      handleStartCvEditor({ canonical, templateId: cvTemplateId });
     } catch (err) {
       setCvEntryError(err instanceof Error ? err.message : "Failed to parse resume");
     } finally {
@@ -519,15 +518,22 @@ export default function App() {
     setIsLoadingProfile(true);
     try {
       const canonical = await getCvProfile(selectedProfileId);
+      const nextTemplateId = canonical.template_id || "awesomecv";
+      setCvTemplateId(nextTemplateId);
       if (canonical.audit?.raw_resume_text) {
         setResumeText(canonical.audit.raw_resume_text);
       }
-      handleStartCvEditor({ canonical });
+      handleStartCvEditor({ canonical, templateId: nextTemplateId });
     } catch (err) {
       setCvEntryError(err instanceof Error ? err.message : "Failed to load profile");
     } finally {
       setIsLoadingProfile(false);
     }
+  };
+
+  const handleTemplateIdChange = (nextTemplateId) => {
+    setCvTemplateId(nextTemplateId);
+    setCvReview((prev) => (prev ? { ...prev, templateId: nextTemplateId } : prev));
   };
 
   const handleSelectJob = (job) => {
@@ -631,6 +637,8 @@ export default function App() {
                 pdfUrl={pdfPreviewUrl}
                 isGenerating={isPdfGenerating}
                 isDownloading={isPdfDownloading}
+                templateId={cvReview.templateId}
+                onTemplateIdChange={handleTemplateIdChange}
                 onUpdate={handleUpdatePdfPreview}
                 onDownload={handleDownloadPdf}
               />
@@ -802,7 +810,7 @@ export default function App() {
                     isLoadingProfile={isLoadingProfile}
                     cvEntryError={cvEntryError}
                     cvTemplateId={cvTemplateId}
-                    onCvTemplateIdChange={setCvTemplateId}
+                    onCvTemplateIdChange={handleTemplateIdChange}
                     cvDocType={cvDocType}
                     onCvDocTypeChange={setCvDocType}
                     cvOutputLanguage={cvOutputLanguage}
@@ -818,6 +826,8 @@ export default function App() {
                         pdfUrl={pdfPreviewUrl}
                         isGenerating={isPdfGenerating}
                         isDownloading={isPdfDownloading}
+                        templateId={cvReview.templateId}
+                        onTemplateIdChange={handleTemplateIdChange}
                         onUpdate={handleUpdatePdfPreview}
                         onDownload={handleDownloadPdf}
                       />
