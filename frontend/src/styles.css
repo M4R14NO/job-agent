@@ -290,6 +290,18 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
+button {
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease, filter 0.18s ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
 .create-review-pane-preview .pdf-preview-card,
 .create-review-pane-editor .cv-editor {
   height: 100%;
@@ -641,19 +653,58 @@ textarea:focus-visible {
 }
 
 .llm-action-button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   border: none;
   color: #ffffff;
   background: linear-gradient(90deg, #1d4ed8 0%, #2563eb 52%, #60a5fa 100%);
   box-shadow: 0 12px 24px rgba(37, 99, 235, 0.22);
 }
 
+.llm-action-button::before {
+  content: "";
+  position: absolute;
+  inset: -35% -45%;
+  background: linear-gradient(
+    102deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.08) 28%,
+    rgba(255, 255, 255, 0.55) 43%,
+    rgba(216, 236, 255, 0.42) 52%,
+    rgba(96, 165, 250, 0.34) 63%,
+    rgba(37, 99, 235, 0.22) 72%,
+    rgba(29, 78, 216, 0) 84%
+  );
+  transform: translateX(-140%) skewX(-16deg);
+  opacity: 0;
+  transition: transform 2.16s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.6s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.llm-action-button > * {
+  position: relative;
+  z-index: 1;
+}
+
 .llm-action-button:hover {
-  filter: brightness(1.03);
+  filter: brightness(1.02) saturate(1.02);
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.3);
+}
+
+.llm-action-button:hover::before {
+  transform: translateX(135%) skewX(-16deg);
+  opacity: 1;
 }
 
 .llm-action-button:disabled {
   background: linear-gradient(90deg, #93c5fd 0%, #93c5fd 100%);
   box-shadow: none;
+}
+
+.llm-action-button:disabled::before {
+  opacity: 0;
 }
 
 .cv-action-danger {
@@ -1507,7 +1558,8 @@ body.modal-open .pdf-preview-iframe {
 .ghost:hover,
 .secondary:hover,
 .primary:hover {
-  filter: brightness(0.98);
+  filter: brightness(1.03) saturate(1.03);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
 }
 
 .cv-create-button,
@@ -1568,15 +1620,58 @@ body.modal-open .pdf-preview-iframe {
 }
 
 .llm-action-button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   border: none;
   color: #ffffff;
   background: linear-gradient(90deg, #1d4ed8 0%, #2563eb 52%, #60a5fa 100%);
   box-shadow: 0 12px 24px rgba(37, 99, 235, 0.22);
 }
 
+.llm-action-button::before {
+  content: "";
+  position: absolute;
+  inset: -35% -45%;
+  background: linear-gradient(
+    102deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.08) 28%,
+    rgba(255, 255, 255, 0.55) 43%,
+    rgba(216, 236, 255, 0.42) 52%,
+    rgba(96, 165, 250, 0.34) 63%,
+    rgba(37, 99, 235, 0.22) 72%,
+    rgba(29, 78, 216, 0) 84%
+  );
+  transform: translateX(-140%) skewX(-16deg);
+  opacity: 0;
+  transition: transform 2.16s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.llm-action-button > * {
+  position: relative;
+  z-index: 1;
+}
+
+.llm-action-button:hover {
+  filter: brightness(1.02) saturate(1.02);
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.3);
+}
+
+.llm-action-button:hover::before {
+  transform: translateX(135%) skewX(-16deg);
+  opacity: 1;
+}
+
 .llm-action-button:disabled {
   background: linear-gradient(90deg, #93c5fd 0%, #93c5fd 100%);
   box-shadow: none;
+}
+
+.llm-action-button:disabled::before {
+  opacity: 0;
 }
 
 .cv-example-toggle,
@@ -2412,6 +2507,17 @@ body.modal-open .pdf-preview-iframe {
   .create-review-pane-preview .pdf-preview-card,
   .create-review-pane-editor .cv-editor {
     height: auto;
+  }
+
+  .create-review-pane-preview .pdf-preview-card {
+    min-height: clamp(820px, 120vw, 1120px);
+  }
+
+  .create-review-pane-preview .pdf-preview-container,
+  .create-review-pane-preview .pdf-preview-iframe,
+  .create-review-pane-preview .pdf-preview-placeholder {
+    min-height: clamp(760px, 112vw, 1040px);
+    height: clamp(760px, 112vw, 1040px);
   }
 
   .create-review-pane-editor .cv-editor {
