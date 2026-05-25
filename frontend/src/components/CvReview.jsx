@@ -19,6 +19,7 @@ import {
   rewriteCvCanonical,
   saveCvProfile
 } from "../api/llm";
+import OverwriteConfirmationModal from "./OverwriteConfirmationModal";
 
 const DEFAULT_SECTION_ORDER = [
   "summary",
@@ -371,6 +372,322 @@ const hasPreviewSectionContent = (section, items = []) => {
 
 const normalizePreviewSectionKey = (section) => (section === "writings" ? "writing" : section);
 
+const FIELD_DIFF_CONFIG = [
+  { key: "first_name", label: "First name" },
+  { key: "last_name", label: "Last name" },
+  { key: "headline", label: "Headline" },
+  { key: "summary", label: "Summary" },
+  { key: "email", label: "Email" },
+  { key: "phone", label: "Phone" },
+  { key: "location", label: "Location" }
+];
+
+const SECTION_DIFF_CONFIG = [
+  {
+    key: "experience",
+    label: "Experience",
+    summarize: (item) => `${item.title || "Role"} @ ${item.organization || "Organization"} ${item.period ? `(${item.period})` : ""}`.trim()
+  },
+  {
+    key: "education",
+    label: "Education",
+    summarize: (item) => `${item.degree || "Degree"} - ${item.institution || "Institution"} ${item.period ? `(${item.period})` : ""}`.trim()
+  },
+  {
+    key: "skills",
+    label: "Skills",
+    summarize: (item) => `${item.category || "Category"}: ${(item.items || []).join(", ")}`.trim()
+  },
+  {
+    key: "volunteer",
+    label: "Volunteer",
+    summarize: (item) => `${item.role || "Role"} @ ${item.organization || "Organization"} ${item.period ? `(${item.period})` : ""}`.trim()
+  },
+  {
+    key: "certificates",
+    label: "Certificates",
+    summarize: (item) => `${item.title || "Certificate"} - ${item.issuer || "Issuer"} ${item.year ? `(${item.year})` : ""}`.trim()
+  },
+  {
+    key: "publications",
+    label: "Publications",
+    summarize: (item) => `${item.title || "Publication"} ${item.venue ? `- ${item.venue}` : ""} ${item.year ? `(${item.year})` : ""}`.trim()
+  },
+  {
+    key: "languages",
+    label: "Languages",
+    summarize: (item) => `${item.name || "Language"}${item.level ? ` - ${item.level}` : ""}`.trim()
+  },
+  {
+    key: "interests",
+    label: "Interests",
+    summarize: (item) => item.name || "Interest"
+  },
+  {
+    key: "awards",
+    label: "Honors & Awards",
+    summarize: (item) => `${item.title || "Award"} ${item.issuer ? `- ${item.issuer}` : ""} ${item.year ? `(${item.year})` : ""}`.trim()
+  }
+];
+
+const compactText = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
+
+const truncateValue = (value, max = 140) => {
+  const normalized = compactText(value);
+  if (!normalized) return "(empty)";
+  return normalized.length > max ? `${normalized.slice(0, max - 1)}...` : normalized;
+};
+
+const fieldLabel = (key) =>
+  String(key || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const profileValuePreview = (value) => {
+  if (Array.isArray(value)) {
+    if (!value.length) return "(empty)";
+    return truncateValue(value.join(", "));
+  }
+  return truncateValue(value);
+};
+
+const stripInternalIds = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => stripInternalIds(entry));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const cleaned = {};
+  Object.entries(value).forEach(([key, entryValue]) => {
+    if (key === "id" || key === "source_id") return;
+    cleaned[key] = stripInternalIds(entryValue);
+  });
+  return cleaned;
+};
+
+const normalizedComparable = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizedComparable(entry));
+  }
+  if (!value || typeof value !== "object") {
+    if (typeof value === "string") return compactText(value);
+    return value;
+  }
+  const normalized = {};
+  Object.entries(value).forEach(([key, entryValue]) => {
+    normalized[key] = normalizedComparable(entryValue);
+  });
+  return normalized;
+};
+
+const itemDetails = (item) => {
+  const cleaned = stripInternalIds(item);
+  if (!cleaned || typeof cleaned !== "object") return [];
+  return Object.entries(cleaned)
+    .filter(([, value]) => {
+      if (value == null) return false;
+      if (Array.isArray(value)) return value.length > 0;
+      if (typeof value === "string") return compactText(value).length > 0;
+      if (typeof value === "object") return Object.keys(value).length > 0;
+      return true;
+    })
+    .map(([key, value]) => `${fieldLabel(key)}: ${truncateValue(profileValuePreview(value), 220)}`);
+};
+
+const changedItemFields = (oldItem, newItem) => {
+  const before = normalizedComparable(stripInternalIds(oldItem));
+  const after = normalizedComparable(stripInternalIds(newItem));
+  const allKeys = new Set([
+    ...Object.keys(before || {}),
+    ...Object.keys(after || {})
+  ]);
+
+  const changes = [];
+  allKeys.forEach((key) => {
+    const oldValue = before?.[key];
+    const newValue = after?.[key];
+    if (JSON.stringify(oldValue) === JSON.stringify(newValue)) return;
+    changes.push({
+      field: fieldLabel(key),
+      oldValue: truncateValue(profileValuePreview(oldValue), 220),
+      newValue: truncateValue(profileValuePreview(newValue), 220)
+    });
+  });
+  return changes;
+};
+
+const itemIdentifier = (item, index, summarize) => {
+  if (item?.id) return `id:${item.id}`;
+  const signature = truncateValue(summarize(item), 180);
+  return `sig:${signature || index}`;
+};
+
+const buildSectionDiff = ({ key, label, summarize, oldItems = [], newItems = [] }) => {
+  const existing = Array.isArray(oldItems) ? oldItems : [];
+  const pending = Array.isArray(newItems) ? newItems : [];
+  const oldPool = existing.map((item, index) => ({
+    item,
+    used: false,
+    idKey: itemIdentifier(item, index, summarize),
+    semanticKey: JSON.stringify(normalizedComparable(stripInternalIds(item))),
+    summary: truncateValue(summarize(item))
+  }));
+
+  const added = [];
+  const removed = [];
+  const updated = [];
+
+  pending.forEach((item, index) => {
+    const idKey = itemIdentifier(item, index, summarize);
+    const semanticKey = JSON.stringify(normalizedComparable(stripInternalIds(item)));
+    const summary = truncateValue(summarize(item));
+
+    let matched = oldPool.find((candidate) => !candidate.used && candidate.idKey === idKey);
+    if (!matched) {
+      matched = oldPool.find((candidate) => !candidate.used && candidate.semanticKey === semanticKey);
+    }
+    if (!matched) {
+      matched = oldPool.find((candidate) => !candidate.used && candidate.summary === summary);
+    }
+
+    if (!matched) {
+      added.push({ value: summary, details: itemDetails(item) });
+      return;
+    }
+
+    matched.used = true;
+    if (matched.semanticKey !== semanticKey) {
+      updated.push({
+        title: summary,
+        oldValue: matched.summary,
+        newValue: summary,
+        changes: changedItemFields(matched.item, item)
+      });
+    }
+  });
+
+  oldPool.forEach((candidate) => {
+    if (!candidate.used) {
+      removed.push({ value: candidate.summary, details: itemDetails(candidate.item) });
+    }
+  });
+
+  if (!added.length && !removed.length && !updated.length) {
+    return null;
+  }
+
+  return { key, label, added, removed, updated };
+};
+
+const nextProfileSuggestion = (targetProfileId) => {
+  const normalized = targetProfileId.trim();
+  if (!normalized) return "profile-v2";
+  const match = normalized.match(/^(.*?)-v(\d+)$/);
+  if (match) {
+    const next = Number(match[2]) + 1;
+    return `${match[1]}-v${next}`;
+  }
+  return `${normalized}-v2`;
+};
+
+const buildOverwriteDiff = ({ existingProfile, pendingPayload, targetProfileId }) => {
+  const topLevelChanges = [];
+  FIELD_DIFF_CONFIG.forEach(({ key, label }) => {
+    const before = existingProfile?.data?.[key];
+    const after = pendingPayload?.data?.[key];
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      topLevelChanges.push({
+        key,
+        label,
+        oldValue: profileValuePreview(before),
+        newValue: profileValuePreview(after)
+      });
+    }
+  });
+
+  const existingLinks = existingProfile?.data?.links || [];
+  const pendingLinks = pendingPayload?.data?.links || [];
+  if (JSON.stringify(existingLinks) !== JSON.stringify(pendingLinks)) {
+    topLevelChanges.push({
+      key: "links",
+      label: "Links",
+      oldValue: profileValuePreview(existingLinks),
+      newValue: profileValuePreview(pendingLinks)
+    });
+  }
+
+  if ((existingProfile?.template_id || "awesomecv") !== (pendingPayload?.template_id || "awesomecv")) {
+    topLevelChanges.push({
+      key: "template_id",
+      label: "Template",
+      oldValue: existingProfile?.template_id || "awesomecv",
+      newValue: pendingPayload?.template_id || "awesomecv"
+    });
+  }
+
+  const existingSectionOrder = existingProfile?.section_order || [];
+  const pendingSectionOrder = pendingPayload?.section_order || [];
+  if (JSON.stringify(existingSectionOrder) !== JSON.stringify(pendingSectionOrder)) {
+    topLevelChanges.push({
+      key: "section_order",
+      label: "Section order",
+      oldValue: profileValuePreview(existingSectionOrder),
+      newValue: profileValuePreview(pendingSectionOrder)
+    });
+  }
+
+  const existingSidebarOrder = existingProfile?.sidebar_section_order || [];
+  const pendingSidebarOrder = pendingPayload?.sidebar_section_order || [];
+  if (JSON.stringify(existingSidebarOrder) !== JSON.stringify(pendingSidebarOrder)) {
+    topLevelChanges.push({
+      key: "sidebar_section_order",
+      label: "Sidebar section order",
+      oldValue: profileValuePreview(existingSidebarOrder),
+      newValue: profileValuePreview(pendingSidebarOrder)
+    });
+  }
+
+  const existingMainOrder = existingProfile?.main_section_order || [];
+  const pendingMainOrder = pendingPayload?.main_section_order || [];
+  if (JSON.stringify(existingMainOrder) !== JSON.stringify(pendingMainOrder)) {
+    topLevelChanges.push({
+      key: "main_section_order",
+      label: "Main section order",
+      oldValue: profileValuePreview(existingMainOrder),
+      newValue: profileValuePreview(pendingMainOrder)
+    });
+  }
+
+  const sectionChanges = SECTION_DIFF_CONFIG
+    .map((config) => buildSectionDiff({
+      ...config,
+      oldItems: existingProfile?.data?.[config.key] || [],
+      newItems: pendingPayload?.data?.[config.key] || []
+    }))
+    .filter(Boolean);
+
+  const totals = sectionChanges.reduce(
+    (acc, section) => {
+      acc.added += section.added.length;
+      acc.removed += section.removed.length;
+      acc.updated += section.updated.length;
+      return acc;
+    },
+    { added: 0, removed: 0, updated: topLevelChanges.length }
+  );
+
+  return {
+    targetProfileId,
+    existingRevision: existingProfile?.revision ?? 0,
+    existingUpdatedAt: existingProfile?.updated_at || null,
+    topLevelChanges,
+    sectionChanges,
+    totals,
+    hasChanges: totals.added + totals.removed + totals.updated > 0
+  };
+};
+
 export default function CvReview({
   canonical,
   job,
@@ -428,6 +745,15 @@ export default function CvReview({
     writing: false,
     education: false
   }));
+  const [overwriteDialog, setOverwriteDialog] = useState({
+    isOpen: false,
+    diff: null,
+    suggestedProfileId: "",
+    pendingPayload: null,
+    pendingTargetProfileId: "",
+    pendingTargetRevision: 0,
+    error: ""
+  });
   const schemaVersion = canonical?.schema_version || "v1";
   const currentSectionOrder = isHipsterTemplate
     ? [...hipsterSectionOrders.sidebar, ...hipsterSectionOrders.main]
@@ -872,36 +1198,60 @@ export default function CvReview({
 
   const handleSave = async () => {
     setError("");
+    setOverwriteDialog((prev) => ({ ...prev, error: "" }));
+    const targetProfileId = profileId.trim();
+    if (!targetProfileId) {
+      setError("Profile ID is required.");
+      return;
+    }
+
+    const payload = {
+      schema_version: schemaVersion,
+      profile_id: targetProfileId,
+      revision,
+      template_id: templateId,
+      data: formData,
+      section_order: currentSectionOrder,
+      sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
+      main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined
+    };
+
     setIsSaving(true);
     try {
-      const targetProfileId = profileId.trim();
-      let targetRevision = revision;
-
-      // If the user changed the profile ID, resolve whether it already exists.
-      // Existing IDs must use their current revision to overwrite cleanly.
-      if (targetProfileId !== loadedProfileId.trim()) {
-        try {
-          const existingTarget = await getCvProfile(targetProfileId);
-          targetRevision = existingTarget?.revision ?? 0;
-        } catch (err) {
-          const message = err instanceof Error ? err.message : "";
-          if (!message.includes("status 404")) {
-            throw err;
-          }
-          targetRevision = 0;
+      let existingTarget = null;
+      let targetRevision = 0;
+      try {
+        existingTarget = await getCvProfile(targetProfileId);
+        targetRevision = existingTarget?.revision ?? 0;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        if (!message.includes("status 404")) {
+          throw err;
         }
       }
 
-      const payload = {
-        schema_version: schemaVersion,
-        profile_id: targetProfileId,
-        revision: targetRevision,
-        template_id: templateId,
-        data: formData,
-        section_order: currentSectionOrder,
-        sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
-        main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined
-      };
+      if (existingTarget) {
+        const diff = buildOverwriteDiff({
+          existingProfile: existingTarget,
+          pendingPayload: payload,
+          targetProfileId
+        });
+
+        if (diff.hasChanges) {
+          setOverwriteDialog({
+            isOpen: true,
+            diff,
+            suggestedProfileId: nextProfileSuggestion(targetProfileId),
+            pendingPayload: payload,
+            pendingTargetProfileId: targetProfileId,
+            pendingTargetRevision: targetRevision,
+            error: ""
+          });
+          return;
+        }
+      }
+
+      payload.revision = targetRevision;
       const saved = await saveCvProfile(targetProfileId, payload);
       setProfileId(saved.profile_id);
       setRevision(saved.revision);
@@ -909,6 +1259,85 @@ export default function CvReview({
       setLoadedRevision(saved.revision);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const closeOverwriteDialog = () => {
+    setOverwriteDialog({
+      isOpen: false,
+      diff: null,
+      suggestedProfileId: "",
+      pendingPayload: null,
+      pendingTargetProfileId: "",
+      pendingTargetRevision: 0,
+      error: ""
+    });
+  };
+
+  const handleConfirmOverwrite = async () => {
+    if (!overwriteDialog.pendingPayload || !overwriteDialog.pendingTargetProfileId) return;
+    setOverwriteDialog((prev) => ({ ...prev, error: "" }));
+    setIsSaving(true);
+    try {
+      const payload = {
+        ...overwriteDialog.pendingPayload,
+        revision: overwriteDialog.pendingTargetRevision,
+        profile_id: overwriteDialog.pendingTargetProfileId
+      };
+      const saved = await saveCvProfile(overwriteDialog.pendingTargetProfileId, payload);
+      setProfileId(saved.profile_id);
+      setRevision(saved.revision);
+      setLoadedProfileId(saved.profile_id);
+      setLoadedRevision(saved.revision);
+      closeOverwriteDialog();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Overwrite failed";
+      setOverwriteDialog((prev) => ({ ...prev, error: message }));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveAsNewFromDialog = async () => {
+    const nextId = overwriteDialog.suggestedProfileId.trim();
+    if (!nextId || !overwriteDialog.pendingPayload) {
+      setOverwriteDialog((prev) => ({ ...prev, error: "Enter a new profile name." }));
+      return;
+    }
+
+    setIsSaving(true);
+    setOverwriteDialog((prev) => ({ ...prev, error: "" }));
+    try {
+      try {
+        await getCvProfile(nextId);
+        setOverwriteDialog((prev) => ({
+          ...prev,
+          error: "That profile name already exists. Choose a different one."
+        }));
+        return;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        if (!message.includes("status 404")) {
+          throw err;
+        }
+      }
+
+      const payload = {
+        ...overwriteDialog.pendingPayload,
+        profile_id: nextId,
+        revision: 0
+      };
+      const saved = await saveCvProfile(nextId, payload);
+      setProfileId(saved.profile_id);
+      setRevision(saved.revision);
+      setLoadedProfileId(saved.profile_id);
+      setLoadedRevision(saved.revision);
+      closeOverwriteDialog();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Save as new profile failed";
+      setOverwriteDialog((prev) => ({ ...prev, error: message }));
     } finally {
       setIsSaving(false);
     }
@@ -2709,6 +3138,23 @@ export default function CvReview({
       </div>
 
       {error && <p className="error">{error}</p>}
+
+      <OverwriteConfirmationModal
+        isOpen={overwriteDialog.isOpen}
+        targetProfileId={overwriteDialog.pendingTargetProfileId}
+        existingRevision={overwriteDialog.diff?.existingRevision ?? 0}
+        existingUpdatedAt={overwriteDialog.diff?.existingUpdatedAt}
+        totals={overwriteDialog.diff?.totals || { added: 0, removed: 0, updated: 0 }}
+        topLevelChanges={overwriteDialog.diff?.topLevelChanges || []}
+        sectionChanges={overwriteDialog.diff?.sectionChanges || []}
+        suggestedProfileId={overwriteDialog.suggestedProfileId}
+        onSuggestedProfileIdChange={(value) => setOverwriteDialog((prev) => ({ ...prev, suggestedProfileId: value }))}
+        onConfirmOverwrite={handleConfirmOverwrite}
+        onSaveAsNew={handleSaveAsNewFromDialog}
+        onCancel={closeOverwriteDialog}
+        isBusy={isSaving}
+        error={overwriteDialog.error}
+      />
     </div>
   );
 }

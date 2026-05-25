@@ -1082,6 +1082,186 @@ select {
   z-index: 1;
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
+body.modal-open .pdf-preview-iframe,
+body.modal-open .pdf-preview-container {
+  pointer-events: none;
+}
+
+.overwrite-modal-card {
+  width: min(980px, 94vw);
+  gap: 18px;
+}
+
+.overwrite-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.overwrite-warning-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #fff3f1;
+  color: #b42318;
+  border: 1px solid #fecdca;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.overwrite-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.overwrite-meta-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+  background: #fafafa;
+}
+
+.overwrite-diff-panel {
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  max-height: 48vh;
+  overflow: auto;
+}
+
+.overwrite-diff-panel h3,
+.overwrite-diff-group h4 {
+  margin: 0;
+}
+
+.overwrite-diff-group {
+  display: grid;
+  gap: 8px;
+}
+
+.overwrite-diff-list {
+  display: grid;
+  gap: 8px;
+}
+
+.overwrite-diff-item {
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.overwrite-diff-item p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.overwrite-change-lines {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+}
+
+.overwrite-change-lines li {
+  font-size: 12px;
+  color: #334155;
+}
+
+.overwrite-diff-item-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.overwrite-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+}
+
+.overwrite-badge-added {
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.overwrite-badge-removed {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.overwrite-badge-updated {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.overwrite-old {
+  color: #991b1b;
+  font-weight: 600;
+}
+
+.overwrite-new {
+  color: #065f46;
+  font-weight: 600;
+}
+
+.overwrite-rename-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.overwrite-rename-actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.overwrite-modal-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+@media (max-width: 720px) {
+  .overwrite-modal-header {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .overwrite-rename-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .overwrite-modal-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .overwrite-modal-actions > button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .cv-editor {
   gap: 20px;
   display: grid;
