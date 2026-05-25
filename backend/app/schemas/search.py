@@ -185,6 +185,7 @@ class CvCanonicalData(BaseModel):
     last_name: str | None = None
     headline: str | None = None
     summary: str | None = None
+    profile_image: str | None = None
     email: str | None = None
     phone: str | None = None
     location: str | None = None

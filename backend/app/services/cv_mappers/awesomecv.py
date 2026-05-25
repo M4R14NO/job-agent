@@ -161,6 +161,7 @@ class CvAwesomePayload(BaseModel):
     first_name: str
     last_name: str
     position: str
+    photo: str | None = None
     address: str | None = None
     mobile: str | None = None
     email: str | None = None
@@ -458,6 +459,7 @@ def map_canonical_to_template_deterministic(
         "first_name": canonical.first_name or "",
         "last_name": canonical.last_name or "",
         "position": canonical.headline or "",
+        "photo": canonical.profile_image or None,
         "address": canonical.location or "",
         "mobile": canonical.phone or "",
         "email": canonical.email or "",
@@ -623,6 +625,8 @@ def map_canonical_to_template(
 
     if section_order:
         data["section_order"] = section_order
+
+    data["photo"] = canonical.profile_image or None
 
     validated_payload = CvAwesomePayload.model_validate(data)
     return validated_payload, validated.provenance

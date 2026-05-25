@@ -21,15 +21,33 @@ def _user_home() -> Path:
 def _default_profile_store() -> str:
     if cv_store := os.getenv("CV_PROFILE_STORE"):
         return cv_store
+
+    def _can_use_store(path: Path) -> bool:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if path.exists():
+                return os.access(path, os.R_OK | os.W_OK)
+            return os.access(path.parent, os.W_OK | os.X_OK)
+        except Exception:
+            return False
+
     # CV_TMP_DIR is set in the sandbox startup command; use it when available
     if cv_tmp := os.getenv("CV_TMP_DIR"):
         return str(Path(cv_tmp) / "profiles" / "cv_profiles.json")
-    # Fallback: try the real user's home (works for non-sandbox runs)
+
     home = _user_home()
-    if home != Path("/var/empty") and os.access(home, os.W_OK):
-        return str(home / ".job-agent" / "profiles" / "cv_profiles.json")
-    # Last resort: /tmp
-    return "/tmp/job-agent-tex/profiles/cv_profiles.json"
+    candidates: list[Path] = []
+    if home != Path("/var/empty"):
+        candidates.append(home / ".job-agent" / "profiles" / "cv_profiles.json")
+
+    candidates.append(Path(tempfile.gettempdir()) / f"job-agent-{os.getuid()}" / "profiles" / "cv_profiles.json")
+    candidates.append(Path("/tmp") / "job-agent-tex" / "profiles" / "cv_profiles.json")
+
+    for candidate in candidates:
+        if _can_use_store(candidate):
+            return str(candidate)
+
+    return str(Path(tempfile.gettempdir()) / f"job-agent-{os.getuid()}" / "profiles" / "cv_profiles.json")
 
 
 DEFAULT_PROFILE_STORE = _default_profile_store()

@@ -628,6 +628,12 @@ button:active:not(:disabled) {
   color: #ffffff;
 }
 
+.secondary.cv-action-remap {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
+}
+
 .preview-visibility-button.is-visible {
   background: #fff7ed;
   border-color: #fdba74;
@@ -708,6 +714,12 @@ button:active:not(:disabled) {
 }
 
 .cv-action-danger {
+  background: #ffebee;
+  border-color: #ef5350;
+  color: #b71c1c;
+}
+
+.secondary.cv-action-danger {
   background: #ffebee;
   border-color: #ef5350;
   color: #b71c1c;

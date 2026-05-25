@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { searchJobs } from "./api/search";
-import { fetchModels, getCvProfile, listCvProfiles, parseCvCanonical, renderCvFromTemplate, saveCvProfile } from "./api/llm";
+import {
+  fetchModels,
+  getCvProfile,
+  listCvProfiles,
+  parseCvCanonical,
+  renderCvFromTemplate,
+  saveCvProfile,
+  uploadCvProfileImage
+} from "./api/llm";
 import { useJobDescription } from "./hooks/useJobDescription";
 import SearchFilters from "./components/SearchFilters";
 import ResultsList from "./components/ResultsList";
@@ -24,7 +32,8 @@ const EMPTY_APPLICATION_CONTEXT = {
   application_date: "",
   job_title: "",
   job_description: "",
-  job_url: ""
+  job_url: "",
+  profile_image: ""
 };
 
 export default function App() {
@@ -75,6 +84,7 @@ export default function App() {
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [isUpdatingProfileCvText, setIsUpdatingProfileCvText] = useState(false);
   const [isRemappingProfileCvText, setIsRemappingProfileCvText] = useState(false);
+  const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false);
   const [cvRemapElapsedMs, setCvRemapElapsedMs] = useState(0);
   const [cvDraftState, setCvDraftState] = useState({
     isDirty: false,
@@ -262,7 +272,8 @@ export default function App() {
     application_date: profile?.application_date || "",
     job_title: profile?.job_title || "",
     job_description: profile?.job_description || "",
-    job_url: profile?.job_url || ""
+    job_url: profile?.job_url || "",
+    profile_image: profile?.data?.profile_image || ""
   });
 
   const contextSnapshotFromProfile = (profile) => ({
@@ -285,7 +296,8 @@ export default function App() {
       application_date: loadedProfileSnapshot.application_date || "",
       job_title: loadedProfileSnapshot.job_title || "",
       job_description: loadedProfileSnapshot.job_description || "",
-      job_url: loadedProfileSnapshot.job_url || ""
+      job_url: loadedProfileSnapshot.job_url || "",
+      profile_image: loadedProfileSnapshot.profile_image || ""
     };
 
     const config = [
@@ -295,7 +307,8 @@ export default function App() {
       ["application_date", "Application date"],
       ["job_title", "Job title"],
       ["job_description", "Job description"],
-      ["job_url", "Job URL"]
+      ["job_url", "Job URL"],
+      ["profile_image", "Profile image"]
     ];
 
     const topLevelChanges = config
@@ -327,6 +340,7 @@ export default function App() {
 
     const structureSignature = JSON.stringify({
       sections: cvPreviewPayload.sections || {},
+      photo: cvPreviewPayload.photo || null,
       section_order: cvPreviewPayload.section_order || [],
       sidebar_section_order: cvPreviewPayload.sidebar_section_order || [],
       main_section_order: cvPreviewPayload.main_section_order || [],
@@ -615,7 +629,8 @@ export default function App() {
       application_date: "",
       job_title: job?.title || "",
       job_description: job?.description || "",
-      job_url: job?.job_url || ""
+      job_url: job?.job_url || "",
+      profile_image: ""
     });
     setSelectedJob(job);
     setActiveJobAction("cv");
@@ -726,6 +741,14 @@ export default function App() {
     return safe || `profile-${Date.now()}`;
   };
 
+  const mergeProfileImageIntoData = (data, profileImage) => {
+    const base = data && typeof data === "object" ? data : {};
+    return {
+      ...base,
+      profile_image: (profileImage || "").trim() || null
+    };
+  };
+
   const handleCreateNewEntry = async ({ profileName } = {}) => {
     const nextProfileId = sanitizeProfileId(profileName || "");
     if (!nextProfileId) {
@@ -751,7 +774,7 @@ export default function App() {
         job_title: applicationContext.job_title || null,
         job_description: applicationContext.job_description || null,
         job_url: applicationContext.job_url || null,
-        data: {},
+        data: mergeProfileImageIntoData({}, applicationContext.profile_image),
         section_order: [],
         sidebar_section_order: [],
         main_section_order: [],
@@ -873,7 +896,16 @@ export default function App() {
     const hasUnsavedChanges = cvDraftState.isDirty || contextDiff.hasChanges;
 
     if (hasUnsavedChanges) {
-      const contextKeys = new Set(["raw_resume_text", "company", "application_status", "application_date", "job_title", "job_description", "job_url"]);
+      const contextKeys = new Set([
+        "raw_resume_text",
+        "company",
+        "application_status",
+        "application_date",
+        "job_title",
+        "job_description",
+        "job_url",
+        "profile_image"
+      ]);
       const combinedTopLevelChanges = [
         ...(cvDraftState.diff?.topLevelChanges || []).filter((change) => !contextKeys.has(change.key)),
         ...contextDiff.topLevelChanges
@@ -948,7 +980,7 @@ export default function App() {
         profile_id: currentProfileId,
         revision: existing.revision,
         template_id: existing.template_id,
-        data: existing.data,
+        data: mergeProfileImageIntoData(existing.data, applicationContext.profile_image),
         section_order: existing.section_order,
         sidebar_section_order: existing.sidebar_section_order,
         main_section_order: existing.main_section_order
@@ -968,7 +1000,8 @@ export default function App() {
           ...(existing.audit || {}),
           ...(basePayload.audit || {}),
           raw_resume_text: resumeText
-        }
+        },
+        data: mergeProfileImageIntoData(basePayload.data || existing.data, applicationContext.profile_image)
       };
 
       const saved = await saveCvProfile(payload.profile_id, payload);
@@ -1007,7 +1040,8 @@ export default function App() {
         audit: {
           ...(existing.audit || {}),
           raw_resume_text: resumeText
-        }
+        },
+        data: mergeProfileImageIntoData(existing.data, applicationContext.profile_image)
       };
       const saved = await saveCvProfile(selectedProfileId, payload);
       upsertCvProfileInList(saved);
@@ -1093,7 +1127,7 @@ export default function App() {
         job_title: effectiveJobTitle || null,
         job_description: effectiveJobDescription || null,
         job_url: effectiveJobUrl || null,
-        data: parsed.data,
+        data: mergeProfileImageIntoData(parsed.data, applicationContext.profile_image || existing?.data?.profile_image),
         section_order: existing?.section_order || parsed.section_order || [],
         sidebar_section_order: existing?.sidebar_section_order || parsed.sidebar_section_order || [],
         main_section_order: existing?.main_section_order || parsed.main_section_order || [],
@@ -1131,6 +1165,63 @@ export default function App() {
   const handleTemplateIdChange = (nextTemplateId) => {
     setCvTemplateId(nextTemplateId);
     setCvReview((prev) => (prev ? { ...prev, templateId: nextTemplateId } : prev));
+  };
+
+  const handleApplicationContextChange = (updater) => {
+    setApplicationContext((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if (next?.profile_image !== prev?.profile_image) {
+        setCvReview((prevReview) => {
+          if (!prevReview) return prevReview;
+          return {
+            ...prevReview,
+            canonical: {
+              ...(prevReview.canonical || {}),
+              data: mergeProfileImageIntoData(prevReview.canonical?.data, next?.profile_image || "")
+            }
+          };
+        });
+        setCvPreviewPayload((prevPayload) => {
+          if (!prevPayload) return prevPayload;
+          return {
+            ...prevPayload,
+            photo: (next?.profile_image || "").trim() || null
+          };
+        });
+      }
+      return next;
+    });
+  };
+
+  const handleUploadProfileImage = async (file) => {
+    if (!file) return;
+    setIsUploadingProfileImage(true);
+    setCvEntryError("");
+    try {
+      const result = await uploadCvProfileImage(file);
+      const imagePath = String(result?.image_path || "").trim();
+      if (!imagePath) {
+        throw new Error("Image upload succeeded but no image path was returned.");
+      }
+
+      setApplicationContext((prev) => ({ ...prev, profile_image: imagePath }));
+      setCvReview((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          canonical: {
+            ...(prev.canonical || {}),
+            data: mergeProfileImageIntoData(prev.canonical?.data, imagePath)
+          }
+        };
+      });
+      setCvPreviewPayload((prev) => (prev ? { ...prev, photo: imagePath } : prev));
+      setCvEntryError("Profile image uploaded. Save the profile to persist this image selection.");
+    } catch (err) {
+      setCvEntryError(err instanceof Error ? err.message : "Failed to upload profile image");
+    } finally {
+      setIsUploadingProfileImage(false);
+    }
   };
 
   const handleCvDraftStateChange = (nextDraftState) => {
@@ -1437,6 +1528,7 @@ export default function App() {
                     isLoadingProfile={isLoadingProfile}
                     isUpdatingProfileCvText={isUpdatingProfileCvText}
                     isRemappingProfileCvText={isRemappingProfileCvText}
+                    isUploadingProfileImage={isUploadingProfileImage}
                     remapProgress={cvRemapProgress}
                     cvEntryError={cvEntryError}
                     cvTemplateId={cvTemplateId}
@@ -1444,7 +1536,8 @@ export default function App() {
                     cvOutputLanguage={cvOutputLanguage}
                     onCvOutputLanguageChange={setCvOutputLanguage}
                     applicationContext={applicationContext}
-                    onApplicationContextChange={setApplicationContext}
+                    onApplicationContextChange={handleApplicationContextChange}
+                    onUploadProfileImage={handleUploadProfileImage}
                     resumeText={resumeText}
                     onResumeTextChange={setResumeText}
                     newProfileId={newProfileId}

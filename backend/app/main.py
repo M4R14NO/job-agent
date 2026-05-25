@@ -1,6 +1,6 @@
 import math
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -34,6 +34,7 @@ from .services.cv_service import (
     parse_resume_to_canonical,
     render_cv_pdf_from_payload,
     rewrite_canonical_with_prompt,
+    save_profile_image,
 )
 from .services.cv_storage import RevisionMismatchError, get_profile_store
 from .services.lmstudio_client import chat_completion, list_models, safe_request
@@ -255,10 +256,37 @@ def validate_cv(payload: CvValidateRequest) -> dict:
     return {"ok": True}
 
 
+@app.post("/cv/profile-image")
+async def upload_cv_profile_image(file: UploadFile = File(...)) -> dict:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Missing filename")
+    if file.content_type and not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Unsupported file type. Please upload an image.")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large. Maximum size is 5 MB.")
+
+    try:
+        image_path = save_profile_image(file_bytes=content, original_filename=file.filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {"image_path": image_path}
+
+
 @app.get("/cv/profiles", response_model=CvProfileListResponse)
 def list_cv_profiles() -> CvProfileListResponse:
     store = get_profile_store()
-    profiles = store.list_profiles()
+    try:
+        profiles = store.list_profiles()
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Cannot access CV profile store at {store.path}. Check file ownership and permissions.",
+        ) from exc
     return CvProfileListResponse(profiles=profiles)
 
 

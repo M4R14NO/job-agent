@@ -72,6 +72,7 @@ const emptyCanonical = {
   last_name: "",
   headline: "",
   summary: "",
+  profile_image: "",
   email: "",
   phone: "",
   location: "",
@@ -376,6 +377,7 @@ const FIELD_DIFF_CONFIG = [
   { key: "last_name", label: "Last name" },
   { key: "headline", label: "Headline" },
   { key: "summary", label: "Summary" },
+  { key: "profile_image", label: "Profile image" },
   { key: "email", label: "Email" },
   { key: "phone", label: "Phone" },
   { key: "location", label: "Location" }

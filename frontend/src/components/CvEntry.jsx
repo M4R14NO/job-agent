@@ -197,6 +197,7 @@ export default function CvEntry({
   isLoadingProfile,
   isUpdatingProfileCvText,
   isRemappingProfileCvText,
+  isUploadingProfileImage,
   remapProgress,
   cvEntryError,
   cvTemplateId,
@@ -205,6 +206,7 @@ export default function CvEntry({
   onCvOutputLanguageChange,
   applicationContext,
   onApplicationContextChange,
+  onUploadProfileImage,
   resumeText,
   onResumeTextChange,
   newProfileId,
@@ -221,6 +223,7 @@ export default function CvEntry({
   const [newEntryDialogOpen, setNewEntryDialogOpen] = useState(false);
   const [newEntryProfileName, setNewEntryProfileName] = useState("");
   const [newEntryError, setNewEntryError] = useState("");
+  const [profileImageError, setProfileImageError] = useState("");
   const searchInputRef = useRef(null);
   const searchButtonRef = useRef(null);
   const resetButtonRef = useRef(null);
@@ -363,6 +366,18 @@ export default function CvEntry({
       allowOverwrite: remapTargetExists
     });
     setRemapDialogOpen(false);
+  };
+
+  const handleProfileImageChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setProfileImageError("");
+    try {
+      await onUploadProfileImage?.(file);
+    } catch (err) {
+      setProfileImageError(err instanceof Error ? err.message : "Failed to upload profile image");
+    }
   };
 
   const toggleSort = (nextSortBy) => {
@@ -526,7 +541,13 @@ export default function CvEntry({
                 </tr>
               </thead>
               <tbody>
-                {filteredProfiles.length === 0 ? (
+                {profilesError ? (
+                  <tr>
+                    <td colSpan={8}>
+                      <p className="error">Failed to load profiles: {profilesError}</p>
+                    </td>
+                  </tr>
+                ) : filteredProfiles.length === 0 ? (
                   <tr>
                     <td colSpan={8}>
                       <p className="helper">No matching profiles found.</p>
@@ -616,6 +637,34 @@ export default function CvEntry({
                   <option value="german">German</option>
                 </select>
               </div>
+              {cvTemplateId === "hipstercv" ? (
+                <div>
+                  <label htmlFor="ctxProfileImage" className="label">Profile image (top bar)</label>
+                  <input
+                    id="ctxProfileImage"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleProfileImageChange}
+                    disabled={isUploadingProfileImage}
+                  />
+                  <p className="helper" style={{ marginTop: 6 }}>
+                    {applicationContext.profile_image
+                      ? `Current image: ${applicationContext.profile_image}`
+                      : "No image selected yet."}
+                  </p>
+                  {applicationContext.profile_image ? (
+                    <button
+                      type="button"
+                      className="ghost"
+                      style={{ marginTop: 6 }}
+                      onClick={() => onApplicationContextChange((prev) => ({ ...prev, profile_image: "" }))}
+                    >
+                      Remove profile image
+                    </button>
+                  ) : null}
+                  {profileImageError ? <p className="error">{profileImageError}</p> : null}
+                </div>
+              ) : null}
             </div>
 
             <div className="field-grid">

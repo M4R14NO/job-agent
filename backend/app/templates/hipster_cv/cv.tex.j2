@@ -28,32 +28,25 @@
 
 \newcommand{\hipstercontactline}[2]{#1 & #2\\[1pt]}
 \newcommand{\hipstermarker}[1]{\raisebox{0.35ex}{\color{backBlue}\bfseries\footnotesize #1}}
-\newcommand{\headermaybephoto}[3]{%
-\begin{tikzpicture}[remember picture,overlay]
-\node[rectangle, fill=backBlue, anchor=north, minimum width=\paperwidth, minimum height=5cm](header) at (current page.north){};
-\node[anchor=west](photo) at ($(header.west)+(3.5cm,-2.45cm)$) {};
-\draw[draw=black!60, line width=0.6pt] (photo) circle (2cm);
-((* if photo and photo | length > 0 *))
-\draw[path picture={\node[anchor=center] at (path picture bounding box.center){\includegraphics[height=4.3cm]{((( photo | latex_escape )))}};}] (photo) circle (2cm);
-((* else *))
-\node[anchor=center, font=\small\color{black!70}] at (photo) {No Photo};
-((* endif *))
-\node[anchor=east](name) at ($(header.east)+(-2.0cm,-1.95cm)$) {#1};
-\node[anchor=north east] at (name.south east) {#2};
-\end{tikzpicture}%
-\vspace{1.8cm}%
-}
 
 \begin{document}
 
 \thispagestyle{empty}
-\section*{Start}
+\section*{}
 
-\headermaybephoto{
-  \bgupper{backBlue}{headerfontboxfont}{\bfseries\Huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}
-}{
-  ((* if position *))\bg{backBlue}{headerfontboxfont}{\large ((( position | latex_escape )))}((* endif *))
-}{((* if photo *))((( photo | latex_escape )))((* endif *))}
+((* set photo_path = (photo | default("", true) | trim) *))
+
+\noindent
+\colorbox{backBlue}{%
+\parbox{\dimexpr\textwidth-2\fboxsep\relax}{%
+\vspace{0.9em}
+\raggedleft
+{\color{white}\bfseries\LARGE ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}\\[0.3em]
+((* if position *)){\color{white}\normalsize ((( position | latex_escape )))}((* endif *))
+\vspace{0.8em}
+}%
+}
+\vspace{1.2em}
 
 \subsection*{}
 \vspace{4em}
