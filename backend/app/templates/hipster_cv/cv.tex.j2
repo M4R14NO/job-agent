@@ -37,20 +37,34 @@
 
 \noindent\hspace*{-1cm}%
 \colorbox{backBlue}{%
-\parbox[c][5.4cm][c]{\dimexpr\paperwidth-2\fboxsep\relax}{%
-\hspace*{1cm}%
-\hspace*{0.18\textwidth}%
-\parbox{0.74\textwidth}{%
-\raggedleft
-{\color{white}\bfseries\Huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}\\[0.45em]
-((* if position *)){\color{white}\Large ((( position | latex_escape )))}((* endif *))
-}
+\parbox[c][5.0cm][c]{\dimexpr\paperwidth-2\fboxsep\relax}{%
+\hspace*{0.35cm}%
+\begin{minipage}[c]{0.24\linewidth}
+\centering
+((* if photo_path *))
+\begin{tikzpicture}
+\node[circle, minimum size=4.7cm, inner sep=0pt, path picture={\node[anchor=center] at (path picture bounding box.center) {\includegraphics[width=4.7cm,height=4.7cm]{((( photo_path | latex_escape )))}};}] (profilePic) {};
+\draw[white, line width=1.2pt] (profilePic) circle (2.35cm);
+\end{tikzpicture}
+((* else *))
+\begin{tikzpicture}
+\node[circle, minimum size=4.7cm, inner sep=0pt, draw=white, line width=1.2pt] (profilePic) {};
+\node[align=center, text=white, font=\small\bfseries] at (profilePic.center) {No\\Photo};
+\end{tikzpicture}
+((* endif *))
+\end{minipage}%
+\hspace*{-0.06\linewidth}%
+\begin{minipage}[c]{0.72\linewidth}
+\centering
+{\color{white}\bfseries\Huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}\\[0.62em]
+((* if position *)){\color{white}\bfseries\Large ((( position | latex_escape )))}((* endif *))
+\end{minipage}
 }%
 }
-\vspace{0.35em}
+\vspace{0em}
 
 \subsection*{}
-\vspace{1.1em}
+\vspace{0.08em}
 
 \setlength{\columnsep}{0.5cm}
 \columnratio{0.24}[0.75]
@@ -60,7 +74,7 @@
 
 \small
 {\setasidefontcolour
-\vspace{1em}
+\vspace{0.2em}
 
 ((* if email or mobile or homepage or github or linkedin *))
 \hspace{-0.7cm}\bgUpper{backBlue}{white}{Contact}\\
