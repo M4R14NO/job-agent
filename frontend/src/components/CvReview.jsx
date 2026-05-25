@@ -6,7 +6,6 @@ import {
   Eye,
   EyeOff,
   Pencil,
-  Plus,
   Save,
   Sparkles,
   Trash2,
@@ -759,7 +758,6 @@ export default function CvReview({
   const [dragOverItem, setDragOverItem] = useState(null); // { namespace, index }
   const [openPreviewEditors, setOpenPreviewEditors] = useState({});
   const [hipsterPreviewTab, setHipsterPreviewTab] = useState("sidebar");
-  const [hiddenSectionsOpen, setHiddenSectionsOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState(() => ({
     basics: true,
     summary: false,
@@ -868,6 +866,7 @@ export default function CvReview({
     setSectionLabels({ ...SECTION_LABELS });
     setEditingLabelKey(null);
     setHiddenPersonalFields(new Set());
+    hiddenPersonalFieldValuesRef.current = {};
     setSaveProfileOpen(false);
     previousTemplateIdRef.current = templateId;
     forceImmediatePreviewRef.current = true;
@@ -1251,12 +1250,10 @@ export default function CvReview({
           <div className="section-actions">
             <button
               type="button"
-              className="ghost icon-button"
+              className="ghost icon-button section-collapse-button"
               onClick={() => toggleExpandedSection(key)}
             >
-              <span className="icon" aria-hidden="true">
-                {isOpen ? "▾" : "▸"}
-              </span>
+              {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
               <span>{isOpen ? "Collapse" : "Expand"}</span>
             </button>
           </div>
@@ -2323,14 +2320,18 @@ export default function CvReview({
     }
   };
 
-  // Helper: toggle a personal field's visibility in the CV (hidden → null in previewPayload)
+  const hiddenPersonalFieldValuesRef = useRef({});
+
+  // Helper: toggle a personal field's visibility in the CV (hidden -> null in previewPayload)
   const togglePersonalField = (previewKey, restoreValue) => {
     setHiddenPersonalFields((prev) => {
       const next = new Set(prev);
       if (next.has(previewKey)) {
         next.delete(previewKey);
-        setPreviewPayload((p) => p ? { ...p, [previewKey]: restoreValue || null } : p);
+        const restored = hiddenPersonalFieldValuesRef.current[previewKey] ?? restoreValue ?? null;
+        setPreviewPayload((p) => p ? { ...p, [previewKey]: restored } : p);
       } else {
+        hiddenPersonalFieldValuesRef.current[previewKey] = restoreValue ?? null;
         next.add(previewKey);
         setPreviewPayload((p) => p ? { ...p, [previewKey]: null } : p);
       }
@@ -2341,7 +2342,10 @@ export default function CvReview({
   // Renders a personal info field row with label, input and optional visibility toggle
   const renderPersonalField = ({ label, previewKey, canonicalField, previewFieldMap, type = "text", placeholder, canHide = false }) => {
     const isHidden = hiddenPersonalFields.has(previewKey);
-    const rawValue = previewPayload ? (previewPayload[previewKey] ?? "") : (formData[canonicalField] ?? "");
+    const payloadValue = previewPayload?.[previewKey];
+    const canonicalValue = canonicalField ? (formData[canonicalField] ?? "") : "";
+    const stashedValue = hiddenPersonalFieldValuesRef.current[previewKey] ?? "";
+    const rawValue = payloadValue ?? (canonicalValue || stashedValue || "");
     const displayValue = isHidden ? "" : rawValue;
     return (
       <div key={previewKey} className={`personal-field-row${isHidden ? " field-hidden" : ""}`}>
@@ -2978,8 +2982,10 @@ export default function CvReview({
   };
 
   const renderPreviewCard = (key, zone = "single") => {
-    const isCardDragged = draggedSection === key && draggedSectionZone === zone;
+    const isEnabled = enabledSections.has(key);
+    const isCardDragged = isEnabled && draggedSection === key && draggedSectionZone === zone;
     const isCardTarget =
+      isEnabled &&
       dragOverKey === key &&
       dragOverZone === zone &&
       draggedSection &&
@@ -2998,9 +3004,9 @@ export default function CvReview({
       <div
         key={`preview-${zone}-${key}`}
         id={`preview-card-${zone}-${key}`}
-        className={`preview-card${isCardDragged ? " is-dragged" : ""}${isCardTarget ? ` is-drop-target${cardDropDir}` : ""}`}
+        className={`preview-card${isCardDragged ? " is-dragged" : ""}${isCardTarget ? ` is-drop-target${cardDropDir}` : ""}${!isEnabled ? " is-section-hidden" : ""}`}
         onDragOver={(e) => {
-          if (!draggedSection || draggedSectionZone !== zone) return;
+          if (!isEnabled || !draggedSection || draggedSectionZone !== zone) return;
           e.preventDefault();
           setDragOverKey(key);
           setDragOverZone(zone);
@@ -3012,6 +3018,7 @@ export default function CvReview({
           }
         }}
         onDrop={() => {
+          if (!isEnabled) return;
           handleDrop(key, zone);
           setDragOverKey(null);
           setDragOverZone(null);
@@ -3022,8 +3029,11 @@ export default function CvReview({
             <button
               type="button"
               className="drag-handle"
-              draggable
-              onDragStart={(e) => handleDragStart(e, key, zone)}
+              draggable={isEnabled}
+              onDragStart={(e) => {
+                if (!isEnabled) return;
+                handleDragStart(e, key, zone);
+              }}
               onDragEnd={() => {
                 setDraggedSection(null);
                 setDraggedSectionZone(null);
@@ -3031,6 +3041,7 @@ export default function CvReview({
                 setDragOverZone(null);
               }}
               aria-label="Drag to reorder section"
+              disabled={!isEnabled}
             >
               <span aria-hidden="true">⋮⋮</span>
               <span aria-hidden="true">⋮⋮</span>
@@ -3057,16 +3068,16 @@ export default function CvReview({
             )}
           </div>
           <div className="inline-actions">
-            <button type="button" className="btn-danger" onClick={() => toggleSectionInReview(key)}>
-              <Trash2 size={13} /> Remove
+            <button type="button" className="secondary btn-sm" onClick={() => toggleSectionInReview(key)}>
+              {isEnabled ? <><EyeOff size={13} /> Hide</> : <><Eye size={13} /> Show</>}
             </button>
-            <button type="button" className="secondary btn-sm" onClick={() => togglePreviewEditor(key)}>
+            <button type="button" className="secondary btn-sm" onClick={() => togglePreviewEditor(key)} disabled={!isEnabled}>
               {openPreviewEditors[key] ? <><X size={13} /> Close</> : <><Pencil size={13} /> Edit</>}
             </button>
           </div>
         </div>
-        {renderPreviewSection(key) || <p className="helper">No entries.</p>}
-        {openPreviewEditors[key] && (
+        {isEnabled ? (renderPreviewSection(key) || <p className="helper">No entries.</p>) : <p className="helper">This section is hidden from the generated CV.</p>}
+        {openPreviewEditors[key] && isEnabled && (
           <div className="preview-editor">
             {renderPreviewEditorSection(key)}
           </div>
@@ -3097,7 +3108,7 @@ export default function CvReview({
               <strong className="sub-card-title"><Sparkles size={15} /> Rewrite with AI (optional)</strong>
               <button
                 type="button"
-                className="ghost icon-button"
+                className="ghost icon-button section-collapse-button"
                 onClick={() => setRewriteOpen((prev) => !prev)}
                 aria-expanded={rewriteOpen}
               >
@@ -3161,60 +3172,17 @@ export default function CvReview({
                         {hipsterPreviewTab === "sidebar" ? "Sidebar" : "Main content"}
                       </h4>
                       {(hipsterPreviewTab === "sidebar" ? hipsterSectionOrders.sidebar : hipsterSectionOrders.main)
-                        .filter((key) => enabledSections.has(key))
                         .map((key) => renderPreviewCard(key, hipsterPreviewTab))}
+                      {hiddenSectionKeysForCurrentView.map((key) => renderPreviewCard(key, hipsterPreviewTab))}
                     </div>
                   </>
                 ) : (
-                  currentSectionOrder
-                    .filter((key) => enabledSections.has(key))
-                    .map((key) => renderPreviewCard(key, "single"))
+                  <>
+                    {currentSectionOrder.map((key) => renderPreviewCard(key, "single"))}
+                    {hiddenSectionKeysForCurrentView.map((key) => renderPreviewCard(key, "single"))}
+                  </>
                 )}
               </div>
-              {isHipsterTemplate ? (
-                hiddenSectionKeysForCurrentView.length > 0 && (
-                  <div className="hidden-sections">
-                    <p className="helper">
-                      Hidden sections in {hipsterPreviewTab === "sidebar" ? "Sidebar" : "Main content"}
-                    </p>
-                    <div className="hidden-sections-list">
-                      {hiddenSectionKeysForCurrentView.map((key) => (
-                        <div key={`review-hidden-${key}`} className="hidden-section-item">
-                          <span>{sectionLabels[key] ?? SECTION_LABELS[key]}</span>
-                          <button type="button" className="secondary btn-sm" onClick={() => toggleSectionInReview(key)}>
-                            <Plus size={13} /> Add
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )
-              ) : (
-                hiddenSectionKeysForCurrentView.length > 0 && (
-                  <div className="hidden-sections">
-                    <button
-                      type="button"
-                      className="ghost"
-                      onClick={() => setHiddenSectionsOpen((prev) => !prev)}
-                    >
-                      {hiddenSectionsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      {hiddenSectionsOpen ? "Hide" : "Show"} available sections ({hiddenSectionKeysForCurrentView.length})
-                    </button>
-                    {hiddenSectionsOpen && (
-                      <div className="hidden-sections-list">
-                        {hiddenSectionKeysForCurrentView.map((key) => (
-                          <div key={`review-hidden-${key}`} className="hidden-section-item">
-                            <span>{sectionLabels[key] ?? SECTION_LABELS[key]}</span>
-                            <button type="button" className="secondary btn-sm" onClick={() => toggleSectionInReview(key)}>
-                              <Plus size={13} /> Add
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              )}
             </>
           ) : (
             <p className="helper">Generating the preview. This can take a moment.</p>
@@ -3226,7 +3194,7 @@ export default function CvReview({
               <strong className="sub-card-title"><Save size={15} /> Save profile (optional)</strong>
               <button
                 type="button"
-                className="ghost icon-button"
+                className="ghost icon-button section-collapse-button"
                 onClick={() => setSaveProfileOpen((prev) => !prev)}
                 aria-expanded={saveProfileOpen}
               >

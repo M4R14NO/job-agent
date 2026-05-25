@@ -445,6 +445,11 @@ body {
   cursor: pointer;
 }
 
+.section-collapse-button {
+  min-width: 104px;
+  justify-content: center;
+}
+
 .icon-button:disabled {
   cursor: not-allowed;
   opacity: 0.6;
@@ -1669,6 +1674,16 @@ body.modal-open .pdf-preview-iframe {
   border-radius: 12px;
   padding: 12px;
   background: #fdfdfd;
+}
+
+.preview-card.is-section-hidden {
+  background: #f8fafc;
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+.preview-card.is-section-hidden .preview-card-title {
+  color: #64748b;
 }
 
 .preview-card h4 {
