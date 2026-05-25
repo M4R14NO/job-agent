@@ -68,15 +68,20 @@ export default function OverwriteConfirmationModal({
         <div className="overwrite-modal-header">
           <div>
             <p className="eyebrow">Confirm overwrite</p>
-            <h2 id="overwrite-title">Profile already exists: {targetProfileId}</h2>
+            <h2 id="overwrite-title">Review detected profile changes</h2>
             <p className="helper">
               Overwriting creates a new revision and replaces the stored data for this profile name.
               Previous values cannot be restored in the current prototype.
             </p>
+            <div className="overwrite-warning-box">
+              <span className="overwrite-warning-pill">
+                <AlertTriangle size={14} /> See what has changed
+              </span>
+              <p>
+                Profile already exists: <strong>{targetProfileId}</strong>
+              </p>
+            </div>
           </div>
-          <span className="overwrite-warning-pill">
-            <AlertTriangle size={14} /> See what has changed
-          </span>
         </div>
 
         <div className="overwrite-meta-grid">
@@ -103,7 +108,10 @@ export default function OverwriteConfirmationModal({
               {basicProfileChanges.length > 0 && (
                 <details className="overwrite-group" open>
                   <summary>
-                    <span className="overwrite-group-title">Basic profile information</span>
+                    <span className="overwrite-summary-main">
+                      <span className="overwrite-summary-caret" aria-hidden="true">▸</span>
+                      <span className="overwrite-group-title">Basic profile information</span>
+                    </span>
                     <span className="overwrite-group-meta">{basicProfileChanges.length} change{basicProfileChanges.length === 1 ? "" : "s"}</span>
                   </summary>
                   <div className="overwrite-diff-list">
@@ -132,7 +140,10 @@ export default function OverwriteConfirmationModal({
               {templateLayoutChanges.length > 0 && (
                 <details className="overwrite-group" open={templateGroupOpenDefault}>
                   <summary>
-                    <span className="overwrite-group-title">Template and layout changes</span>
+                    <span className="overwrite-summary-main">
+                      <span className="overwrite-summary-caret" aria-hidden="true">▸</span>
+                      <span className="overwrite-group-title">Template and layout changes</span>
+                    </span>
                     <span className="overwrite-group-meta">{templateLayoutChanges.length} change{templateLayoutChanges.length === 1 ? "" : "s"}</span>
                   </summary>
                   <div className="overwrite-diff-list">
@@ -161,7 +172,10 @@ export default function OverwriteConfirmationModal({
               {sectionChanges.length > 0 && (
                 <details className="overwrite-group" open>
                   <summary>
-                    <span className="overwrite-group-title">Section content changes</span>
+                    <span className="overwrite-summary-main">
+                      <span className="overwrite-summary-caret" aria-hidden="true">▸</span>
+                      <span className="overwrite-group-title">Section content changes</span>
+                    </span>
                     <span className="overwrite-group-meta">{sectionChanges.length} section{sectionChanges.length === 1 ? "" : "s"}</span>
                   </summary>
                   <div className="overwrite-diff-group-list">
@@ -171,7 +185,10 @@ export default function OverwriteConfirmationModal({
                       return (
                         <details className="overwrite-subgroup" key={`section-${section.key}`} open={sectionDefaultOpen}>
                           <summary>
-                            <span className="overwrite-subgroup-title">{section.label}</span>
+                            <span className="overwrite-summary-main">
+                              <span className="overwrite-summary-caret" aria-hidden="true">▸</span>
+                              <span className="overwrite-subgroup-title">{section.label}</span>
+                            </span>
                             <span className="overwrite-group-meta">{sectionCount} change{sectionCount === 1 ? "" : "s"}</span>
                           </summary>
                           <div className="overwrite-diff-list">
@@ -239,10 +256,10 @@ export default function OverwriteConfirmationModal({
         {error && <p className="error">{error}</p>}
 
         <div className="overwrite-modal-actions">
-          <button type="button" className="overwrite-btn overwrite-btn-neutral" onClick={onCancel} disabled={isBusy}>
-            <X size={14} /> Cancel
-          </button>
           <div className="overwrite-modal-actions-right">
+            <button type="button" className="overwrite-btn overwrite-btn-neutral" onClick={onCancel} disabled={isBusy}>
+              <X size={14} /> Cancel
+            </button>
             {!showRenameFlow ? (
               <button
                 type="button"
@@ -252,16 +269,7 @@ export default function OverwriteConfirmationModal({
               >
                 <Save size={14} /> Save as new profile
               </button>
-            ) : (
-              <button
-                type="button"
-                className="overwrite-btn overwrite-btn-neutral"
-                onClick={() => setShowRenameFlow(false)}
-                disabled={isBusy}
-              >
-                <X size={14} /> Back
-              </button>
-            )}
+            ) : null}
             <button type="button" className="overwrite-btn overwrite-btn-danger" onClick={onConfirmOverwrite} disabled={isBusy}>
               <AlertTriangle size={14} /> {isBusy ? "Saving..." : "Overwrite existing profile"}
             </button>

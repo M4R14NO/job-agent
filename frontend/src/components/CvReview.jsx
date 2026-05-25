@@ -571,8 +571,12 @@ const buildSectionDiff = ({ key, label, summarize, oldItems = [], newItems = [] 
         newValue: summary,
         changes
       });
-      beforeRows[matched.index].status = "updated";
-      afterRows[index].status = "updated";
+      const beforeText = compactText(matched.summary);
+      const afterText = compactText(summary);
+      if (beforeText !== afterText) {
+        beforeRows[matched.index].status = "updated";
+        afterRows[index].status = "updated";
+      }
     }
   });
 
@@ -778,6 +782,7 @@ export default function CvReview({
     error: ""
   });
   const previewDebounceRef = useRef(null);
+  const previousTemplateIdRef = useRef(templateId);
   const schemaVersion = canonical?.schema_version || "v1";
   const currentSectionOrder = isHipsterTemplate
     ? [...hipsterSectionOrders.sidebar, ...hipsterSectionOrders.main]
@@ -842,6 +847,7 @@ export default function CvReview({
     setEditingLabelKey(null);
     setHiddenPersonalFields(new Set());
     setSaveProfileOpen(false);
+    previousTemplateIdRef.current = templateId;
   }, [canonical]);
 
   useEffect(() => {
@@ -852,6 +858,18 @@ export default function CvReview({
     if (isPreviewing) return undefined;
     const nextHash = buildPreviewHash();
     if (previewPayload && previewHash === nextHash) return undefined;
+
+    const templateChanged = previousTemplateIdRef.current !== templateId;
+    previousTemplateIdRef.current = templateId;
+
+    if (templateChanged || !previewPayload) {
+      if (previewDebounceRef.current) {
+        clearTimeout(previewDebounceRef.current);
+        previewDebounceRef.current = null;
+      }
+      handlePreview({ force: true });
+      return undefined;
+    }
 
     if (previewDebounceRef.current) {
       clearTimeout(previewDebounceRef.current);

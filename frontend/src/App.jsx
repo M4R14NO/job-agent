@@ -68,6 +68,8 @@ export default function App() {
 
   const searchTimerRef = useRef(null);
   const pdfPreviewTimerRef = useRef(null);
+  const pdfPreviewTemplateRef = useRef("");
+  const hasRenderedPdfPreviewRef = useRef(false);
   const isResizingSidebarRef = useRef(false);
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(SIDEBAR_MIN_WIDTH);
@@ -199,10 +201,23 @@ export default function App() {
 
   useEffect(() => {
     if (!cvPreviewPayload || !cvReview) return undefined;
+    const activeTemplateId = cvReview.templateId || "awesomecv";
+    const templateChanged = Boolean(pdfPreviewTemplateRef.current) && pdfPreviewTemplateRef.current !== activeTemplateId;
+    const shouldRenderImmediately = !hasRenderedPdfPreviewRef.current || templateChanged;
+    pdfPreviewTemplateRef.current = activeTemplateId;
+
     if (pdfPreviewTimerRef.current) {
       clearTimeout(pdfPreviewTimerRef.current);
     }
+
+    if (shouldRenderImmediately) {
+      hasRenderedPdfPreviewRef.current = true;
+      handleUpdatePdfPreview();
+      return undefined;
+    }
+
     pdfPreviewTimerRef.current = setTimeout(() => {
+      hasRenderedPdfPreviewRef.current = true;
       handleUpdatePdfPreview();
     }, PDF_PREVIEW_DEBOUNCE_MS);
 
@@ -435,6 +450,8 @@ export default function App() {
     setActiveJobAction("cv");
     setCvPreviewPayload(null);
     setPdfPreviewUrl(null);
+    hasRenderedPdfPreviewRef.current = false;
+    pdfPreviewTemplateRef.current = templateId || "awesomecv";
   };
 
   const handleUpdatePdfPreview = async () => {
@@ -495,6 +512,8 @@ export default function App() {
     setActiveView("create");
     setCvPreviewPayload(null);
     setPdfPreviewUrl(null);
+    hasRenderedPdfPreviewRef.current = false;
+    pdfPreviewTemplateRef.current = templateId || cvTemplateId || "awesomecv";
   };
 
   const handleCreateCvFromResume = async () => {
@@ -557,6 +576,8 @@ export default function App() {
     setActiveJobAction("none");
     setCvPreviewPayload(null);
     setPdfPreviewUrl(null);
+    hasRenderedPdfPreviewRef.current = false;
+    pdfPreviewTemplateRef.current = "";
   };
 
   const handleBackToResults = () => {
@@ -566,6 +587,8 @@ export default function App() {
     setActiveJobAction("none");
     setCvPreviewPayload(null);
     setPdfPreviewUrl(null);
+    hasRenderedPdfPreviewRef.current = false;
+    pdfPreviewTemplateRef.current = "";
   };
 
   const handleSetView = (view) => {

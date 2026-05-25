@@ -1059,7 +1059,7 @@ select {
   inset: 0;
   display: grid;
   place-items: center;
-  z-index: 20;
+  z-index: 3000;
 }
 
 .modal-backdrop {
@@ -1091,6 +1091,15 @@ body.modal-open .pdf-preview-container {
   pointer-events: none;
 }
 
+body.modal-open .pdf-preview-card,
+body.modal-open .pdf-preview-card * {
+  pointer-events: none !important;
+}
+
+body.modal-open .pdf-preview-iframe {
+  visibility: hidden;
+}
+
 .overwrite-modal-card {
   width: min(980px, 94vw);
   gap: 18px;
@@ -1102,21 +1111,38 @@ body.modal-open .pdf-preview-container {
 
 .overwrite-modal-header {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr;
   justify-content: space-between;
   align-items: flex-start;
   gap: 14px;
+}
+
+.overwrite-warning-box {
+  margin-top: 8px;
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+  width: min(760px, 100%);
+}
+
+.overwrite-warning-box p {
+  margin: 0;
+  color: #78350f;
+  font-size: 14px;
 }
 
 .overwrite-warning-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 0;
   border-radius: 999px;
-  background: #fffbeb;
+  background: transparent;
   color: #92400e;
-  border: 1px solid #fde68a;
+  border: none;
   font-size: 12px;
   font-weight: 700;
 }
@@ -1169,6 +1195,23 @@ body.modal-open .pdf-preview-container {
   gap: 8px;
   font-weight: 700;
   background: #f8fafc;
+}
+
+.overwrite-summary-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.overwrite-summary-caret {
+  font-size: 13px;
+  color: #475569;
+  transition: transform 0.2s ease;
+}
+
+.overwrite-group[open] > summary .overwrite-summary-caret,
+.overwrite-subgroup[open] > summary .overwrite-summary-caret {
+  transform: rotate(90deg);
 }
 
 .overwrite-group > summary::-webkit-details-marker,
@@ -1372,7 +1415,7 @@ body.modal-open .pdf-preview-container {
 
 .overwrite-modal-actions {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   gap: 12px;
 }
