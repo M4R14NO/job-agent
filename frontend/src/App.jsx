@@ -25,6 +25,18 @@ const SIDEBAR_MIN_WIDTH = 360;
 const SIDEBAR_MAX_WIDTH = 720;
 const PDF_PREVIEW_DEBOUNCE_MS = 5000;
 const CANONICAL_SCHEMA_VERSION = "v1";
+const DEFAULT_TEMPLATE_THEME_COLORS = {
+  awesomecv: "#C0392B",
+  hipstercv: "#496E8C"
+};
+
+const normalizeHexColor = (value, fallback = null) => {
+  const raw = String(value || "").trim();
+  const normalized = raw.startsWith("#") ? raw : `#${raw}`;
+  const match = normalized.match(/^#([0-9a-fA-F]{6})$/);
+  if (!match) return fallback;
+  return `#${match[1].toUpperCase()}`;
+};
 
 const EMPTY_APPLICATION_CONTEXT = {
   company: "",
@@ -115,6 +127,7 @@ export default function App() {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
   const [isPdfDownloading, setIsPdfDownloading] = useState(false);
+  const [cvThemeColors, setCvThemeColors] = useState(DEFAULT_TEMPLATE_THEME_COLORS);
 
   const searchTimerRef = useRef(null);
   const cvRemapTimerRef = useRef(null);
@@ -132,6 +145,26 @@ export default function App() {
   const jobs = response?.jobs ?? [];
   const descriptionHtml = useJobDescription(selectedJob);
   const isFindView = activeView === "find";
+
+  const resolveTemplateThemeColor = (templateId) => {
+    const key = templateId || "awesomecv";
+    const fallback = DEFAULT_TEMPLATE_THEME_COLORS[key] || DEFAULT_TEMPLATE_THEME_COLORS.awesomecv;
+    return normalizeHexColor(cvThemeColors[key], fallback);
+  };
+
+  const applyTemplateThemeToPayload = (payload, templateId) => {
+    const key = templateId || "awesomecv";
+    const color = resolveTemplateThemeColor(key);
+    if (!payload || !color) return payload;
+    const hex = color.replace("#", "");
+    if (key === "hipstercv") {
+      return { ...payload, accent_color_hex: hex };
+    }
+    if (key === "awesomecv") {
+      return { ...payload, awesome_color_hex: hex };
+    }
+    return payload;
+  };
 
   const defaultRerankTopN = (() => {
     const total = response?.jobs?.length ?? resultsWanted;
@@ -336,11 +369,13 @@ export default function App() {
   useEffect(() => {
     if (!cvPreviewPayload || !cvReview) return undefined;
     const activeTemplateId = cvReview.templateId || "awesomecv";
+    const activeThemeColor = resolveTemplateThemeColor(activeTemplateId);
     const templateChanged = Boolean(pdfPreviewTemplateRef.current) && pdfPreviewTemplateRef.current !== activeTemplateId;
 
     const structureSignature = JSON.stringify({
       sections: cvPreviewPayload.sections || {},
       photo: cvPreviewPayload.photo || null,
+      theme_color: activeThemeColor,
       section_order: cvPreviewPayload.section_order || [],
       sidebar_section_order: cvPreviewPayload.sidebar_section_order || [],
       main_section_order: cvPreviewPayload.main_section_order || [],
@@ -381,7 +416,7 @@ export default function App() {
         pdfPreviewTimerRef.current = null;
       }
     };
-  }, [cvPreviewPayload, cvReview?.templateId]);
+  }, [cvPreviewPayload, cvReview?.templateId, cvThemeColors]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -649,6 +684,7 @@ export default function App() {
       return;
     }
     const { __source_profile_id, ...templatePayload } = cvPreviewPayload;
+    const themedPayload = applyTemplateThemeToPayload(templatePayload, cvReview.templateId || "awesomecv");
     if (pdfPreviewUrl) {
       URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl(null);
@@ -656,7 +692,7 @@ export default function App() {
     setIsPdfGenerating(true);
     try {
       const { blob } = await renderCvFromTemplate({
-        payload: templatePayload,
+        payload: themedPayload,
         template_id: cvReview.templateId || "awesomecv",
         doc_type: cvReview.docType || "resume"
       });
@@ -682,10 +718,11 @@ export default function App() {
       return;
     }
     const { __source_profile_id, ...templatePayload } = cvPreviewPayload;
+    const themedPayload = applyTemplateThemeToPayload(templatePayload, cvReview.templateId || "awesomecv");
     setIsPdfDownloading(true);
     try {
       const { blob, filename } = await renderCvFromTemplate({
-        payload: templatePayload,
+        payload: themedPayload,
         template_id: cvReview.templateId || "awesomecv",
         doc_type: cvReview.docType || "resume"
       });
@@ -1167,6 +1204,17 @@ export default function App() {
     setCvReview((prev) => (prev ? { ...prev, templateId: nextTemplateId } : prev));
   };
 
+  const handleThemeColorChange = (nextColor) => {
+    const activeTemplateId = cvReview?.templateId || cvTemplateId || "awesomecv";
+    const fallback = resolveTemplateThemeColor(activeTemplateId);
+    const normalized = normalizeHexColor(nextColor, fallback);
+    if (!normalized) return;
+    setCvThemeColors((prev) => ({
+      ...prev,
+      [activeTemplateId]: normalized
+    }));
+  };
+
   const handleApplicationContextChange = (updater) => {
     setApplicationContext((prev) => {
       const next = typeof updater === "function" ? updater(prev) : updater;
@@ -1352,6 +1400,8 @@ export default function App() {
                 isDownloading={isPdfDownloading}
                 templateId={cvReview.templateId}
                 onTemplateIdChange={handleTemplateIdChange}
+                themeColor={resolveTemplateThemeColor(cvReview.templateId || "awesomecv")}
+                onThemeColorChange={handleThemeColorChange}
                 onUpdate={handleUpdatePdfPreview}
                 onDownload={handleDownloadPdf}
               />
@@ -1553,6 +1603,8 @@ export default function App() {
                       isDownloading={isPdfDownloading}
                       templateId={cvReview?.templateId || cvTemplateId}
                       onTemplateIdChange={handleTemplateIdChange}
+                      themeColor={resolveTemplateThemeColor(cvReview?.templateId || cvTemplateId || "awesomecv")}
+                      onThemeColorChange={handleThemeColorChange}
                       onUpdate={handleUpdatePdfPreview}
                       onDownload={handleDownloadPdf}
                       disabled={!cvReview}

@@ -117,11 +117,17 @@ export function PdfPreviewCard({
   isDownloading,
   templateId,
   onTemplateIdChange,
+  themeColor,
+  onThemeColorChange,
   onUpdate,
   onDownload,
   disabled = false,
   disabledReason = ""
 }) {
+  const colorPresets = templateId === "hipstercv"
+    ? ["#496E8C", "#2F5D50", "#0F766E", "#374151", "#7C3AED", "#B45309"]
+    : ["#C0392B", "#E11D48", "#0F766E", "#2563EB", "#9333EA", "#EA580C"];
+
   const handleTemplateKeyDown = (event) => {
     if (event.key === "Tab" && !event.shiftKey && !disabled && !isGenerating) {
       event.preventDefault();
@@ -159,6 +165,34 @@ export function PdfPreviewCard({
                 <option value="awesomecv">AwesomeCV</option>
                 <option value="hipstercv">HipsterCV</option>
               </select>
+            </div>
+          )}
+          {onThemeColorChange && (
+            <div className="pdf-preview-template-control">
+              <span className="pdf-preview-template-label">Theme color</span>
+              <input
+                id="pdf-preview-theme-color"
+                className="pdf-preview-theme-color-input"
+                type="color"
+                value={themeColor || "#496E8C"}
+                onChange={(event) => onThemeColorChange(event.target.value)}
+                disabled={disabled || isGenerating}
+                aria-label="Theme color"
+              />
+              <div className="pdf-preview-color-palette" role="group" aria-label="Theme color presets">
+                {colorPresets.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    className={`pdf-preview-color-swatch${(themeColor || "").toUpperCase() === preset.toUpperCase() ? " is-active" : ""}`}
+                    style={{ backgroundColor: preset }}
+                    onClick={() => onThemeColorChange(preset)}
+                    disabled={disabled || isGenerating}
+                    aria-label={`Set color ${preset}`}
+                    title={preset}
+                  />
+                ))}
+              </div>
             </div>
           )}
           <button

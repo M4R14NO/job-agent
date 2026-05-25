@@ -26,6 +26,12 @@
 \newlength{\hipstersidebarbgwidth}
 \setlength{\hipstersidebarbgwidth}{\dimexpr1cm+\leftcolwidth+0.5\columnsep\relax}
 
+((* if accent_color_hex *))
+\definecolor{hipster-accent}{HTML}{((( accent_color_hex )))}
+\colorlet{backBlue}{hipster-accent}
+\colorlet{headerblue}{hipster-accent}
+((* endif *))
+
 \AddToShipoutPictureBG{%
 	\AtPageLowerLeft{%
 		\color[rgb]{0.9,0.9,0.9}\rule{\hipstersidebarbgwidth}{\paperheight}%
