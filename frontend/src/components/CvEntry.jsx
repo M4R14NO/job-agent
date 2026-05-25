@@ -84,16 +84,54 @@ const formatDate = (value) => {
 
 const normalizeText = (value) => String(value || "").toLowerCase();
 
-const fuzzyMatch = (query, text) => {
+const fuzzyFieldMatch = (query, text) => {
   const q = normalizeText(query).trim();
   const t = normalizeText(text);
-  if (!q) return true;
+  if (!q || q.length < 4) return false;
   if (t.includes(q)) return true;
   let qi = 0;
+  let startIndex = -1;
+  let endIndex = -1;
   for (let ti = 0; ti < t.length && qi < q.length; ti += 1) {
-    if (t[ti] === q[qi]) qi += 1;
+    if (t[ti] === q[qi]) {
+      if (startIndex === -1) startIndex = ti;
+      endIndex = ti;
+      qi += 1;
+    }
   }
-  return qi === q.length;
+  if (qi !== q.length) return false;
+  // Reject very wide matches to avoid matching almost every row.
+  const span = endIndex - startIndex + 1;
+  return span <= q.length * 3;
+};
+
+const profileSearchFields = (profile) => [
+  profile.profile_id,
+  profile.company,
+  profile.application_status,
+  profile.application_date,
+  profile.job_title,
+  profile.job_description,
+  profile.job_url,
+  profile.template_id,
+  profile.audit?.raw_resume_text,
+  JSON.stringify(profile.data || {})
+];
+
+const profileMatchesQuery = (profile, query) => {
+  const normalized = normalizeText(query).trim();
+  if (!normalized) return true;
+  const terms = normalized.split(/\s+/).filter(Boolean);
+  const fields = profileSearchFields(profile).map((field) => normalizeText(field));
+  return terms.every((term) => fields.some((field) => field.includes(term) || fuzzyFieldMatch(term, field)));
+};
+
+const statusBadgeClass = (status) => {
+  const normalized = normalizeText(status);
+  if (normalized === "offer" || normalized === "invited" || normalized === "interviewing") return "status-badge is-positive";
+  if (normalized === "applied" || normalized === "in-prep") return "status-badge is-neutral";
+  if (normalized === "rejected" || normalized === "closed") return "status-badge is-negative";
+  return "status-badge";
 };
 
 const nextProfileVersionName = (profileId) => {
@@ -166,7 +204,10 @@ export default function CvEntry({
 }) {
   const [activeTab, setActiveTab] = useState("load");
   const [showExampleCvText, setShowExampleCvText] = useState(false);
-  const [profileSearch, setProfileSearch] = useState("");
+  const [profileSearchDraft, setProfileSearchDraft] = useState("");
+  const [profileSearchQuery, setProfileSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("updated");
+  const [sortDirection, setSortDirection] = useState("desc");
   const [remapDialogOpen, setRemapDialogOpen] = useState(false);
   const [remapProfileName, setRemapProfileName] = useState("");
 
@@ -176,26 +217,23 @@ export default function CvEntry({
   );
 
   const filteredProfiles = useMemo(() => {
-    if (!profileSearch.trim()) return cvProfiles;
-    return cvProfiles.filter((profile) => {
-      const searchable = JSON.stringify({
-        profile_id: profile.profile_id,
-        template_id: profile.template_id,
-        company: profile.company,
-        application_status: profile.application_status,
-        application_date: profile.application_date,
-        job_title: profile.job_title,
-        job_description: profile.job_description,
-        job_url: profile.job_url,
-        section_order: profile.section_order,
-        sidebar_section_order: profile.sidebar_section_order,
-        main_section_order: profile.main_section_order,
-        data: profile.data,
-        raw_resume_text: profile.audit?.raw_resume_text
-      });
-      return fuzzyMatch(profileSearch, searchable);
+    const filtered = cvProfiles.filter((profile) => profileMatchesQuery(profile, profileSearchQuery));
+    const sorted = [...filtered].sort((a, b) => {
+      const leftDate = Date.parse(a.updated_at || a.created_at || "") || 0;
+      const rightDate = Date.parse(b.updated_at || b.created_at || "") || 0;
+      const getValue = (profile, key) => {
+        if (key === "updated") return Date.parse(profile.updated_at || profile.created_at || "") || 0;
+        if (key === "revision") return Number(profile.revision || 0);
+        return normalizeText(profile?.[key]);
+      };
+      const left = sortBy === "updated" ? leftDate : getValue(a, sortBy);
+      const right = sortBy === "updated" ? rightDate : getValue(b, sortBy);
+      if (left < right) return sortDirection === "asc" ? -1 : 1;
+      if (left > right) return sortDirection === "asc" ? 1 : -1;
+      return normalizeText(a.profile_id).localeCompare(normalizeText(b.profile_id));
     });
-  }, [cvProfiles, profileSearch]);
+    return sorted;
+  }, [cvProfiles, profileSearchQuery, sortBy, sortDirection]);
 
   const remapTargetExists = useMemo(
     () => cvProfiles.some((profile) => profile.profile_id === remapProfileName.trim()),
@@ -225,6 +263,22 @@ export default function CvEntry({
     });
     setRemapDialogOpen(false);
   };
+
+  const toggleSort = (nextSortBy) => {
+    if (sortBy === nextSortBy) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortBy(nextSortBy);
+    setSortDirection(nextSortBy === "updated" || nextSortBy === "revision" ? "desc" : "asc");
+  };
+
+  const renderSortHeader = (label, key) => (
+    <button type="button" className="table-sort-button" onClick={() => toggleSort(key)}>
+      <span>{label}</span>
+      {sortBy === key ? <span className="table-sort-indicator">{sortDirection === "asc" ? "↑" : "↓"}</span> : null}
+    </button>
+  );
 
   return (
     <div className="cv-entry">
@@ -264,32 +318,48 @@ export default function CvEntry({
         <div className="cv-entry-panel" role="tabpanel">
           <div>
             <label htmlFor="profileSearch" className="label">Search profiles</label>
-            <input
-              id="profileSearch"
-              type="text"
-              placeholder="Search by profile name, company, status, job info, or CV content"
-              value={profileSearch}
-              onChange={(e) => setProfileSearch(e.target.value)}
-            />
+            <div className="cv-search-row">
+              <input
+                id="profileSearch"
+                type="text"
+                placeholder="Search by profile name, company, status, job title, description, or CV text"
+                value={profileSearchDraft}
+                onChange={(e) => setProfileSearchDraft(e.target.value)}
+              />
+              <button type="button" className="secondary" onClick={() => setProfileSearchQuery(profileSearchDraft)}>
+                Search
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => {
+                  setProfileSearchDraft("");
+                  setProfileSearchQuery("");
+                }}
+              >
+                Reset
+              </button>
+            </div>
           </div>
 
           <div className="cv-profile-table-wrap">
             <table className="cv-profile-table">
               <thead>
                 <tr>
-                  <th>Profile</th>
-                  <th>Company</th>
-                  <th>Status</th>
-                  <th>Template</th>
-                  <th>Revision</th>
-                  <th>Updated</th>
+                  <th>{renderSortHeader("Profile", "profile_id")}</th>
+                  <th>{renderSortHeader("Company", "company")}</th>
+                  <th>{renderSortHeader("Status", "application_status")}</th>
+                  <th>{renderSortHeader("Job title", "job_title")}</th>
+                  <th>{renderSortHeader("Template", "template_id")}</th>
+                  <th>{renderSortHeader("Revision", "revision")}</th>
+                  <th>{renderSortHeader("Updated", "updated")}</th>
                   <th>Sections</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredProfiles.length === 0 ? (
                   <tr>
-                    <td colSpan={7}>
+                    <td colSpan={8}>
                       <p className="helper">No matching profiles found.</p>
                     </td>
                   </tr>
@@ -305,7 +375,12 @@ export default function CvEntry({
                       >
                         <td>{profile.profile_id}</td>
                         <td>{profile.company || "-"}</td>
-                        <td>{profile.application_status || "-"}</td>
+                        <td>
+                          {profile.application_status ? (
+                            <span className={statusBadgeClass(profile.application_status)}>{profile.application_status}</span>
+                          ) : "-"}
+                        </td>
+                        <td>{profile.job_title || "-"}</td>
                         <td>{profile.template_id || "awesomecv"}</td>
                         <td>r{profile.revision ?? 0}</td>
                         <td>{formatDate(profile.updated_at || profile.created_at)}</td>
@@ -343,23 +418,6 @@ export default function CvEntry({
                 />
               </div>
               <div>
-                <label htmlFor="ctxStatus" className="label">Application status</label>
-                <select
-                  id="ctxStatus"
-                  value={applicationContext.application_status || ""}
-                  onChange={(e) => onApplicationContextChange((prev) => ({ ...prev, application_status: e.target.value }))}
-                >
-                  <option value="">Not set</option>
-                  <option value="in-prep">In preparation</option>
-                  <option value="applied">Applied</option>
-                  <option value="invited">Invited</option>
-                  <option value="interviewing">Interviewing</option>
-                  <option value="offer">Offer</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="closed">Closed</option>
-                </select>
-              </div>
-              <div>
                 <label htmlFor="ctxDate" className="label">Application date</label>
                 <input
                   id="ctxDate"
@@ -375,6 +433,24 @@ export default function CvEntry({
                   value={applicationContext.job_title || ""}
                   onChange={(e) => onApplicationContextChange((prev) => ({ ...prev, job_title: e.target.value }))}
                 />
+              </div>
+              <div>
+                <label htmlFor="ctxStatus" className="label">Application status</label>
+                <select
+                  id="ctxStatus"
+                  className="app-status-select"
+                  value={applicationContext.application_status || ""}
+                  onChange={(e) => onApplicationContextChange((prev) => ({ ...prev, application_status: e.target.value }))}
+                >
+                  <option value="">Not set</option>
+                  <option value="in-prep">In preparation</option>
+                  <option value="applied">Applied</option>
+                  <option value="invited">Invited</option>
+                  <option value="interviewing">Interviewing</option>
+                  <option value="offer">Offer</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="closed">Closed</option>
+                </select>
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
                 <label htmlFor="ctxJobUrl" className="label">Job URL</label>
@@ -420,11 +496,11 @@ export default function CvEntry({
             <button
               type="button"
               className="secondary cv-action-remap"
-              title="Create a job-tailored CV profile from the current CV text and optional job description. You can review the new profile name first."
+              title="Use your CV text together with the optional job title and job description to create a tailored CV profile."
               onClick={openRemapDialog}
               disabled={isRemappingProfileCvText || isLoadingProfile || !selectedProfile || !resumeText.trim()}
             >
-              {isRemappingProfileCvText ? "Tailoring profile..." : "Tailor CV to job description"}
+              {isRemappingProfileCvText ? "Tailoring profile..." : "Tailor CV using CV text + job description"}
             </button>
           </div>
 
@@ -432,12 +508,12 @@ export default function CvEntry({
             <div className="refinement-progress">
               <div className="results-loading">
                 <Spinner size="sm" color="blue.500" />
-                <span>Updating canonical mapping from CV text. This can take a minute.</span>
+                <span>Tailoring your CV for this role. This can take about a minute.</span>
               </div>
               <div className="progress-header">
-                <span>LLM remap progress</span>
+                <span>CV tailoring progress</span>
                 <span>
-                  Tokens {remapProgress.currentTokens} / {remapProgress.totalTokens} (est.)
+                  {remapProgress.percent}% complete
                 </span>
               </div>
               <Progress.Root value={remapProgress.percent} size="sm" colorPalette="blue">

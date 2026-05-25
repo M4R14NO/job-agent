@@ -947,8 +947,16 @@ export default function CvReview({
   }, [isHipsterTemplate]);
 
   useEffect(() => {
-    onPreviewPayloadChange?.(previewPayload);
-  }, [previewPayload]);
+    const sourceProfileId = canonical?.profile_id || initialProfileId || "default";
+    if (!previewPayload) {
+      onPreviewPayloadChange?.(null);
+      return;
+    }
+    onPreviewPayloadChange?.({
+      ...previewPayload,
+      __source_profile_id: sourceProfileId
+    });
+  }, [previewPayload, canonical?.profile_id, initialProfileId, onPreviewPayloadChange]);
 
   useEffect(() => {
     onDraftStateChange?.({

@@ -109,6 +109,7 @@ export default function App() {
   const pdfPreviewTemplateRef = useRef("");
   const hasRenderedPdfPreviewRef = useRef(false);
   const pdfPreviewStructureRef = useRef("");
+  const pdfPreviewRequestVersionRef = useRef(0);
   const cvDraftHashRef = useRef("");
   const isResizingSidebarRef = useRef(false);
   const resizeStartXRef = useRef(0);
@@ -603,6 +604,7 @@ export default function App() {
   };
 
   const handleStartCvReview = ({ canonical, job, templateId, docType, outputLanguage }) => {
+    pdfPreviewRequestVersionRef.current += 1;
     setCvReview({ canonical, job, templateId, docType, outputLanguage });
     setApplicationContext({
       company: job?.company || "",
@@ -623,6 +625,12 @@ export default function App() {
 
   const handleUpdatePdfPreview = async () => {
     if (!cvPreviewPayload || !cvReview) return;
+    const requestVersion = ++pdfPreviewRequestVersionRef.current;
+    const activeProfileId = cvReview?.canonical?.profile_id || cvReview?.initialProfileId || "default";
+    if (cvPreviewPayload.__source_profile_id && cvPreviewPayload.__source_profile_id !== activeProfileId) {
+      return;
+    }
+    const { __source_profile_id, ...templatePayload } = cvPreviewPayload;
     if (pdfPreviewUrl) {
       URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl(null);
@@ -630,25 +638,36 @@ export default function App() {
     setIsPdfGenerating(true);
     try {
       const { blob } = await renderCvFromTemplate({
-        payload: cvPreviewPayload,
+        payload: templatePayload,
         template_id: cvReview.templateId || "awesomecv",
         doc_type: cvReview.docType || "resume"
       });
       const url = URL.createObjectURL(blob);
+      if (requestVersion !== pdfPreviewRequestVersionRef.current) {
+        URL.revokeObjectURL(url);
+        return;
+      }
       setPdfPreviewUrl(url);
     } catch (err) {
       // silently fail — error is visible in CvReview
     } finally {
-      setIsPdfGenerating(false);
+      if (requestVersion === pdfPreviewRequestVersionRef.current) {
+        setIsPdfGenerating(false);
+      }
     }
   };
 
   const handleDownloadPdf = async () => {
     if (!cvPreviewPayload || !cvReview) return;
+    const activeProfileId = cvReview?.canonical?.profile_id || cvReview?.initialProfileId || "default";
+    if (cvPreviewPayload.__source_profile_id && cvPreviewPayload.__source_profile_id !== activeProfileId) {
+      return;
+    }
+    const { __source_profile_id, ...templatePayload } = cvPreviewPayload;
     setIsPdfDownloading(true);
     try {
       const { blob, filename } = await renderCvFromTemplate({
-        payload: cvPreviewPayload,
+        payload: templatePayload,
         template_id: cvReview.templateId || "awesomecv",
         doc_type: cvReview.docType || "resume"
       });
@@ -668,6 +687,7 @@ export default function App() {
   };
 
   const handleStartCvEditor = ({ canonical, templateId, initialProfileId }) => {
+    pdfPreviewRequestVersionRef.current += 1;
     setCvReview({
       canonical,
       job: { title: "", company: "", description: "", job_url: "" },
@@ -697,6 +717,7 @@ export default function App() {
 
   const loadProfileIntoEditor = async (profileId) => {
     if (!profileId) return;
+    pdfPreviewRequestVersionRef.current += 1;
     setCvEntryError("");
     setIsLoadingProfile(true);
     try {
@@ -1046,6 +1067,7 @@ export default function App() {
   };
 
   const handleSelectJob = (job) => {
+    pdfPreviewRequestVersionRef.current += 1;
     setSelectedJob(job);
     setCvReview(null);
     setActiveView("find");
@@ -1058,6 +1080,7 @@ export default function App() {
   };
 
   const handleBackToResults = () => {
+    pdfPreviewRequestVersionRef.current += 1;
     setSelectedJob(null);
     setCvReview(null);
     setActiveView("find");
