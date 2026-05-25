@@ -197,6 +197,18 @@ body {
   gap: 24px;
 }
 
+.cv-entry-header-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.cv-profile-table tbody tr:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+  background: #eff6ff;
+}
+
 .create-review-layout {
   display: grid;
   grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.1fr);
@@ -204,8 +216,18 @@ body {
   align-items: start;
 }
 
+.cv-example-toggle {
+  margin-top: 10px;
+}
+
 .create-review-pane {
   min-width: 0;
+}
+
+.panel-disabled {
+  opacity: 0.88;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
 }
 
 .create-review-pane-preview,
@@ -214,6 +236,23 @@ body {
   top: 24px;
   height: calc(100vh - 48px);
   overflow-y: auto;
+}
+
+.pdf-preview-card.is-disabled {
+  opacity: 0.92;
+}
+
+.pdf-preview-card.is-disabled .pdf-preview-container {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 
 .create-review-pane-preview .pdf-preview-card,
@@ -238,6 +277,10 @@ body {
 .create-review-pane-preview .pdf-preview-placeholder {
   height: 100%;
   min-height: 0;
+}
+
+.cv-entry-header-actions {
+  width: auto;
 }
 
 .sidebar-backdrop {
@@ -2225,6 +2268,12 @@ body.modal-open .pdf-preview-iframe {
   .cv-entry-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .cv-entry-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .cv-entry-tabs {

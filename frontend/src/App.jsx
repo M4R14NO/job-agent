@@ -56,6 +56,8 @@ export default function App() {
   const [profilesError, setProfilesError] = useState("");
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState("");
+  const [draftProfileId, setDraftProfileId] = useState("");
+  const [isDraftProfileActive, setIsDraftProfileActive] = useState(false);
   const [newProfileId, setNewProfileId] = useState("default");
   const [cvTemplateId, setCvTemplateId] = useState("awesomecv");
   const [cvOutputLanguage, setCvOutputLanguage] = useState("english");
@@ -68,7 +70,6 @@ export default function App() {
     raw_resume_text: "",
     ...EMPTY_APPLICATION_CONTEXT
   });
-  const [isCreatingCv, setIsCreatingCv] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [isUpdatingProfileCvText, setIsUpdatingProfileCvText] = useState(false);
   const [isRemappingProfileCvText, setIsRemappingProfileCvText] = useState(false);
@@ -705,6 +706,45 @@ export default function App() {
     pdfPreviewStructureRef.current = "";
   };
 
+  const clearCreatePreviewState = () => {
+    pdfPreviewRequestVersionRef.current += 1;
+    setCvReview(null);
+    setCvPreviewPayload(null);
+    setPdfPreviewUrl(null);
+    hasRenderedPdfPreviewRef.current = false;
+    pdfPreviewTemplateRef.current = "";
+    pdfPreviewStructureRef.current = "";
+  };
+
+  const sanitizeProfileId = (value) => {
+    const normalized = (value || "").trim().toLowerCase();
+    const safe = normalized
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+    return safe || `profile-${Date.now()}`;
+  };
+
+  const buildDraftProfileId = () => `draft-${Date.now()}`;
+
+  const handleCreateNewEntry = () => {
+    const nextDraftId = buildDraftProfileId();
+    setNewProfileId("");
+    setDraftProfileId(nextDraftId);
+    setIsDraftProfileActive(true);
+    setSelectedProfileId(nextDraftId);
+    setResumeText("");
+    setApplicationContext({ ...EMPTY_APPLICATION_CONTEXT });
+    setLoadedProfileSnapshot({
+      profile_id: nextDraftId,
+      revision: 0,
+      updated_at: null,
+      raw_resume_text: "",
+      ...EMPTY_APPLICATION_CONTEXT
+    });
+    setCvEntryError("");
+    clearCreatePreviewState();
+  };
+
   const upsertCvProfileInList = (profile) => {
     setCvProfiles((prev) => {
       const index = prev.findIndex((item) => item.profile_id === profile.profile_id);
@@ -723,6 +763,8 @@ export default function App() {
     try {
       const canonical = await getCvProfile(profileId);
       const nextTemplateId = canonical.template_id || "awesomecv";
+      setIsDraftProfileActive(false);
+      setDraftProfileId("");
       setSelectedProfileId(canonical.profile_id || profileId);
       setCvTemplateId(nextTemplateId);
       setResumeText(canonical.audit?.raw_resume_text || "");
@@ -758,6 +800,16 @@ export default function App() {
   const handleProfileRowSelect = async (profile) => {
     if (!profile?.profile_id) return;
     const nextProfileId = profile.profile_id;
+
+    if (profile.__isDraftEntry) {
+      setIsDraftProfileActive(true);
+      setDraftProfileId(nextProfileId);
+      setSelectedProfileId(nextProfileId);
+      setCvEntryError("");
+      clearCreatePreviewState();
+      return;
+    }
+
     if (nextProfileId === selectedProfileId) {
       await loadProfileIntoEditor(nextProfileId);
       return;
@@ -917,8 +969,8 @@ export default function App() {
   };
 
   const handleRemapProfileCvText = async ({ targetProfileId, allowOverwrite } = {}) => {
-    if (!selectedProfileId) {
-      setCvEntryError("Select a profile before remapping from CV text.");
+    if (!selectedProfileId && !isDraftProfileActive) {
+      setCvEntryError("Select a profile or create a new entry before tailoring.");
       return;
     }
     if (!selectedModel) {
@@ -933,10 +985,20 @@ export default function App() {
     setCvEntryError("");
     setIsRemappingProfileCvText(true);
     try {
-      const existing = await getCvProfile(selectedProfileId);
-      const nextProfileId = (targetProfileId || buildNextVersionedProfileId(selectedProfileId)).trim();
-      if (!nextProfileId) {
-        throw new Error("Profile name is required.");
+      const hasPersistedSelectedProfile = cvProfiles.some((profile) => profile.profile_id === selectedProfileId);
+      let existing = null;
+      if (hasPersistedSelectedProfile) {
+        existing = await getCvProfile(selectedProfileId);
+      }
+
+      const requestedProfileId = String(targetProfileId || "").trim();
+      const fallbackProfileId = hasPersistedSelectedProfile
+        ? buildNextVersionedProfileId(selectedProfileId)
+        : newProfileId.trim();
+      const nextProfileId = sanitizeProfileId(requestedProfileId || fallbackProfileId);
+
+      if (!hasPersistedSelectedProfile && !(requestedProfileId || fallbackProfileId)) {
+        throw new Error("Profile name is required for a new entry.");
       }
 
       let existingTarget = null;
@@ -951,10 +1013,10 @@ export default function App() {
         throw new Error("Target profile already exists. Choose a different name or confirm overwrite.");
       }
 
-      const effectiveJobTitle = applicationContext.job_title || existing.job_title || existing.audit?.final_template_payload?.job_title || "";
-      const effectiveCompany = applicationContext.company || existing.company || "";
-      const effectiveJobDescription = applicationContext.job_description || existing.job_description || "";
-      const effectiveJobUrl = applicationContext.job_url || existing.job_url || "";
+      const effectiveJobTitle = applicationContext.job_title || existing?.job_title || existing?.audit?.final_template_payload?.job_title || "";
+      const effectiveCompany = applicationContext.company || existing?.company || "";
+      const effectiveJobDescription = applicationContext.job_description || existing?.job_description || "";
+      const effectiveJobUrl = applicationContext.job_url || existing?.job_url || "";
 
       const parsed = await parseCvCanonical({
         resume_text: resumeText,
@@ -967,22 +1029,22 @@ export default function App() {
         job_url: effectiveJobUrl || undefined
       });
       const payload = {
-        schema_version: parsed.schema_version || existing.schema_version || "v1",
+        schema_version: parsed.schema_version || existing?.schema_version || "v1",
         profile_id: nextProfileId,
         revision: existingTarget?.revision ?? 0,
-        template_id: existing.template_id || cvTemplateId,
+        template_id: existing?.template_id || cvTemplateId,
         company: effectiveCompany || null,
-        application_status: applicationContext.application_status || existing.application_status || null,
-        application_date: applicationContext.application_date || existing.application_date || null,
+        application_status: applicationContext.application_status || existing?.application_status || null,
+        application_date: applicationContext.application_date || existing?.application_date || null,
         job_title: effectiveJobTitle || null,
         job_description: effectiveJobDescription || null,
         job_url: effectiveJobUrl || null,
         data: parsed.data,
-        section_order: existing.section_order,
-        sidebar_section_order: existing.sidebar_section_order,
-        main_section_order: existing.main_section_order,
+        section_order: existing?.section_order || parsed.section_order || [],
+        sidebar_section_order: existing?.sidebar_section_order || parsed.sidebar_section_order || [],
+        main_section_order: existing?.main_section_order || parsed.main_section_order || [],
         audit: {
-          ...(existing.audit || {}),
+          ...(existing?.audit || {}),
           raw_resume_text: resumeText,
           parsed_canonical: parsed.data,
           edited_canonical: parsed.data
@@ -991,6 +1053,9 @@ export default function App() {
       const saved = await saveCvProfile(nextProfileId, payload);
       upsertCvProfileInList(saved);
       setSelectedProfileId(saved.profile_id);
+      setIsDraftProfileActive(false);
+      setDraftProfileId("");
+      setNewProfileId(saved.profile_id);
       setCvTemplateId(saved.template_id || "awesomecv");
       setApplicationContext(contextFromProfile(saved));
       setLoadedProfileSnapshot(contextSnapshotFromProfile(saved));
@@ -1006,43 +1071,6 @@ export default function App() {
       setCvEntryError(err instanceof Error ? err.message : "Failed to remap CV text");
     } finally {
       setIsRemappingProfileCvText(false);
-    }
-  };
-
-  const handleCreateCvFromResume = async () => {
-    if (!selectedModel) {
-      setCvEntryError("Select a model to create a CV profile.");
-      return;
-    }
-    if (!resumeText.trim()) {
-      setCvEntryError("CV text is required to create a new profile.");
-      return;
-    }
-    setCvEntryError("");
-    setIsCreatingCv(true);
-    try {
-      const canonical = await parseCvCanonical({
-        resume_text: resumeText,
-        model: selectedModel,
-        lm_timeout: lmTimeout,
-        output_language: cvOutputLanguage
-      });
-      handleStartCvEditor({
-        canonical,
-        templateId: cvTemplateId,
-        initialProfileId: newProfileId.trim() || "default"
-      });
-      setLoadedProfileSnapshot({
-        profile_id: "",
-        revision: 0,
-        updated_at: null,
-        raw_resume_text: resumeText,
-        ...applicationContext
-      });
-    } catch (err) {
-      setCvEntryError(err instanceof Error ? err.message : "Failed to parse CV text");
-    } finally {
-      setIsCreatingCv(false);
     }
   };
 
@@ -1332,7 +1360,7 @@ export default function App() {
                 <p className="eyebrow">CV workspace</p>
                 <h1>Create CV</h1>
                 <p className="subtitle">
-                  Load an existing profile or create one from CV text.
+                  Work from one profile table and start new entries without switching tabs.
                 </p>
               </header>
               <div className="create-layout">
@@ -1345,10 +1373,8 @@ export default function App() {
                     onSelectedProfileIdChange={setSelectedProfileId}
                     onProfileRowSelect={handleProfileRowSelect}
                     onRefreshProfiles={loadProfiles}
-                    onCreateCvFromResume={handleCreateCvFromResume}
                     onUpdateProfileCvText={handleUpdateApplicationProfileData}
                     onRemapProfileCvText={handleRemapProfileCvText}
-                    isCreatingCv={isCreatingCv}
                     isLoadingProfile={isLoadingProfile}
                     isUpdatingProfileCvText={isUpdatingProfileCvText}
                     isRemappingProfileCvText={isRemappingProfileCvText}
@@ -1364,22 +1390,27 @@ export default function App() {
                     onResumeTextChange={setResumeText}
                     newProfileId={newProfileId}
                     onNewProfileIdChange={setNewProfileId}
+                    onCreateNewEntry={handleCreateNewEntry}
+                    draftProfileId={draftProfileId}
+                    isDraftProfileActive={isDraftProfileActive}
                   />
                 </section>
-                {cvReview ? (
-                  <div className="create-review-layout">
-                    <div className="create-review-pane create-review-pane-preview">
-                      <PdfPreviewCard
-                        pdfUrl={pdfPreviewUrl}
-                        isGenerating={isPdfGenerating}
-                        isDownloading={isPdfDownloading}
-                        templateId={cvReview.templateId}
-                        onTemplateIdChange={handleTemplateIdChange}
-                        onUpdate={handleUpdatePdfPreview}
-                        onDownload={handleDownloadPdf}
-                      />
-                    </div>
-                    <div className="create-review-pane create-review-pane-editor">
+                <div className="create-review-layout">
+                  <div className="create-review-pane create-review-pane-preview">
+                    <PdfPreviewCard
+                      pdfUrl={pdfPreviewUrl}
+                      isGenerating={isPdfGenerating}
+                      isDownloading={isPdfDownloading}
+                      templateId={cvReview?.templateId || cvTemplateId}
+                      onTemplateIdChange={handleTemplateIdChange}
+                      onUpdate={handleUpdatePdfPreview}
+                      onDownload={handleDownloadPdf}
+                      disabled={!cvReview}
+                      disabledReason="Tailor the CV first to enable preview."
+                    />
+                  </div>
+                  <div className="create-review-pane create-review-pane-editor">
+                    {cvReview ? (
                       <CvReview
                         canonical={cvReview.canonical}
                         job={cvReview.job}
@@ -1394,13 +1425,13 @@ export default function App() {
                         onDraftStateChange={handleCvDraftStateChange}
                         onPreviewPayloadChange={setCvPreviewPayload}
                       />
-                    </div>
+                    ) : (
+                      <div className="panel-card panel-empty panel-disabled">
+                        <p className="helper">Tailor the CV first to unlock CV preview and editing.</p>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="panel-card panel-empty">
-                    <p className="helper">Load a profile or create one to start editing.</p>
-                  </div>
-                )}
+                </div>
               </div>
             </>
           )}

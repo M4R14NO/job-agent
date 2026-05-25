@@ -118,10 +118,12 @@ export function PdfPreviewCard({
   templateId,
   onTemplateIdChange,
   onUpdate,
-  onDownload
+  onDownload,
+  disabled = false,
+  disabledReason = ""
 }) {
   return (
-    <div className="panel-card pdf-preview-card">
+    <div className={`panel-card pdf-preview-card${disabled ? " is-disabled" : ""}`}>
       <div className="panel-header">
         <div>
           <p className="eyebrow">PDF preview</p>
@@ -136,6 +138,7 @@ export function PdfPreviewCard({
                 value={templateId}
                 onChange={(event) => onTemplateIdChange(event.target.value)}
                 aria-label="Template"
+                disabled={disabled}
               >
                 <option value="awesomecv">AwesomeCV</option>
                 <option value="hipstercv">HipsterCV</option>
@@ -146,7 +149,7 @@ export function PdfPreviewCard({
             type="button"
             className="secondary btn-sm"
             onClick={onUpdate}
-            disabled={isGenerating}
+            disabled={disabled || isGenerating}
           >
             <RefreshCw size={14} />
             {isGenerating ? "Rendering…" : "Update preview"}
@@ -155,8 +158,8 @@ export function PdfPreviewCard({
             type="button"
             className="primary btn-sm"
             onClick={onDownload}
-            disabled={isDownloading || !pdfUrl}
-            title={!pdfUrl ? "Render a preview first" : "Download the current PDF"}
+            disabled={disabled || isDownloading || !pdfUrl}
+            title={disabled ? disabledReason : (!pdfUrl ? "Render a preview first" : "Download the current PDF")}
           >
             <Download size={14} />
             {isDownloading ? "Downloading…" : "Download PDF"}
@@ -164,7 +167,11 @@ export function PdfPreviewCard({
         </div>
       </div>
       <div className="pdf-preview-container">
-        {pdfUrl ? (
+        {disabled ? (
+          <div className="pdf-preview-placeholder">
+            <p className="helper">{disabledReason || "Preview is disabled until CV form data exists."}</p>
+          </div>
+        ) : pdfUrl ? (
           <iframe
             src={pdfUrl}
             title="CV PDF preview"
