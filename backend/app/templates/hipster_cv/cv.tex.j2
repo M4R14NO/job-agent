@@ -7,7 +7,7 @@
 \documentclass[pastel]{hipstercv}
 \usepackage[utf8]{inputenc}
 \usepackage[default]{raleway}
-\usepackage[margin=1cm, a4paper]{geometry}
+\usepackage[left=1cm,right=1cm,bottom=1cm,top=0cm,a4paper]{geometry}
 \usepackage[english]{babel}
 \usepackage{enumitem}
 
@@ -35,15 +35,16 @@
 
 ((* set photo_path = (photo | default("", true) | trim) *))
 
-\vspace*{-1.6cm}
 \noindent\hspace*{-1cm}%
 \colorbox{backBlue}{%
 \parbox[c][5.4cm][c]{\dimexpr\paperwidth-2\fboxsep\relax}{%
 \hspace*{1cm}%
-\hspace*{0.43\textwidth}%
+\hspace*{0.18\textwidth}%
+\parbox{0.74\textwidth}{%
 \raggedleft
-{\color{white}\bfseries\LARGE ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}\\[0.3em]
-((* if position *)){\color{white}\normalsize ((( position | latex_escape )))}((* endif *))
+{\color{white}\bfseries\Huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}\\[0.45em]
+((* if position *)){\color{white}\Large ((( position | latex_escape )))}((* endif *))
+}
 }%
 }
 \vspace{0.35em}
