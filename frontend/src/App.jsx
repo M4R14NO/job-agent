@@ -14,6 +14,7 @@ const LLM_PROFILE_KEY = "job-agent:llm-profiles";
 const SIDEBAR_WIDTH_KEY = "job-agent:sidebar-width";
 const SIDEBAR_MIN_WIDTH = 360;
 const SIDEBAR_MAX_WIDTH = 720;
+const PDF_PREVIEW_DEBOUNCE_MS = 5000;
 
 export default function App() {
   const [resumeText, setResumeText] = useState("");
@@ -66,6 +67,7 @@ export default function App() {
   const [isPdfDownloading, setIsPdfDownloading] = useState(false);
 
   const searchTimerRef = useRef(null);
+  const pdfPreviewTimerRef = useRef(null);
   const isResizingSidebarRef = useRef(false);
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(SIDEBAR_MIN_WIDTH);
@@ -196,8 +198,20 @@ export default function App() {
   }, [activeView]);
 
   useEffect(() => {
-    if (!cvPreviewPayload || !cvReview) return;
-    handleUpdatePdfPreview();
+    if (!cvPreviewPayload || !cvReview) return undefined;
+    if (pdfPreviewTimerRef.current) {
+      clearTimeout(pdfPreviewTimerRef.current);
+    }
+    pdfPreviewTimerRef.current = setTimeout(() => {
+      handleUpdatePdfPreview();
+    }, PDF_PREVIEW_DEBOUNCE_MS);
+
+    return () => {
+      if (pdfPreviewTimerRef.current) {
+        clearTimeout(pdfPreviewTimerRef.current);
+        pdfPreviewTimerRef.current = null;
+      }
+    };
   }, [cvPreviewPayload, cvReview?.templateId]);
 
   useEffect(() => {

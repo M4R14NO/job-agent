@@ -1094,10 +1094,15 @@ body.modal-open .pdf-preview-container {
 .overwrite-modal-card {
   width: min(980px, 94vw);
   gap: 18px;
+  min-width: 620px;
+  min-height: 420px;
+  resize: both;
+  overflow: auto;
 }
 
 .overwrite-modal-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   justify-content: space-between;
   align-items: flex-start;
   gap: 14px;
@@ -1109,9 +1114,9 @@ body.modal-open .pdf-preview-container {
   gap: 6px;
   padding: 6px 10px;
   border-radius: 999px;
-  background: #fff3f1;
-  color: #b42318;
-  border: 1px solid #fecdca;
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
   font-size: 12px;
   font-weight: 700;
 }
@@ -1141,14 +1146,61 @@ body.modal-open .pdf-preview-container {
   overflow: auto;
 }
 
-.overwrite-diff-panel h3,
-.overwrite-diff-group h4 {
+.overwrite-diff-panel h3 {
   margin: 0;
+  font-size: 20px;
 }
 
-.overwrite-diff-group {
-  display: grid;
+.overwrite-group,
+.overwrite-subgroup {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.overwrite-group > summary,
+.overwrite-subgroup > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 8px;
+  font-weight: 700;
+  background: #f8fafc;
+}
+
+.overwrite-group > summary::-webkit-details-marker,
+.overwrite-subgroup > summary::-webkit-details-marker {
+  display: none;
+}
+
+.overwrite-group-title {
+  font-size: 16px;
+  color: #111827;
+}
+
+.overwrite-subgroup-title {
+  font-size: 15px;
+  color: #111827;
+}
+
+.overwrite-group-meta {
+  font-size: 12px;
+  color: #4b5563;
+  font-weight: 600;
+}
+
+.overwrite-group > .overwrite-diff-list,
+.overwrite-group > .overwrite-diff-group-list,
+.overwrite-subgroup > .overwrite-diff-list {
+  padding: 10px;
+}
+
+.overwrite-diff-group-list {
+  display: grid;
+  gap: 10px;
 }
 
 .overwrite-diff-list {
@@ -1170,16 +1222,97 @@ body.modal-open .pdf-preview-container {
   font-size: 13px;
 }
 
-.overwrite-change-lines {
-  margin: 4px 0 0;
-  padding-left: 18px;
+.overwrite-compare-grid {
   display: grid;
-  gap: 2px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.overwrite-change-lines li {
-  font-size: 12px;
-  color: #334155;
+.overwrite-compare-grid-section {
+  align-items: stretch;
+}
+
+.overwrite-compare-col {
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+  background: #ffffff;
+  align-content: start;
+}
+
+.overwrite-col-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.overwrite-compare-col-before {
+  background: #fff7f7;
+  border-color: #fecaca;
+}
+
+.overwrite-compare-col-after {
+  background: #f5fff8;
+  border-color: #bbf7d0;
+}
+
+.overwrite-compare-col.is-added {
+  background: #ecfdf3;
+  border-color: #86efac;
+}
+
+.overwrite-compare-col.is-removed {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+.overwrite-compare-col.is-removed p {
+  text-decoration: line-through;
+}
+
+.overwrite-compare-col.is-muted {
+  background: #f8fafc;
+  border-color: #dbe2ea;
+}
+
+.overwrite-section-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.overwrite-section-row {
+  border-radius: 8px;
+  border: 1px solid #dbe2ea;
+  background: #ffffff;
+  padding: 7px 8px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.overwrite-section-row.is-added {
+  background: #ecfdf3;
+  border-color: #86efac;
+  color: #14532d;
+}
+
+.overwrite-section-row.is-removed {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #7f1d1d;
+  text-decoration: line-through;
+}
+
+.overwrite-section-row.is-updated {
+  background: #fff7ed;
+  border-color: #fdba74;
+  color: #7c2d12;
 }
 
 .overwrite-diff-item-head {
@@ -1225,6 +1358,9 @@ body.modal-open .pdf-preview-container {
 .overwrite-rename-panel {
   display: grid;
   gap: 8px;
+  border: 1px dashed #d1d5db;
+  border-radius: 12px;
+  padding: 12px;
 }
 
 .overwrite-rename-actions {
@@ -1241,13 +1377,65 @@ body.modal-open .pdf-preview-container {
   gap: 12px;
 }
 
+.overwrite-modal-actions-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.overwrite-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.overwrite-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.overwrite-btn-neutral {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.overwrite-btn-secondary {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.overwrite-btn-success {
+  background: #15803d;
+  color: #ffffff;
+}
+
+.overwrite-btn-danger {
+  background: #dc2626;
+  color: #ffffff;
+}
+
 @media (max-width: 720px) {
+  .overwrite-modal-card {
+    min-width: 0;
+    width: 95vw;
+    resize: none;
+  }
+
   .overwrite-modal-header {
     grid-template-columns: 1fr;
-    display: grid;
   }
 
   .overwrite-rename-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .overwrite-compare-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1256,7 +1444,13 @@ body.modal-open .pdf-preview-container {
     align-items: stretch;
   }
 
-  .overwrite-modal-actions > button {
+  .overwrite-modal-actions-right {
+    display: grid;
+    gap: 8px;
+  }
+
+  .overwrite-modal-actions button,
+  .overwrite-modal-actions-right button {
     width: 100%;
     justify-content: center;
   }

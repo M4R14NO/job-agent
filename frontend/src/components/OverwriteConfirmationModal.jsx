@@ -1,5 +1,5 @@
 import { AlertTriangle, Save, X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 function renderChangeBadge(type) {
   if (type === "added") return <span className="overwrite-badge overwrite-badge-added">Added</span>;
@@ -23,9 +23,30 @@ export default function OverwriteConfirmationModal({
   isBusy,
   error
 }) {
+  const [showRenameFlow, setShowRenameFlow] = useState(false);
+
+  const templateLayoutKeys = useMemo(
+    () => new Set(["template_id", "section_order", "sidebar_section_order", "main_section_order", "enabled_sections"]),
+    []
+  );
+
+  const basicProfileChanges = useMemo(
+    () => topLevelChanges.filter((change) => !templateLayoutKeys.has(change.key)),
+    [topLevelChanges, templateLayoutKeys]
+  );
+
+  const templateLayoutChanges = useMemo(
+    () => topLevelChanges.filter((change) => templateLayoutKeys.has(change.key)),
+    [topLevelChanges, templateLayoutKeys]
+  );
+
+  const totalChangeCount = totals.added + totals.removed + totals.updated;
+  const templateGroupOpenDefault = templateLayoutChanges.length > 0 && totalChangeCount <= 4;
+
   useEffect(() => {
     if (!isOpen) return undefined;
     document.body.classList.add("modal-open");
+    setShowRenameFlow(false);
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
         onCancel?.();
@@ -54,7 +75,7 @@ export default function OverwriteConfirmationModal({
             </p>
           </div>
           <span className="overwrite-warning-pill">
-            <AlertTriangle size={14} /> Destructive update
+            <AlertTriangle size={14} /> See what has changed
           </span>
         </div>
 
@@ -79,110 +100,172 @@ export default function OverwriteConfirmationModal({
             <p className="helper">No meaningful changes detected.</p>
           ) : (
             <>
-              {topLevelChanges.length > 0 && (
-                <div className="overwrite-diff-group">
-                  <h4>Profile fields</h4>
+              {basicProfileChanges.length > 0 && (
+                <details className="overwrite-group" open>
+                  <summary>
+                    <span className="overwrite-group-title">Basic profile information</span>
+                    <span className="overwrite-group-meta">{basicProfileChanges.length} change{basicProfileChanges.length === 1 ? "" : "s"}</span>
+                  </summary>
                   <div className="overwrite-diff-list">
-                    {topLevelChanges.map((change) => (
-                      <div className="overwrite-diff-item" key={`top-${change.key}`}>
+                    {basicProfileChanges.map((change) => (
+                      <div className="overwrite-diff-item" key={`top-basic-${change.key}`}>
                         <div className="overwrite-diff-item-head">
                           {renderChangeBadge("updated")}
                           <strong>{change.label}</strong>
                         </div>
-                        <p><span className="overwrite-old">Before:</span> {change.oldValue}</p>
-                        <p><span className="overwrite-new">After:</span> {change.newValue}</p>
+                        <div className="overwrite-compare-grid">
+                          <div className="overwrite-compare-col overwrite-compare-col-before">
+                            <span className="overwrite-col-label">Before</span>
+                            <p>{change.oldValue}</p>
+                          </div>
+                          <div className="overwrite-compare-col overwrite-compare-col-after">
+                            <span className="overwrite-col-label">After</span>
+                            <p>{change.newValue}</p>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                </details>
               )}
 
-              {sectionChanges.map((section) => (
-                <div className="overwrite-diff-group" key={`section-${section.key}`}>
-                  <h4>{section.label}</h4>
+              {templateLayoutChanges.length > 0 && (
+                <details className="overwrite-group" open={templateGroupOpenDefault}>
+                  <summary>
+                    <span className="overwrite-group-title">Template and layout changes</span>
+                    <span className="overwrite-group-meta">{templateLayoutChanges.length} change{templateLayoutChanges.length === 1 ? "" : "s"}</span>
+                  </summary>
                   <div className="overwrite-diff-list">
-                    {section.updated.map((change, index) => (
-                      <div className="overwrite-diff-item" key={`${section.key}-updated-${index}`}>
+                    {templateLayoutChanges.map((change) => (
+                      <div className="overwrite-diff-item" key={`top-template-${change.key}`}>
                         <div className="overwrite-diff-item-head">
                           {renderChangeBadge("updated")}
-                          <strong>{change.title}</strong>
+                          <strong>{change.label}</strong>
                         </div>
-                        <p><span className="overwrite-old">Before:</span> {change.oldValue}</p>
-                        <p><span className="overwrite-new">After:</span> {change.newValue}</p>
-                        {Array.isArray(change.changes) && change.changes.length > 0 && (
-                          <ul className="overwrite-change-lines">
-                            {change.changes.map((row, rowIndex) => (
-                              <li key={`${section.key}-updated-${index}-row-${rowIndex}`}>
-                                <strong>{row.field}:</strong> {row.oldValue} {"->"} {row.newValue}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    ))}
-                    {section.added.map((entry, index) => (
-                      <div className="overwrite-diff-item" key={`${section.key}-added-${index}`}>
-                        <div className="overwrite-diff-item-head">
-                          {renderChangeBadge("added")}
-                          <strong>New entry</strong>
+                        <div className="overwrite-compare-grid">
+                          <div className="overwrite-compare-col overwrite-compare-col-before">
+                            <span className="overwrite-col-label">Before</span>
+                            <p>{change.oldValue}</p>
+                          </div>
+                          <div className="overwrite-compare-col overwrite-compare-col-after">
+                            <span className="overwrite-col-label">After</span>
+                            <p>{change.newValue}</p>
+                          </div>
                         </div>
-                        <p><span className="overwrite-new">After:</span> {entry.value}</p>
-                        {Array.isArray(entry.details) && entry.details.length > 0 && (
-                          <ul className="overwrite-change-lines">
-                            {entry.details.map((row, rowIndex) => (
-                              <li key={`${section.key}-added-${index}-row-${rowIndex}`}>{row}</li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    ))}
-                    {section.removed.map((entry, index) => (
-                      <div className="overwrite-diff-item" key={`${section.key}-removed-${index}`}>
-                        <div className="overwrite-diff-item-head">
-                          {renderChangeBadge("removed")}
-                          <strong>Removed entry</strong>
-                        </div>
-                        <p><span className="overwrite-old">Before:</span> {entry.value}</p>
-                        {Array.isArray(entry.details) && entry.details.length > 0 && (
-                          <ul className="overwrite-change-lines">
-                            {entry.details.map((row, rowIndex) => (
-                              <li key={`${section.key}-removed-${index}-row-${rowIndex}`}>{row}</li>
-                            ))}
-                          </ul>
-                        )}
                       </div>
                     ))}
                   </div>
-                </div>
-              ))}
+                </details>
+              )}
+
+              {sectionChanges.length > 0 && (
+                <details className="overwrite-group" open>
+                  <summary>
+                    <span className="overwrite-group-title">Section content changes</span>
+                    <span className="overwrite-group-meta">{sectionChanges.length} section{sectionChanges.length === 1 ? "" : "s"}</span>
+                  </summary>
+                  <div className="overwrite-diff-group-list">
+                    {sectionChanges.map((section) => {
+                      const sectionCount = section.updated.length + section.added.length + section.removed.length;
+                      const sectionDefaultOpen = sectionCount <= 3;
+                      return (
+                        <details className="overwrite-subgroup" key={`section-${section.key}`} open={sectionDefaultOpen}>
+                          <summary>
+                            <span className="overwrite-subgroup-title">{section.label}</span>
+                            <span className="overwrite-group-meta">{sectionCount} change{sectionCount === 1 ? "" : "s"}</span>
+                          </summary>
+                          <div className="overwrite-diff-list">
+                            <div className="overwrite-diff-item">
+                              <div className="overwrite-diff-item-head">
+                                <strong>Before vs After</strong>
+                              </div>
+                              <div className="overwrite-compare-grid overwrite-compare-grid-section">
+                                <div className="overwrite-compare-col overwrite-compare-col-before">
+                                  <span className="overwrite-col-label">Before</span>
+                                  <ul className="overwrite-section-list">
+                                    {(section.beforeRows || []).map((row, rowIndex) => (
+                                      <li
+                                        key={`${section.key}-before-${row.idKey}-${rowIndex}`}
+                                        className={`overwrite-section-row is-${row.status || "normal"}`}
+                                      >
+                                        {row.text}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                <div className="overwrite-compare-col overwrite-compare-col-after">
+                                  <span className="overwrite-col-label">After</span>
+                                  <ul className="overwrite-section-list">
+                                    {(section.afterRows || []).map((row, rowIndex) => (
+                                      <li
+                                        key={`${section.key}-after-${row.idKey}-${rowIndex}`}
+                                        className={`overwrite-section-row is-${row.status || "normal"}`}
+                                      >
+                                        {row.text}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </details>
+                      );
+                    })}
+                  </div>
+                </details>
+              )}
             </>
           )}
         </div>
 
-        <div className="overwrite-rename-panel">
-          <label className="label" htmlFor="suggestedProfileId">Use a new profile name instead</label>
-          <div className="overwrite-rename-actions">
-            <input
-              id="suggestedProfileId"
-              value={suggestedProfileId}
-              onChange={(event) => onSuggestedProfileIdChange(event.target.value)}
-              placeholder="new-profile-name"
-            />
-            <button type="button" className="secondary" onClick={onSaveAsNew} disabled={isBusy || !suggestedProfileId.trim()}>
-              <Save size={14} /> Save as new profile
-            </button>
+        {showRenameFlow && (
+          <div className="overwrite-rename-panel">
+            <label className="label" htmlFor="suggestedProfileId">Confirm new profile name</label>
+            <div className="overwrite-rename-actions">
+              <input
+                id="suggestedProfileId"
+                value={suggestedProfileId}
+                onChange={(event) => onSuggestedProfileIdChange(event.target.value)}
+                placeholder="new-profile-name"
+              />
+              <button type="button" className="overwrite-btn overwrite-btn-success" onClick={onSaveAsNew} disabled={isBusy || !suggestedProfileId.trim()}>
+                <Save size={14} /> Confirm and save
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {error && <p className="error">{error}</p>}
 
         <div className="overwrite-modal-actions">
-          <button type="button" className="ghost" onClick={onCancel} disabled={isBusy}>
+          <button type="button" className="overwrite-btn overwrite-btn-neutral" onClick={onCancel} disabled={isBusy}>
             <X size={14} /> Cancel
           </button>
-          <button type="button" className="btn-danger" onClick={onConfirmOverwrite} disabled={isBusy}>
-            <AlertTriangle size={14} /> {isBusy ? "Saving..." : "Overwrite existing profile"}
-          </button>
+          <div className="overwrite-modal-actions-right">
+            {!showRenameFlow ? (
+              <button
+                type="button"
+                className="overwrite-btn overwrite-btn-secondary"
+                onClick={() => setShowRenameFlow(true)}
+                disabled={isBusy}
+              >
+                <Save size={14} /> Save as new profile
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="overwrite-btn overwrite-btn-neutral"
+                onClick={() => setShowRenameFlow(false)}
+                disabled={isBusy}
+              >
+                <X size={14} /> Back
+              </button>
+            )}
+            <button type="button" className="overwrite-btn overwrite-btn-danger" onClick={onConfirmOverwrite} disabled={isBusy}>
+              <AlertTriangle size={14} /> {isBusy ? "Saving..." : "Overwrite existing profile"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

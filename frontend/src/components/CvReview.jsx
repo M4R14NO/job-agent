@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -430,6 +430,8 @@ const SECTION_DIFF_CONFIG = [
   }
 ];
 
+const PREVIEW_DEBOUNCE_MS = 10000;
+
 const compactText = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
 
 const truncateValue = (value, max = 140) => {
@@ -481,20 +483,6 @@ const normalizedComparable = (value) => {
   return normalized;
 };
 
-const itemDetails = (item) => {
-  const cleaned = stripInternalIds(item);
-  if (!cleaned || typeof cleaned !== "object") return [];
-  return Object.entries(cleaned)
-    .filter(([, value]) => {
-      if (value == null) return false;
-      if (Array.isArray(value)) return value.length > 0;
-      if (typeof value === "string") return compactText(value).length > 0;
-      if (typeof value === "object") return Object.keys(value).length > 0;
-      return true;
-    })
-    .map(([key, value]) => `${fieldLabel(key)}: ${truncateValue(profileValuePreview(value), 220)}`);
-};
-
 const changedItemFields = (oldItem, newItem) => {
   const before = normalizedComparable(stripInternalIds(oldItem));
   const after = normalizedComparable(stripInternalIds(newItem));
@@ -526,8 +514,22 @@ const itemIdentifier = (item, index, summarize) => {
 const buildSectionDiff = ({ key, label, summarize, oldItems = [], newItems = [] }) => {
   const existing = Array.isArray(oldItems) ? oldItems : [];
   const pending = Array.isArray(newItems) ? newItems : [];
+
+  const beforeRows = existing.map((item, index) => ({
+    idKey: itemIdentifier(item, index, summarize),
+    text: truncateValue(summarize(item)),
+    status: "normal"
+  }));
+
+  const afterRows = pending.map((item, index) => ({
+    idKey: itemIdentifier(item, index, summarize),
+    text: truncateValue(summarize(item)),
+    status: "normal"
+  }));
+
   const oldPool = existing.map((item, index) => ({
     item,
+    index,
     used: false,
     idKey: itemIdentifier(item, index, summarize),
     semanticKey: JSON.stringify(normalizedComparable(stripInternalIds(item))),
@@ -552,24 +554,32 @@ const buildSectionDiff = ({ key, label, summarize, oldItems = [], newItems = [] 
     }
 
     if (!matched) {
-      added.push({ value: summary, details: itemDetails(item) });
+      added.push(summary);
+      afterRows[index].status = "added";
       return;
     }
 
     matched.used = true;
     if (matched.semanticKey !== semanticKey) {
+      const changes = changedItemFields(matched.item, item);
+      if (!changes.length) {
+        return;
+      }
       updated.push({
         title: summary,
         oldValue: matched.summary,
         newValue: summary,
-        changes: changedItemFields(matched.item, item)
+        changes
       });
+      beforeRows[matched.index].status = "updated";
+      afterRows[index].status = "updated";
     }
   });
 
   oldPool.forEach((candidate) => {
     if (!candidate.used) {
-      removed.push({ value: candidate.summary, details: itemDetails(candidate.item) });
+      removed.push(candidate.summary);
+      beforeRows[candidate.index].status = "removed";
     }
   });
 
@@ -577,7 +587,7 @@ const buildSectionDiff = ({ key, label, summarize, oldItems = [], newItems = [] 
     return null;
   }
 
-  return { key, label, added, removed, updated };
+  return { key, label, added, removed, updated, beforeRows, afterRows };
 };
 
 const nextProfileSuggestion = (targetProfileId) => {
@@ -634,6 +644,19 @@ const buildOverwriteDiff = ({ existingProfile, pendingPayload, targetProfileId }
       label: "Section order",
       oldValue: profileValuePreview(existingSectionOrder),
       newValue: profileValuePreview(pendingSectionOrder)
+    });
+  }
+
+  const existingSectionSet = new Set(existingSectionOrder);
+  const pendingSectionSet = new Set(pendingSectionOrder);
+  const removedSections = existingSectionOrder.filter((section) => !pendingSectionSet.has(section));
+  const addedSections = pendingSectionOrder.filter((section) => !existingSectionSet.has(section));
+  if (removedSections.length || addedSections.length) {
+    topLevelChanges.push({
+      key: "enabled_sections",
+      label: "Enabled sections",
+      oldValue: removedSections.length ? `Includes: ${removedSections.join(", ")}` : "No removed sections",
+      newValue: addedSections.length ? `Added: ${addedSections.join(", ")}` : "No added sections"
     });
   }
 
@@ -754,6 +777,7 @@ export default function CvReview({
     pendingTargetRevision: 0,
     error: ""
   });
+  const previewDebounceRef = useRef(null);
   const schemaVersion = canonical?.schema_version || "v1";
   const currentSectionOrder = isHipsterTemplate
     ? [...hipsterSectionOrders.sidebar, ...hipsterSectionOrders.main]
@@ -825,10 +849,24 @@ export default function CvReview({
   }, [previewPayload]);
 
   useEffect(() => {
-    if (isPreviewing) return;
+    if (isPreviewing) return undefined;
     const nextHash = buildPreviewHash();
-    if (previewPayload && previewHash === nextHash) return;
-    handlePreview();
+    if (previewPayload && previewHash === nextHash) return undefined;
+
+    if (previewDebounceRef.current) {
+      clearTimeout(previewDebounceRef.current);
+    }
+
+    previewDebounceRef.current = setTimeout(() => {
+      handlePreview();
+    }, PREVIEW_DEBOUNCE_MS);
+
+    return () => {
+      if (previewDebounceRef.current) {
+        clearTimeout(previewDebounceRef.current);
+        previewDebounceRef.current = null;
+      }
+    };
   }, [
     isPreviewing,
     previewPayload,
