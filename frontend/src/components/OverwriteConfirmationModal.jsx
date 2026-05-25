@@ -9,7 +9,9 @@ function renderChangeBadge(type) {
 
 export default function OverwriteConfirmationModal({
   isOpen,
+  mode = "overwrite",
   targetProfileId,
+  pendingTargetProfileId,
   existingRevision,
   existingUpdatedAt,
   totals,
@@ -18,6 +20,7 @@ export default function OverwriteConfirmationModal({
   suggestedProfileId,
   onSuggestedProfileIdChange,
   onConfirmOverwrite,
+  onSwitchWithoutSaving,
   onSaveAsNew,
   onCancel,
   isBusy,
@@ -61,34 +64,55 @@ export default function OverwriteConfirmationModal({
 
   if (!isOpen) return null;
 
+  const isSwitchMode = mode === "switch";
+  const primaryButtonLabel = isSwitchMode
+    ? (isBusy ? "Saving..." : "Save changes and switch")
+    : (isBusy ? "Saving..." : "Overwrite existing profile");
+
   return (
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby="overwrite-title">
       <div className="modal-backdrop" onClick={onCancel} />
       <div className="modal-card overwrite-modal-card">
         <div className="overwrite-modal-header">
           <div>
-            <p className="eyebrow">Confirm overwrite</p>
-            <h2 id="overwrite-title">Review detected profile changes</h2>
+            <p className="eyebrow">{isSwitchMode ? "Unsaved changes" : "Confirm overwrite"}</p>
+            <h2 id="overwrite-title">{isSwitchMode ? "Review changes before switching profile" : "Review detected profile changes"}</h2>
             <p className="helper">
-              Overwriting creates a new revision and replaces the stored data for this profile name.
-              Previous values cannot be restored in the current prototype.
+              {isSwitchMode
+                ? "Save the current draft before opening another profile, or switch immediately and discard unsaved edits."
+                : "Overwriting creates a new revision and replaces the stored data for this profile name. Previous values cannot be restored in the current prototype."}
             </p>
             <div className="overwrite-warning-box">
               <span className="overwrite-warning-pill">
                 <AlertTriangle size={14} /> See what has changed
               </span>
               <p>
-                Profile already exists: <strong>{targetProfileId}</strong>
+                {isSwitchMode ? (
+                  <>
+                    Current profile: <strong>{targetProfileId}</strong>
+                    {pendingTargetProfileId ? (
+                      <>
+                        {" -> Switching to: "}<strong>{pendingTargetProfileId}</strong>
+                      </>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    Profile already exists: <strong>{targetProfileId}</strong>
+                  </>
+                )}
               </p>
             </div>
           </div>
         </div>
 
         <div className="overwrite-meta-grid">
-          <div className="overwrite-meta-item">
-            <span className="label">Existing revision</span>
-            <strong>{existingRevision}</strong>
-          </div>
+          {!isSwitchMode ? (
+            <div className="overwrite-meta-item">
+              <span className="label">Existing revision</span>
+              <strong>{existingRevision}</strong>
+            </div>
+          ) : null}
           <div className="overwrite-meta-item">
             <span className="label">Last updated</span>
             <strong>{existingUpdatedAt ? new Date(existingUpdatedAt).toLocaleString() : "Unknown"}</strong>
@@ -236,7 +260,7 @@ export default function OverwriteConfirmationModal({
           )}
         </div>
 
-        {showRenameFlow && (
+        {showRenameFlow && !isSwitchMode && (
           <div className="overwrite-rename-panel">
             <label className="label" htmlFor="suggestedProfileId">Confirm new profile name</label>
             <div className="overwrite-rename-actions">
@@ -260,7 +284,17 @@ export default function OverwriteConfirmationModal({
             <button type="button" className="overwrite-btn overwrite-btn-neutral" onClick={onCancel} disabled={isBusy}>
               <X size={14} /> Cancel
             </button>
-            {!showRenameFlow ? (
+            {isSwitchMode ? (
+              <button
+                type="button"
+                className="overwrite-btn overwrite-btn-secondary"
+                onClick={onSwitchWithoutSaving}
+                disabled={isBusy}
+              >
+                <X size={14} /> Switch profile without saving changes
+              </button>
+            ) : null}
+            {!showRenameFlow && !isSwitchMode ? (
               <button
                 type="button"
                 className="overwrite-btn overwrite-btn-secondary"
@@ -271,7 +305,7 @@ export default function OverwriteConfirmationModal({
               </button>
             ) : null}
             <button type="button" className="overwrite-btn overwrite-btn-danger" onClick={onConfirmOverwrite} disabled={isBusy}>
-              <AlertTriangle size={14} /> {isBusy ? "Saving..." : "Overwrite existing profile"}
+              <AlertTriangle size={14} /> {primaryButtonLabel}
             </button>
           </div>
         </div>

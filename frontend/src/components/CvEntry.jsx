@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { Progress, Spinner } from "@chakra-ui/react";
 
 const SECTION_DESCRIPTORS = [
   { key: "summary", label: "Summary", hasContent: (profile) => Boolean((profile?.data?.summary || "").trim()) },
@@ -82,8 +83,30 @@ const formatDate = (value) => {
 };
 
 const getSectionStats = (profile) => {
-  const visible = SECTION_DESCRIPTORS.filter((descriptor) => descriptor.hasContent(profile)).map((descriptor) => descriptor.label);
-  const hidden = SECTION_DESCRIPTORS.filter((descriptor) => !descriptor.hasContent(profile)).map((descriptor) => descriptor.label);
+  const knownKeys = SECTION_DESCRIPTORS.map((descriptor) => descriptor.key);
+  const templateId = profile?.template_id || "awesomecv";
+  const orderedSections = templateId === "hipstercv"
+    ? [
+      ...(Array.isArray(profile?.sidebar_section_order) ? profile.sidebar_section_order : []),
+      ...(Array.isArray(profile?.main_section_order) ? profile.main_section_order : [])
+    ]
+    : (Array.isArray(profile?.section_order) ? profile.section_order : []);
+
+  const hasExplicitLayout = orderedSections.length > 0;
+  const visibleKeySet = hasExplicitLayout
+    ? new Set(orderedSections.filter((key) => knownKeys.includes(key)))
+    : new Set(
+      SECTION_DESCRIPTORS
+        .filter((descriptor) => descriptor.hasContent(profile))
+        .map((descriptor) => descriptor.key)
+    );
+
+  const visible = SECTION_DESCRIPTORS
+    .filter((descriptor) => visibleKeySet.has(descriptor.key))
+    .map((descriptor) => descriptor.label);
+  const hidden = SECTION_DESCRIPTORS
+    .filter((descriptor) => !visibleKeySet.has(descriptor.key))
+    .map((descriptor) => descriptor.label);
   return {
     visible,
     hidden
@@ -96,11 +119,16 @@ export default function CvEntry({
   profilesError,
   selectedProfileId,
   onSelectedProfileIdChange,
+  onProfileRowSelect,
   onRefreshProfiles,
-  onLoadProfile,
   onCreateCvFromResume,
+  onUpdateProfileCvText,
+  onRemapProfileCvText,
   isCreatingCv,
   isLoadingProfile,
+  isUpdatingProfileCvText,
+  isRemappingProfileCvText,
+  remapProgress,
   cvEntryError,
   cvTemplateId,
   onCvTemplateIdChange,
@@ -119,16 +147,12 @@ export default function CvEntry({
     [cvProfiles, selectedProfileId]
   );
 
-  useEffect(() => {
-    if (!selectedProfile) return;
-    onCvTemplateIdChange(selectedProfile.template_id || "awesomecv");
-    onResumeTextChange(selectedProfile.audit?.raw_resume_text || "");
-  }, [selectedProfile, onCvTemplateIdChange, onResumeTextChange]);
-
   const handleProfileSelect = (profile) => {
+    if (onProfileRowSelect) {
+      onProfileRowSelect(profile);
+      return;
+    }
     onSelectedProfileIdChange(profile.profile_id);
-    onCvTemplateIdChange(profile.template_id || "awesomecv");
-    onResumeTextChange(profile.audit?.raw_resume_text || "");
   };
 
   return (
@@ -190,16 +214,12 @@ export default function CvEntry({
                     const sectionStats = getSectionStats(profile);
                     const isSelected = selectedProfileId === profile.profile_id;
                     return (
-                      <tr key={profile.profile_id} className={isSelected ? "is-selected" : ""}>
-                        <td>
-                          <button
-                            type="button"
-                            className="cv-profile-select"
-                            onClick={() => handleProfileSelect(profile)}
-                          >
-                            {profile.profile_id}
-                          </button>
-                        </td>
+                      <tr
+                        key={profile.profile_id}
+                        className={isSelected ? "is-selected" : ""}
+                        onClick={() => handleProfileSelect(profile)}
+                      >
+                        <td>{profile.profile_id}</td>
                         <td>{profile.template_id || "awesomecv"}</td>
                         <td>r{profile.revision ?? 0}</td>
                         <td>{formatDate(profile.updated_at || profile.created_at)}</td>
@@ -235,13 +255,46 @@ export default function CvEntry({
             <button
               type="button"
               className="secondary"
-              onClick={onLoadProfile}
-              disabled={isLoadingProfile || profilesLoading || !selectedProfileId}
+              onClick={onUpdateProfileCvText}
+              disabled={isUpdatingProfileCvText || isLoadingProfile || !selectedProfile}
             >
-              {isLoadingProfile ? "Loading profile..." : "Load selected profile"}
+              {isUpdatingProfileCvText ? "Updating profile..." : "Update profile with CV text"}
             </button>
-            <p className="helper">Template is automatically taken from the selected profile.</p>
+            <button
+              type="button"
+              className="secondary"
+              onClick={onRemapProfileCvText}
+              disabled={isRemappingProfileCvText || isLoadingProfile || !selectedProfile || !resumeText.trim()}
+            >
+              {isRemappingProfileCvText ? "Remapping with LLM..." : "Remap and save as new profile version"}
+            </button>
+            <p className="helper">Remapping performs an LLM call and creates a new versioned profile name.</p>
           </div>
+
+          {isRemappingProfileCvText && remapProgress ? (
+            <div className="refinement-progress">
+              <div className="results-loading">
+                <Spinner size="sm" color="blue.500" />
+                <span>Updating canonical mapping from CV text. This can take a minute.</span>
+              </div>
+              <div className="progress-header">
+                <span>LLM remap progress</span>
+                <span>
+                  Tokens {remapProgress.currentTokens} / {remapProgress.totalTokens} (est.)
+                </span>
+              </div>
+              <Progress.Root value={remapProgress.percent} size="sm" colorPalette="blue">
+                <Progress.Track>
+                  <Progress.Range />
+                </Progress.Track>
+              </Progress.Root>
+              <p className="helper">
+                {remapProgress.elapsedSeconds}s / {remapProgress.timeoutSeconds}s elapsed
+              </p>
+            </div>
+          ) : null}
+
+          <p className="helper">Selecting a profile row loads it directly and keeps template in sync.</p>
         </div>
       ) : (
         <div className="cv-entry-panel" role="tabpanel">

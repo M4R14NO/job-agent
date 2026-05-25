@@ -395,6 +395,14 @@ body {
   background: #fff7ed;
 }
 
+.cv-profile-table tbody tr {
+  cursor: pointer;
+}
+
+.cv-profile-table tbody tr:hover {
+  background: #f8fafc;
+}
+
 .cv-profile-select {
   border: none;
   background: transparent;

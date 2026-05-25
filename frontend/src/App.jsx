@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { searchJobs } from "./api/search";
-import { fetchModels, getCvProfile, listCvProfiles, parseCvCanonical, renderCvFromTemplate } from "./api/llm";
+import { fetchModels, getCvProfile, listCvProfiles, parseCvCanonical, renderCvFromTemplate, saveCvProfile } from "./api/llm";
 import { useJobDescription } from "./hooks/useJobDescription";
 import SearchFilters from "./components/SearchFilters";
 import ResultsList from "./components/ResultsList";
 import { JobActionsCard, JobDetailsCard, PdfPreviewCard } from "./components/JobModal";
 import CvReview from "./components/CvReview";
 import CvEntry from "./components/CvEntry";
+import OverwriteConfirmationModal from "./components/OverwriteConfirmationModal";
 import { Box, Grid, GridItem } from "@chakra-ui/react";
 
 const CACHE_KEY = "job-agent:search-response";
@@ -52,6 +53,24 @@ export default function App() {
   const [cvEntryError, setCvEntryError] = useState("");
   const [isCreatingCv, setIsCreatingCv] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [isUpdatingProfileCvText, setIsUpdatingProfileCvText] = useState(false);
+  const [isRemappingProfileCvText, setIsRemappingProfileCvText] = useState(false);
+  const [cvRemapElapsedMs, setCvRemapElapsedMs] = useState(0);
+  const [cvDraftState, setCvDraftState] = useState({
+    isDirty: false,
+    diff: null,
+    payload: null,
+    sourceProfileId: "",
+    targetProfileId: "",
+    revision: 0,
+    updatedAt: null
+  });
+  const [profileSwitchDialog, setProfileSwitchDialog] = useState({
+    isOpen: false,
+    pendingProfileId: "",
+    isBusy: false,
+    error: ""
+  });
   const [activeView, setActiveView] = useState("find");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeJobAction, setActiveJobAction] = useState("none");
@@ -67,10 +86,12 @@ export default function App() {
   const [isPdfDownloading, setIsPdfDownloading] = useState(false);
 
   const searchTimerRef = useRef(null);
+  const cvRemapTimerRef = useRef(null);
   const pdfPreviewTimerRef = useRef(null);
   const pdfPreviewTemplateRef = useRef("");
   const hasRenderedPdfPreviewRef = useRef(false);
   const pdfPreviewStructureRef = useRef("");
+  const cvDraftHashRef = useRef("");
   const isResizingSidebarRef = useRef(false);
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(SIDEBAR_MIN_WIDTH);
@@ -105,6 +126,25 @@ export default function App() {
       currentTokens: Math.min(estimatedRefinementTokens, Math.round(estimatedRefinementTokens * ratio)),
       totalTokens: estimatedRefinementTokens,
       elapsedSeconds: Math.round(searchElapsedMs / 1000),
+      timeoutSeconds: lmTimeout
+    };
+  })();
+
+  const remapTokenEstimate = (() => {
+    const text = `${resumeText}`.trim();
+    if (!text) return 0;
+    return Math.max(1, Math.ceil(text.length / 4)) + 280;
+  })();
+
+  const cvRemapProgress = (() => {
+    if (!isRemappingProfileCvText || !lmTimeout || remapTokenEstimate <= 0) return null;
+    const timeoutMs = Math.max(1, lmTimeout * 1000);
+    const ratio = Math.min(cvRemapElapsedMs / timeoutMs, 1);
+    return {
+      percent: Math.round(ratio * 100),
+      currentTokens: Math.min(remapTokenEstimate, Math.round(remapTokenEstimate * ratio)),
+      totalTokens: remapTokenEstimate,
+      elapsedSeconds: Math.round(cvRemapElapsedMs / 1000),
       timeoutSeconds: lmTimeout
     };
   })();
@@ -270,6 +310,28 @@ export default function App() {
       }
     };
   }, [isLoading]);
+
+  useEffect(() => {
+    if (!isRemappingProfileCvText) {
+      setCvRemapElapsedMs(0);
+      if (cvRemapTimerRef.current) {
+        clearInterval(cvRemapTimerRef.current);
+        cvRemapTimerRef.current = null;
+      }
+      return undefined;
+    }
+    const start = Date.now();
+    setCvRemapElapsedMs(0);
+    cvRemapTimerRef.current = setInterval(() => {
+      setCvRemapElapsedMs(Date.now() - start);
+    }, 500);
+    return () => {
+      if (cvRemapTimerRef.current) {
+        clearInterval(cvRemapTimerRef.current);
+        cvRemapTimerRef.current = null;
+      }
+    };
+  }, [isRemappingProfileCvText]);
 
   useEffect(() => {
     const handleMouseMove = (event) => {
@@ -539,6 +601,217 @@ export default function App() {
     pdfPreviewStructureRef.current = "";
   };
 
+  const upsertCvProfileInList = (profile) => {
+    setCvProfiles((prev) => {
+      const index = prev.findIndex((item) => item.profile_id === profile.profile_id);
+      if (index === -1) return [profile, ...prev];
+      const next = [...prev];
+      next[index] = profile;
+      return next;
+    });
+  };
+
+  const loadProfileIntoEditor = async (profileId) => {
+    if (!profileId) return;
+    setCvEntryError("");
+    setIsLoadingProfile(true);
+    try {
+      const canonical = await getCvProfile(profileId);
+      const nextTemplateId = canonical.template_id || "awesomecv";
+      setSelectedProfileId(canonical.profile_id || profileId);
+      setCvTemplateId(nextTemplateId);
+      setResumeText(canonical.audit?.raw_resume_text || "");
+      upsertCvProfileInList(canonical);
+      handleStartCvEditor({
+        canonical,
+        templateId: nextTemplateId,
+        initialProfileId: canonical.profile_id || profileId
+      });
+    } catch (err) {
+      setCvEntryError(err instanceof Error ? err.message : "Failed to load profile");
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  };
+
+  const buildNextVersionedProfileId = (profileId) => {
+    const normalized = (profileId || "profile").trim();
+    const base = normalized.replace(/-v\d+$/, "") || "profile";
+    const regex = new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-v(\\d+)$`);
+    const versionCandidates = cvProfiles
+      .map((profile) => {
+        const match = regex.exec(profile.profile_id || "");
+        return match ? Number(match[1]) : null;
+      })
+      .filter((value) => Number.isFinite(value));
+    const maxVersion = versionCandidates.length ? Math.max(...versionCandidates) : (normalized === base ? 1 : 0);
+    return `${base}-v${Math.max(2, maxVersion + 1)}`;
+  };
+
+  const handleProfileRowSelect = async (profile) => {
+    if (!profile?.profile_id) return;
+    const nextProfileId = profile.profile_id;
+    if (nextProfileId === selectedProfileId) {
+      await loadProfileIntoEditor(nextProfileId);
+      return;
+    }
+
+    if (cvReview && cvDraftState.isDirty) {
+      setProfileSwitchDialog({
+        isOpen: true,
+        pendingProfileId: nextProfileId,
+        isBusy: false,
+        error: ""
+      });
+      return;
+    }
+
+    await loadProfileIntoEditor(nextProfileId);
+  };
+
+  const closeProfileSwitchDialog = () => {
+    setProfileSwitchDialog({
+      isOpen: false,
+      pendingProfileId: "",
+      isBusy: false,
+      error: ""
+    });
+  };
+
+  const handleSwitchWithoutSaving = async () => {
+    if (!profileSwitchDialog.pendingProfileId) return;
+    setProfileSwitchDialog((prev) => ({ ...prev, isBusy: true, error: "" }));
+    await loadProfileIntoEditor(profileSwitchDialog.pendingProfileId);
+    closeProfileSwitchDialog();
+  };
+
+  const handleSaveAndSwitchProfile = async () => {
+    if (!profileSwitchDialog.pendingProfileId) return;
+    if (!cvDraftState.payload || !cvDraftState.targetProfileId) {
+      setProfileSwitchDialog((prev) => ({ ...prev, error: "No editable draft available to save." }));
+      return;
+    }
+
+    setProfileSwitchDialog((prev) => ({ ...prev, isBusy: true, error: "" }));
+    try {
+      let existing = null;
+      try {
+        existing = await getCvProfile(cvDraftState.targetProfileId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        if (!message.includes("status 404")) throw err;
+      }
+
+      const payload = {
+        ...cvDraftState.payload,
+        profile_id: cvDraftState.targetProfileId,
+        revision: existing?.revision ?? 0,
+        audit: {
+          ...(existing?.audit || {}),
+          raw_resume_text: resumeText
+        }
+      };
+
+      const saved = await saveCvProfile(payload.profile_id, payload);
+      upsertCvProfileInList(saved);
+      await loadProfileIntoEditor(profileSwitchDialog.pendingProfileId);
+      closeProfileSwitchDialog();
+    } catch (err) {
+      setProfileSwitchDialog((prev) => ({
+        ...prev,
+        error: err instanceof Error ? err.message : "Failed to save draft before switching.",
+        isBusy: false
+      }));
+      return;
+    }
+  };
+
+  const handleUpdateProfileCvText = async () => {
+    if (!selectedProfileId) {
+      setCvEntryError("Select a profile before updating CV text.");
+      return;
+    }
+    setCvEntryError("");
+    setIsUpdatingProfileCvText(true);
+    try {
+      const existing = await getCvProfile(selectedProfileId);
+      const payload = {
+        ...existing,
+        revision: existing.revision,
+        audit: {
+          ...(existing.audit || {}),
+          raw_resume_text: resumeText
+        }
+      };
+      const saved = await saveCvProfile(selectedProfileId, payload);
+      upsertCvProfileInList(saved);
+      setResumeText(saved.audit?.raw_resume_text || "");
+      setCvEntryError(`Profile '${selectedProfileId}' updated with CV text (revision ${saved.revision}).`);
+    } catch (err) {
+      setCvEntryError(err instanceof Error ? err.message : "Failed to update profile CV text");
+    } finally {
+      setIsUpdatingProfileCvText(false);
+    }
+  };
+
+  const handleRemapProfileCvText = async () => {
+    if (!selectedProfileId) {
+      setCvEntryError("Select a profile before remapping from CV text.");
+      return;
+    }
+    if (!selectedModel) {
+      setCvEntryError("Select a model before remapping.");
+      return;
+    }
+    if (!resumeText.trim()) {
+      setCvEntryError("CV text is required to remap.");
+      return;
+    }
+
+    setCvEntryError("");
+    setIsRemappingProfileCvText(true);
+    try {
+      const existing = await getCvProfile(selectedProfileId);
+      const parsed = await parseCvCanonical({
+        resume_text: resumeText,
+        model: selectedModel,
+        lm_timeout: lmTimeout,
+        output_language: cvOutputLanguage
+      });
+      const nextProfileId = buildNextVersionedProfileId(selectedProfileId);
+      const payload = {
+        schema_version: parsed.schema_version || existing.schema_version || "v1",
+        profile_id: nextProfileId,
+        revision: 0,
+        template_id: existing.template_id || cvTemplateId,
+        data: parsed.data,
+        section_order: existing.section_order,
+        sidebar_section_order: existing.sidebar_section_order,
+        main_section_order: existing.main_section_order,
+        audit: {
+          ...(existing.audit || {}),
+          raw_resume_text: resumeText,
+          parsed_canonical: parsed.data,
+          edited_canonical: parsed.data
+        }
+      };
+      const saved = await saveCvProfile(nextProfileId, payload);
+      upsertCvProfileInList(saved);
+      setSelectedProfileId(saved.profile_id);
+      setCvTemplateId(saved.template_id || "awesomecv");
+      handleStartCvEditor({
+        canonical: saved,
+        templateId: saved.template_id || "awesomecv",
+        initialProfileId: saved.profile_id
+      });
+      setCvEntryError(`Created '${saved.profile_id}' from remapped CV text via LLM.`);
+    } catch (err) {
+      setCvEntryError(err instanceof Error ? err.message : "Failed to remap CV text");
+    } finally {
+      setIsRemappingProfileCvText(false);
+    }
+  };
+
   const handleCreateCvFromResume = async () => {
     if (!selectedModel) {
       setCvEntryError("Select a model to create a CV profile.");
@@ -569,35 +842,24 @@ export default function App() {
     }
   };
 
-  const handleLoadProfile = async () => {
-    if (!selectedProfileId) {
-      setCvEntryError("Select a profile to load.");
-      return;
-    }
-    setCvEntryError("");
-    setIsLoadingProfile(true);
-    try {
-      const canonical = await getCvProfile(selectedProfileId);
-      const nextTemplateId = canonical.template_id || "awesomecv";
-      setCvTemplateId(nextTemplateId);
-      if (canonical.audit?.raw_resume_text) {
-        setResumeText(canonical.audit.raw_resume_text);
-      }
-      handleStartCvEditor({
-        canonical,
-        templateId: nextTemplateId,
-        initialProfileId: canonical.profile_id || selectedProfileId
-      });
-    } catch (err) {
-      setCvEntryError(err instanceof Error ? err.message : "Failed to load profile");
-    } finally {
-      setIsLoadingProfile(false);
-    }
-  };
-
   const handleTemplateIdChange = (nextTemplateId) => {
     setCvTemplateId(nextTemplateId);
     setCvReview((prev) => (prev ? { ...prev, templateId: nextTemplateId } : prev));
+  };
+
+  const handleCvDraftStateChange = (nextDraftState) => {
+    if (!nextDraftState) return;
+    const nextHash = JSON.stringify({
+      isDirty: Boolean(nextDraftState.isDirty),
+      sourceProfileId: nextDraftState.sourceProfileId || "",
+      targetProfileId: nextDraftState.targetProfileId || "",
+      revision: nextDraftState.revision || 0,
+      payload: nextDraftState.payload || null,
+      totals: nextDraftState.diff?.totals || null
+    });
+    if (nextHash === cvDraftHashRef.current) return;
+    cvDraftHashRef.current = nextHash;
+    setCvDraftState(nextDraftState);
   };
 
   const handleSelectJob = (job) => {
@@ -736,6 +998,7 @@ export default function App() {
                   outputLanguage={cvReview.outputLanguage}
                   model={selectedModel}
                   lmTimeout={lmTimeout}
+                  onDraftStateChange={handleCvDraftStateChange}
                   onPreviewPayloadChange={setCvPreviewPayload}
                 />
               ) : null}
@@ -873,11 +1136,16 @@ export default function App() {
                     profilesError={profilesError}
                     selectedProfileId={selectedProfileId}
                     onSelectedProfileIdChange={setSelectedProfileId}
+                    onProfileRowSelect={handleProfileRowSelect}
                     onRefreshProfiles={loadProfiles}
-                    onLoadProfile={handleLoadProfile}
                     onCreateCvFromResume={handleCreateCvFromResume}
+                    onUpdateProfileCvText={handleUpdateProfileCvText}
+                    onRemapProfileCvText={handleRemapProfileCvText}
                     isCreatingCv={isCreatingCv}
                     isLoadingProfile={isLoadingProfile}
+                    isUpdatingProfileCvText={isUpdatingProfileCvText}
+                    isRemappingProfileCvText={isRemappingProfileCvText}
+                    remapProgress={cvRemapProgress}
                     cvEntryError={cvEntryError}
                     cvTemplateId={cvTemplateId}
                     onCvTemplateIdChange={handleTemplateIdChange}
@@ -913,6 +1181,7 @@ export default function App() {
                         lmTimeout={lmTimeout}
                         resumeText={resumeText}
                         initialProfileId={cvReview.initialProfileId}
+                        onDraftStateChange={handleCvDraftStateChange}
                         onPreviewPayloadChange={setCvPreviewPayload}
                       />
                     </div>
@@ -933,6 +1202,26 @@ export default function App() {
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
+
+      <OverwriteConfirmationModal
+        isOpen={profileSwitchDialog.isOpen}
+        mode="switch"
+        targetProfileId={cvDraftState.targetProfileId || selectedProfileId}
+        pendingTargetProfileId={profileSwitchDialog.pendingProfileId}
+        existingRevision={cvDraftState.revision || 0}
+        existingUpdatedAt={cvDraftState.updatedAt}
+        totals={cvDraftState.diff?.totals || { added: 0, removed: 0, updated: 0 }}
+        topLevelChanges={cvDraftState.diff?.topLevelChanges || []}
+        sectionChanges={cvDraftState.diff?.sectionChanges || []}
+        suggestedProfileId=""
+        onSuggestedProfileIdChange={() => {}}
+        onConfirmOverwrite={handleSaveAndSwitchProfile}
+        onSwitchWithoutSaving={handleSwitchWithoutSaving}
+        onSaveAsNew={() => {}}
+        onCancel={closeProfileSwitchDialog}
+        isBusy={profileSwitchDialog.isBusy}
+        error={profileSwitchDialog.error}
+      />
     </Box>
   );
 }

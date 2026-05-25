@@ -723,6 +723,7 @@ export default function CvReview({
   model,
   lmTimeout,
   initialProfileId,
+  onDraftStateChange,
   onPreviewPayloadChange
 }) {
   const isHipsterTemplate = templateId === "hipstercv";
@@ -826,6 +827,35 @@ export default function CvReview({
 
   const buildPreviewHash = () => buildPreviewHashFrom(formData, currentSectionOrder, hipsterSectionOrders);
 
+  const draftProfileId = profileId.trim() || loadedProfileId || canonical?.profile_id || "default";
+  const draftPayload = {
+    schema_version: schemaVersion,
+    profile_id: draftProfileId,
+    revision,
+    template_id: templateId,
+    data: formData,
+    section_order: currentSectionOrder,
+    sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
+    main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined
+  };
+
+  const draftDiff = buildOverwriteDiff({
+    existingProfile: {
+      ...canonical,
+      profile_id: canonical?.profile_id || draftProfileId,
+      template_id: canonical?.template_id || templateId,
+      section_order: canonical?.section_order,
+      sidebar_section_order: canonical?.sidebar_section_order,
+      main_section_order: canonical?.main_section_order,
+      data: canonical?.data || emptyCanonical
+    },
+    pendingPayload: draftPayload,
+    targetProfileId: draftProfileId
+  });
+
+  const hasProfileIdChange = draftProfileId !== (canonical?.profile_id || "default");
+  const hasUnsavedDraftChanges = hasProfileIdChange || draftDiff.hasChanges;
+
   const scheduleNextPreview = ({ immediate = false } = {}) => {
     if (immediate) {
       forceImmediatePreviewRef.current = true;
@@ -884,6 +914,27 @@ export default function CvReview({
   useEffect(() => {
     onPreviewPayloadChange?.(previewPayload);
   }, [previewPayload]);
+
+  useEffect(() => {
+    onDraftStateChange?.({
+      isDirty: hasUnsavedDraftChanges,
+      diff: draftDiff,
+      payload: draftPayload,
+      sourceProfileId: canonical?.profile_id || draftProfileId,
+      targetProfileId: draftProfileId,
+      revision,
+      updatedAt: canonical?.updated_at || null
+    });
+  }, [
+    onDraftStateChange,
+    hasUnsavedDraftChanges,
+    draftDiff,
+    draftPayload,
+    canonical?.profile_id,
+    canonical?.updated_at,
+    draftProfileId,
+    revision
+  ]);
 
   useEffect(() => {
     if (isPreviewing) return undefined;
