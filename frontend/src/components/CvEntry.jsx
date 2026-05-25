@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { CheckCircle2, Download, PencilLine, Plus, RefreshCw, Search, RotateCcw, Sparkles, Tag } from "lucide-react";
 import { Progress, Spinner } from "@chakra-ui/react";
 
 const SECTION_DESCRIPTORS = [
@@ -75,11 +76,17 @@ Rock climbing, chess, espresso brewing
 PROJECTS
 Open-source feature drift monitor for tabular models (github.com/alexrivers/drift-watch)`;
 
-const formatDate = (value) => {
+const formatDateTime = (value) => {
   if (!value) return "-";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "-";
-  return parsed.toLocaleDateString("en-GB", { year: "numeric", month: "short", day: "2-digit" });
+  return parsed.toLocaleString("en-GB", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 };
 
 const normalizeText = (value) => String(value || "").toLowerCase();
@@ -185,6 +192,7 @@ export default function CvEntry({
   onUpdateProfileCvText,
   onRemapProfileCvText,
   onCreateNewEntry,
+  onBeginNewEntry,
   isCreatingProfileEntry,
   isLoadingProfile,
   isUpdatingProfileCvText,
@@ -213,6 +221,16 @@ export default function CvEntry({
   const [newEntryDialogOpen, setNewEntryDialogOpen] = useState(false);
   const [newEntryProfileName, setNewEntryProfileName] = useState("");
   const [newEntryError, setNewEntryError] = useState("");
+  const searchInputRef = useRef(null);
+  const searchButtonRef = useRef(null);
+  const resetButtonRef = useRef(null);
+  const createButtonRef = useRef(null);
+  const refreshButtonRef = useRef(null);
+  const firstRowRef = useRef(null);
+  const exampleButtonRef = useRef(null);
+  const updateProfileButtonRef = useRef(null);
+  const tailorButtonRef = useRef(null);
+  const cvTextRef = useRef(null);
 
   const profilesWithDraft = useMemo(() => {
     if (!isDraftProfileActive || !draftProfileId) return cvProfiles;
@@ -294,7 +312,20 @@ export default function CvEntry({
     }
   };
 
+  const focusFirstRow = () => {
+    firstRowRef.current?.focus();
+  };
+
+  const focusElementById = (id) => {
+    document.getElementById(id)?.focus();
+  };
+
+  const focusCvText = () => {
+    cvTextRef.current?.focus();
+  };
+
   const openNewEntryDialog = () => {
+    onBeginNewEntry?.();
     const defaultName = String(newProfileId || "").trim();
     setNewEntryProfileName(defaultName);
     setNewEntryError("");
@@ -358,18 +389,6 @@ export default function CvEntry({
           <h3>CV profiles</h3>
           <p className="helper">Select a profile or start a new entry directly from this table.</p>
         </div>
-        <div className="cv-entry-header-actions">
-          <button
-            type="button"
-            className="secondary"
-            onClick={openNewEntryDialog}
-          >
-            Create new entry
-          </button>
-          <button type="button" className="ghost" onClick={onRefreshProfiles} disabled={profilesLoading}>
-            {profilesLoading ? "Refreshing..." : "Refresh profiles"}
-          </button>
-        </div>
       </div>
 
       <div className="cv-entry-panel">
@@ -377,31 +396,118 @@ export default function CvEntry({
             <label htmlFor="profileSearch" className="label">Search profiles</label>
             <div className="cv-search-row">
               <input
+                ref={searchInputRef}
                 id="profileSearch"
                 type="text"
                 placeholder="Search by profile name, company, status, job title, description, or CV text"
                 value={profileSearchDraft}
                 onChange={(e) => setProfileSearchDraft(e.target.value)}
                 onKeyDown={(e) => {
+                  if (e.key === "Tab" && e.shiftKey) {
+                    e.preventDefault();
+                    refreshButtonRef.current?.focus();
+                    return;
+                  }
                   if (e.key === "Enter") {
                     e.preventDefault();
-                    setProfileSearchQuery(profileSearchDraft);
+                    searchButtonRef.current?.click();
+                    searchButtonRef.current?.focus();
+                    return;
+                  }
+                  if (e.key === "Tab" && !e.shiftKey) {
+                    e.preventDefault();
+                    searchButtonRef.current?.focus();
                   }
                 }}
               />
-              <button type="button" className="secondary" onClick={() => setProfileSearchQuery(profileSearchDraft)}>
-                Search
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => {
-                  setProfileSearchDraft("");
-                  setProfileSearchQuery("");
-                }}
-              >
-                Reset
-              </button>
+              <div className="cv-search-actions">
+                <button
+                  ref={searchButtonRef}
+                  type="button"
+                  className="primary cv-search-button"
+                  onClick={() => setProfileSearchQuery(profileSearchDraft)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Tab" && e.shiftKey) {
+                      e.preventDefault();
+                      searchInputRef.current?.focus();
+                      return;
+                    }
+                    if (e.key === "Tab" && !e.shiftKey) {
+                      e.preventDefault();
+                      resetButtonRef.current?.focus();
+                    }
+                  }}
+                >
+                  <Search size={14} />
+                  Search
+                </button>
+                <button
+                  ref={resetButtonRef}
+                  type="button"
+                  className="ghost cv-reset-button"
+                  onClick={() => {
+                    setProfileSearchDraft("");
+                    setProfileSearchQuery("");
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Tab" && e.shiftKey) {
+                      e.preventDefault();
+                      searchButtonRef.current?.focus();
+                      return;
+                    }
+                    if (e.key === "Tab" && !e.shiftKey) {
+                      e.preventDefault();
+                      createButtonRef.current?.focus();
+                    }
+                  }}
+                >
+                  <RotateCcw size={14} />
+                  Reset
+                </button>
+                <div className="cv-search-profile-actions">
+                  <button
+                    ref={createButtonRef}
+                    type="button"
+                    className="primary cv-create-button"
+                    onClick={openNewEntryDialog}
+                    onKeyDown={(e) => {
+                      if (e.key === "Tab" && e.shiftKey) {
+                        e.preventDefault();
+                        resetButtonRef.current?.focus();
+                        return;
+                      }
+                      if (e.key === "Tab" && !e.shiftKey) {
+                        e.preventDefault();
+                        refreshButtonRef.current?.focus();
+                      }
+                    }}
+                  >
+                    <Plus size={14} />
+                    Create new CV Profile
+                  </button>
+                  <button
+                    ref={refreshButtonRef}
+                    type="button"
+                    className="ghost cv-refresh-button"
+                    onClick={onRefreshProfiles}
+                    disabled={profilesLoading}
+                    onKeyDown={(e) => {
+                      if (e.key === "Tab" && e.shiftKey) {
+                        e.preventDefault();
+                        createButtonRef.current?.focus();
+                        return;
+                      }
+                      if (e.key === "Tab" && !e.shiftKey) {
+                        e.preventDefault();
+                        focusFirstRow();
+                      }
+                    }}
+                  >
+                    <RefreshCw size={14} />
+                    {profilesLoading ? "Refreshing..." : "Refresh profiles"}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -409,7 +515,7 @@ export default function CvEntry({
             <table className="cv-profile-table">
               <thead>
                 <tr>
-                  <th>{renderSortHeader("Profile", "profile_id")}</th>
+                  <th>{renderSortHeader("CV profile", "profile_id")}</th>
                   <th>{renderSortHeader("Company", "company")}</th>
                   <th>{renderSortHeader("Status", "application_status")}</th>
                   <th>{renderSortHeader("Job title", "job_title")}</th>
@@ -433,6 +539,7 @@ export default function CvEntry({
                     return (
                       <tr
                         key={profile.profile_id}
+                        ref={filteredProfiles[0]?.profile_id === profile.profile_id ? firstRowRef : null}
                         className={isSelected ? "is-selected" : ""}
                         onClick={() => handleProfileSelect(profile)}
                         onKeyDown={(event) => handleProfileRowKeyDown(event, profile)}
@@ -451,7 +558,7 @@ export default function CvEntry({
                         <td>{profile.job_title || "-"}</td>
                         <td>{profile.template_id || "awesomecv"}</td>
                         <td>r{profile.revision ?? 0}</td>
-                        <td>{formatDate(profile.updated_at || profile.created_at)}</td>
+                        <td>{formatDateTime(profile.updated_at || profile.created_at)}</td>
                         <td>
                           <span className="cv-profile-section-meta">
                             {sectionStats.visible.length} shown / {sectionStats.hidden.length} hidden
@@ -478,7 +585,7 @@ export default function CvEntry({
             <p className="helper">Track job details and keep CV source text here. Use it for both existing and new entries.</p>
             <div className="field-grid">
               <div>
-                <label htmlFor="newProfileName" className="label">Profile name</label>
+                <label htmlFor="newProfileName" className="label">CV profile</label>
                 <input
                   id="newProfileName"
                   type="text"
@@ -577,17 +684,37 @@ export default function CvEntry({
               <div style={{ gridColumn: "1 / -1" }}>
                 <label htmlFor="loadedProfileCvText" className="label">CV text</label>
                 <textarea
+                  ref={cvTextRef}
                   id="loadedProfileCvText"
                   rows={8}
                   placeholder="Paste or edit CV text for this profile"
                   value={resumeText}
                   onChange={(e) => onResumeTextChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Tab" && !e.shiftKey) {
+                      e.preventDefault();
+                      exampleButtonRef.current?.focus();
+                    }
+                  }}
                 />
                 <button
+                  ref={exampleButtonRef}
                   type="button"
                   className="ghost cv-example-toggle"
                   onClick={() => setShowExampleCvText((prev) => !prev)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Tab" && e.shiftKey) {
+                      e.preventDefault();
+                      focusCvText();
+                      return;
+                    }
+                    if (e.key === "Tab" && !e.shiftKey) {
+                      e.preventDefault();
+                      updateProfileButtonRef.current?.focus();
+                    }
+                  }}
                 >
+                  <Tag size={14} />
                   {showExampleCvText ? "Hide example CV text" : "Show example CV text"}
                 </button>
                 {showExampleCvText ? <pre className="example-box">{EXAMPLE_CV_TEXT}</pre> : null}
@@ -598,21 +725,47 @@ export default function CvEntry({
           <div className="cv-entry-cta-wrap">
             <div className="cv-entry-actions">
               <button
+                ref={updateProfileButtonRef}
                 type="button"
-                className="secondary cv-action-update"
+                className="primary cv-action-update"
                 onClick={onUpdateProfileCvText}
                 disabled={isUpdatingProfileCvText || isLoadingProfile || !hasPersistedSelectedProfile}
+                onKeyDown={(e) => {
+                  if (e.key === "Tab" && e.shiftKey) {
+                    e.preventDefault();
+                    exampleButtonRef.current?.focus();
+                    return;
+                  }
+                  if (e.key === "Tab" && !e.shiftKey) {
+                    e.preventDefault();
+                    tailorButtonRef.current?.focus();
+                  }
+                }}
               >
-                {isUpdatingProfileCvText ? "Updating profile..." : "Update application profile data"}
+                <PencilLine size={14} />
+                {isUpdatingProfileCvText ? "Updating profile..." : "Update CV profile data"}
               </button>
               <button
+                ref={tailorButtonRef}
                 type="button"
-                className="secondary cv-action-remap"
-                title="Use your CV text together with the optional job title and job description to create a tailored CV profile."
+                className="primary cv-action-remap llm-action-button"
+                title="Use AI to tailor this CV profile from your CV text and the job details you added above."
                 onClick={openRemapDialog}
                 disabled={isRemappingProfileCvText || isLoadingProfile || !resumeText.trim()}
+                onKeyDown={(e) => {
+                  if (e.key === "Tab" && e.shiftKey) {
+                    e.preventDefault();
+                    updateProfileButtonRef.current?.focus();
+                    return;
+                  }
+                  if (e.key === "Tab" && !e.shiftKey) {
+                    e.preventDefault();
+                    focusElementById("pdf-preview-template-select");
+                  }
+                }}
               >
-                {isRemappingProfileCvText ? "Tailoring profile..." : "Tailor CV using CV text + job description"}
+                <Sparkles size={14} />
+                {isRemappingProfileCvText ? "Tailoring profile..." : "Tailor CV using CV text & job description"}
               </button>
             </div>
           </div>
@@ -686,7 +839,7 @@ export default function CvEntry({
           <div className="modal-backdrop" onClick={() => setNewEntryDialogOpen(false)} />
           <div className="modal-card">
             <div className="modal-header">
-              <h2 id="new-entry-title">Create new profile</h2>
+              <h2 id="new-entry-title">Create new CV Profile</h2>
             </div>
             <p className="helper">Choose a profile name to create and save a new entry immediately.</p>
             <div>

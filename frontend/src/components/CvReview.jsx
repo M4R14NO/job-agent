@@ -3165,10 +3165,19 @@ export default function CvReview({
             )}
           </div>
           <div className="inline-actions">
-            <button type="button" className="secondary btn-sm" onClick={() => toggleSectionInReview(key)}>
+            <button
+              type="button"
+              className={`secondary btn-sm preview-visibility-button${isEnabled ? " is-visible" : " is-hidden"}`}
+              onClick={() => toggleSectionInReview(key)}
+            >
               {isEnabled ? <><EyeOff size={13} /> Hide</> : <><Eye size={13} /> Show</>}
             </button>
-            <button type="button" className="secondary btn-sm" onClick={() => togglePreviewEditor(key)} disabled={!isEnabled}>
+            <button
+              type="button"
+              className={`secondary btn-sm preview-edit-button${openPreviewEditors[key] ? " is-open" : ""}`}
+              onClick={() => togglePreviewEditor(key)}
+              disabled={!isEnabled}
+            >
               {openPreviewEditors[key] ? <><X size={13} /> Close</> : <><Pencil size={13} /> Edit</>}
             </button>
           </div>
@@ -3206,6 +3215,7 @@ export default function CvReview({
                 className="ghost icon-button section-collapse-button"
                 onClick={() => setRewriteOpen((prev) => !prev)}
                 aria-expanded={rewriteOpen}
+                title="Open the AI rewrite panel to update wording across your full CV."
               >
                 {rewriteOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                 <span>{rewriteOpen ? "Collapse" : "Expand"}</span>
@@ -3225,9 +3235,10 @@ export default function CvReview({
                 <div className="inline-actions">
                   <button
                     type="button"
-                    className="secondary"
+                    className="secondary llm-action-button"
                     onClick={handleRewrite}
                     disabled={isRewriting}
+                    title="Use AI to rewrite the full CV with your instructions while keeping the current structure."
                   >
                     <Sparkles size={14} />
                     {isRewriting ? "Rewriting..." : "Rewrite with AI"}

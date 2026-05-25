@@ -778,6 +778,26 @@ export default function App() {
     }
   };
 
+  const handleBeginNewEntry = () => {
+    clearCreatePreviewState();
+    setSelectedProfileId("");
+    setDraftProfileId("");
+    setIsDraftProfileActive(false);
+    setApplicationContext({ ...EMPTY_APPLICATION_CONTEXT });
+    setResumeText("");
+    setLoadedProfileSnapshot({
+      profile_id: "",
+      revision: 0,
+      updated_at: null,
+      raw_resume_text: "",
+      ...EMPTY_APPLICATION_CONTEXT
+    });
+    setCvTemplateId("awesomecv");
+    setCvOutputLanguage("english");
+    setNewProfileId("");
+    setCvEntryError("");
+  };
+
   const upsertCvProfileInList = (profile) => {
     setCvProfiles((prev) => {
       const index = prev.findIndex((item) => item.profile_id === profile.profile_id);
@@ -1197,14 +1217,16 @@ export default function App() {
             {activeJobAction === "none" && !cvReview ? (
               <>
                 <button
-                  className="cta cta-cover"
+                  className="cta cta-cover llm-action-button"
                   onClick={() => setActiveJobAction("cover")}
+                  title="Use AI to draft a cover letter for the selected job based on your resume and job details."
                 >
                   Generate cover letter
                 </button>
                 <button
-                  className="cta cta-cv"
+                  className="cta cta-cv llm-action-button"
                   onClick={() => setActiveJobAction("cv")}
+                  title="Use AI to turn your resume text and job context into an editable CV draft."
                 >
                   Generate CV
                 </button>
@@ -1394,7 +1416,7 @@ export default function App() {
                 <p className="eyebrow">CV workspace</p>
                 <h1>Create CV</h1>
                 <p className="subtitle">
-                  Work from one profile table and start new entries without switching tabs.
+                  Create a new CV or load and work on an existing one.
                 </p>
               </header>
               <div className="create-layout">
@@ -1410,6 +1432,7 @@ export default function App() {
                     onUpdateProfileCvText={handleUpdateApplicationProfileData}
                     onRemapProfileCvText={handleRemapProfileCvText}
                     onCreateNewEntry={handleCreateNewEntry}
+                    onBeginNewEntry={handleBeginNewEntry}
                     isCreatingProfileEntry={isCreatingProfileEntry}
                     isLoadingProfile={isLoadingProfile}
                     isUpdatingProfileCvText={isUpdatingProfileCvText}
