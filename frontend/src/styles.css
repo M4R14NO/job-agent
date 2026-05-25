@@ -430,8 +430,32 @@ body {
 }
 
 .cv-entry-actions {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.cv-entry-actions .helper {
+  width: 100%;
+}
+
+.cv-action-update {
+  background: #e8f5e9;
+  border-color: #7cb342;
+  color: #1b5e20;
+}
+
+.cv-action-remap {
+  background: #e3f2fd;
+  border-color: #42a5f5;
+  color: #0d47a1;
+}
+
+.cv-action-danger {
+  background: #ffebee;
+  border-color: #ef5350;
+  color: #b71c1c;
 }
 
 .cv-step-nav {

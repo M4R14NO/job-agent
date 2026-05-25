@@ -381,6 +381,15 @@ const FIELD_DIFF_CONFIG = [
   { key: "location", label: "Location" }
 ];
 
+const PROFILE_META_DIFF_CONFIG = [
+  { key: "company", label: "Company" },
+  { key: "application_status", label: "Application status" },
+  { key: "application_date", label: "Application date" },
+  { key: "job_title", label: "Job title" },
+  { key: "job_description", label: "Job description" },
+  { key: "job_url", label: "Job URL" }
+];
+
 const SECTION_DIFF_CONFIG = [
   {
     key: "experience",
@@ -630,6 +639,19 @@ const buildOverwriteDiff = ({ existingProfile, pendingPayload, targetProfileId }
     });
   }
 
+  PROFILE_META_DIFF_CONFIG.forEach(({ key, label }) => {
+    const before = existingProfile?.[key];
+    const after = pendingPayload?.[key];
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      topLevelChanges.push({
+        key,
+        label,
+        oldValue: profileValuePreview(before),
+        newValue: profileValuePreview(after)
+      });
+    }
+  });
+
   if ((existingProfile?.template_id || "awesomecv") !== (pendingPayload?.template_id || "awesomecv")) {
     topLevelChanges.push({
       key: "template_id",
@@ -723,6 +745,7 @@ export default function CvReview({
   model,
   lmTimeout,
   initialProfileId,
+  applicationContext,
   onDraftStateChange,
   onPreviewPayloadChange
 }) {
@@ -833,6 +856,12 @@ export default function CvReview({
     profile_id: draftProfileId,
     revision,
     template_id: templateId,
+    company: applicationContext?.company || canonical?.company || null,
+    application_status: applicationContext?.application_status || canonical?.application_status || null,
+    application_date: applicationContext?.application_date || canonical?.application_date || null,
+    job_title: applicationContext?.job_title || canonical?.job_title || null,
+    job_description: applicationContext?.job_description || canonical?.job_description || null,
+    job_url: applicationContext?.job_url || canonical?.job_url || null,
     data: formData,
     section_order: currentSectionOrder,
     sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
@@ -844,6 +873,12 @@ export default function CvReview({
       ...canonical,
       profile_id: canonical?.profile_id || draftProfileId,
       template_id: canonical?.template_id || templateId,
+      company: canonical?.company || null,
+      application_status: canonical?.application_status || null,
+      application_date: canonical?.application_date || null,
+      job_title: canonical?.job_title || null,
+      job_description: canonical?.job_description || null,
+      job_url: canonical?.job_url || null,
       section_order: canonical?.section_order,
       sidebar_section_order: canonical?.sidebar_section_order,
       main_section_order: canonical?.main_section_order,
@@ -3155,8 +3190,6 @@ export default function CvReview({
             <p className="helper">No job context provided. Preview will be generic.</p>
           )}
 
-          {renderBasics()}
-
           <div className="sub-card">
             <div className="sub-card-header">
               <strong className="sub-card-title"><Sparkles size={15} /> Rewrite with AI (optional)</strong>
@@ -3196,6 +3229,8 @@ export default function CvReview({
               </>
             )}
           </div>
+
+          {renderBasics()}
           {previewPayload ? (
             <>
               <div className="preview-grid">

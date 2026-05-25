@@ -218,6 +218,12 @@ class CvCanonicalProfile(BaseModel):
     updated_at: str | None = None
     template_id: str = "awesomecv"
     data: CvCanonicalData
+    company: str | None = None
+    application_status: str | None = None
+    application_date: str | None = None
+    job_title: str | None = None
+    job_description: str | None = None
+    job_url: str | None = None
     section_order: list[str] | None = None
     sidebar_section_order: list[str] | None = None
     main_section_order: list[str] | None = None

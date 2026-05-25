@@ -82,6 +82,29 @@ const formatDate = (value) => {
   return parsed.toLocaleDateString("en-GB", { year: "numeric", month: "short", day: "2-digit" });
 };
 
+const normalizeText = (value) => String(value || "").toLowerCase();
+
+const fuzzyMatch = (query, text) => {
+  const q = normalizeText(query).trim();
+  const t = normalizeText(text);
+  if (!q) return true;
+  if (t.includes(q)) return true;
+  let qi = 0;
+  for (let ti = 0; ti < t.length && qi < q.length; ti += 1) {
+    if (t[ti] === q[qi]) qi += 1;
+  }
+  return qi === q.length;
+};
+
+const nextProfileVersionName = (profileId) => {
+  const normalized = (profileId || "profile").trim() || "profile";
+  const match = normalized.match(/^(.*?)-v(\d+)$/);
+  if (match) {
+    return `${match[1]}-v${Number(match[2]) + 1}`;
+  }
+  return `${normalized}-v2`;
+};
+
 const getSectionStats = (profile) => {
   const knownKeys = SECTION_DESCRIPTORS.map((descriptor) => descriptor.key);
   const templateId = profile?.template_id || "awesomecv";
@@ -134,6 +157,8 @@ export default function CvEntry({
   onCvTemplateIdChange,
   cvOutputLanguage,
   onCvOutputLanguageChange,
+  applicationContext,
+  onApplicationContextChange,
   resumeText,
   onResumeTextChange,
   newProfileId,
@@ -141,10 +166,40 @@ export default function CvEntry({
 }) {
   const [activeTab, setActiveTab] = useState("load");
   const [showExampleCvText, setShowExampleCvText] = useState(false);
+  const [profileSearch, setProfileSearch] = useState("");
+  const [remapDialogOpen, setRemapDialogOpen] = useState(false);
+  const [remapProfileName, setRemapProfileName] = useState("");
 
   const selectedProfile = useMemo(
     () => cvProfiles.find((profile) => profile.profile_id === selectedProfileId) || null,
     [cvProfiles, selectedProfileId]
+  );
+
+  const filteredProfiles = useMemo(() => {
+    if (!profileSearch.trim()) return cvProfiles;
+    return cvProfiles.filter((profile) => {
+      const searchable = JSON.stringify({
+        profile_id: profile.profile_id,
+        template_id: profile.template_id,
+        company: profile.company,
+        application_status: profile.application_status,
+        application_date: profile.application_date,
+        job_title: profile.job_title,
+        job_description: profile.job_description,
+        job_url: profile.job_url,
+        section_order: profile.section_order,
+        sidebar_section_order: profile.sidebar_section_order,
+        main_section_order: profile.main_section_order,
+        data: profile.data,
+        raw_resume_text: profile.audit?.raw_resume_text
+      });
+      return fuzzyMatch(profileSearch, searchable);
+    });
+  }, [cvProfiles, profileSearch]);
+
+  const remapTargetExists = useMemo(
+    () => cvProfiles.some((profile) => profile.profile_id === remapProfileName.trim()),
+    [cvProfiles, remapProfileName]
   );
 
   const handleProfileSelect = (profile) => {
@@ -153,6 +208,22 @@ export default function CvEntry({
       return;
     }
     onSelectedProfileIdChange(profile.profile_id);
+  };
+
+  const openRemapDialog = () => {
+    const suggested = nextProfileVersionName(selectedProfile?.profile_id || selectedProfileId || "profile");
+    setRemapProfileName(suggested);
+    setRemapDialogOpen(true);
+  };
+
+  const handleConfirmRemap = () => {
+    const targetProfileId = remapProfileName.trim();
+    if (!targetProfileId) return;
+    onRemapProfileCvText?.({
+      targetProfileId,
+      allowOverwrite: remapTargetExists
+    });
+    setRemapDialogOpen(false);
   };
 
   return (
@@ -191,11 +262,24 @@ export default function CvEntry({
 
       {activeTab === "load" ? (
         <div className="cv-entry-panel" role="tabpanel">
+          <div>
+            <label htmlFor="profileSearch" className="label">Search profiles</label>
+            <input
+              id="profileSearch"
+              type="text"
+              placeholder="Search by profile name, company, status, job info, or CV content"
+              value={profileSearch}
+              onChange={(e) => setProfileSearch(e.target.value)}
+            />
+          </div>
+
           <div className="cv-profile-table-wrap">
             <table className="cv-profile-table">
               <thead>
                 <tr>
                   <th>Profile</th>
+                  <th>Company</th>
+                  <th>Status</th>
                   <th>Template</th>
                   <th>Revision</th>
                   <th>Updated</th>
@@ -203,14 +287,14 @@ export default function CvEntry({
                 </tr>
               </thead>
               <tbody>
-                {cvProfiles.length === 0 ? (
+                {filteredProfiles.length === 0 ? (
                   <tr>
-                    <td colSpan={5}>
-                      <p className="helper">No profiles found. Create one from CV text.</p>
+                    <td colSpan={7}>
+                      <p className="helper">No matching profiles found.</p>
                     </td>
                   </tr>
                 ) : (
-                  cvProfiles.map((profile) => {
+                  filteredProfiles.map((profile) => {
                     const sectionStats = getSectionStats(profile);
                     const isSelected = selectedProfileId === profile.profile_id;
                     return (
@@ -220,6 +304,8 @@ export default function CvEntry({
                         onClick={() => handleProfileSelect(profile)}
                       >
                         <td>{profile.profile_id}</td>
+                        <td>{profile.company || "-"}</td>
+                        <td>{profile.application_status || "-"}</td>
                         <td>{profile.template_id || "awesomecv"}</td>
                         <td>r{profile.revision ?? 0}</td>
                         <td>{formatDate(profile.updated_at || profile.created_at)}</td>
@@ -242,33 +328,104 @@ export default function CvEntry({
             </table>
           </div>
 
-          <label htmlFor="loadedProfileCvText" className="label">CV text for selected profile (optional edits)</label>
-          <textarea
-            id="loadedProfileCvText"
-            rows={8}
-            placeholder="Select a profile to load its stored CV text here..."
-            value={resumeText}
-            onChange={(e) => onResumeTextChange(e.target.value)}
-          />
+          <div className="sub-card" style={{ marginTop: 4 }}>
+            <div className="sub-card-header">
+              <strong>Application context</strong>
+            </div>
+            <p className="helper">Track the job application context and keep CV source text with it.</p>
+            <div className="field-grid">
+              <div>
+                <label htmlFor="ctxCompany" className="label">Company</label>
+                <input
+                  id="ctxCompany"
+                  value={applicationContext.company || ""}
+                  onChange={(e) => onApplicationContextChange((prev) => ({ ...prev, company: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label htmlFor="ctxStatus" className="label">Application status</label>
+                <select
+                  id="ctxStatus"
+                  value={applicationContext.application_status || ""}
+                  onChange={(e) => onApplicationContextChange((prev) => ({ ...prev, application_status: e.target.value }))}
+                >
+                  <option value="">Not set</option>
+                  <option value="in-prep">In preparation</option>
+                  <option value="applied">Applied</option>
+                  <option value="invited">Invited</option>
+                  <option value="interviewing">Interviewing</option>
+                  <option value="offer">Offer</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="ctxDate" className="label">Application date</label>
+                <input
+                  id="ctxDate"
+                  type="date"
+                  value={applicationContext.application_date || ""}
+                  onChange={(e) => onApplicationContextChange((prev) => ({ ...prev, application_date: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label htmlFor="ctxJobTitle" className="label">Job title</label>
+                <input
+                  id="ctxJobTitle"
+                  value={applicationContext.job_title || ""}
+                  onChange={(e) => onApplicationContextChange((prev) => ({ ...prev, job_title: e.target.value }))}
+                />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label htmlFor="ctxJobUrl" className="label">Job URL</label>
+                <input
+                  id="ctxJobUrl"
+                  value={applicationContext.job_url || ""}
+                  placeholder="https://..."
+                  onChange={(e) => onApplicationContextChange((prev) => ({ ...prev, job_url: e.target.value }))}
+                />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label htmlFor="ctxJobDescription" className="label">Job description</label>
+                <textarea
+                  id="ctxJobDescription"
+                  rows={5}
+                  value={applicationContext.job_description || ""}
+                  onChange={(e) => onApplicationContextChange((prev) => ({ ...prev, job_description: e.target.value }))}
+                  placeholder="Optional: paste a job description to tailor CV remapping"
+                />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label htmlFor="loadedProfileCvText" className="label">CV text</label>
+                <textarea
+                  id="loadedProfileCvText"
+                  rows={8}
+                  placeholder="Paste or edit CV text for this profile"
+                  value={resumeText}
+                  onChange={(e) => onResumeTextChange(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
 
           <div className="cv-entry-actions">
             <button
               type="button"
-              className="secondary"
+              className="secondary cv-action-update"
               onClick={onUpdateProfileCvText}
               disabled={isUpdatingProfileCvText || isLoadingProfile || !selectedProfile}
             >
-              {isUpdatingProfileCvText ? "Updating profile..." : "Update profile with CV text"}
+              {isUpdatingProfileCvText ? "Updating profile..." : "Update application profile data"}
             </button>
             <button
               type="button"
-              className="secondary"
-              onClick={onRemapProfileCvText}
+              className="secondary cv-action-remap"
+              title="Create a job-tailored CV profile from the current CV text and optional job description. You can review the new profile name first."
+              onClick={openRemapDialog}
               disabled={isRemappingProfileCvText || isLoadingProfile || !selectedProfile || !resumeText.trim()}
             >
-              {isRemappingProfileCvText ? "Remapping with LLM..." : "Remap and save as new profile version"}
+              {isRemappingProfileCvText ? "Tailoring profile..." : "Tailor CV to job description"}
             </button>
-            <p className="helper">Remapping performs an LLM call and creates a new versioned profile name.</p>
           </div>
 
           {isRemappingProfileCvText && remapProgress ? (
@@ -294,7 +451,6 @@ export default function CvEntry({
             </div>
           ) : null}
 
-          <p className="helper">Selecting a profile row loads it directly and keeps template in sync.</p>
         </div>
       ) : (
         <div className="cv-entry-panel" role="tabpanel">
@@ -367,6 +523,43 @@ export default function CvEntry({
 
       {profilesError && <p className="error">{profilesError}</p>}
       {cvEntryError && <p className="error">{cvEntryError}</p>}
+
+      {remapDialogOpen && (
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="remap-name-title">
+          <div className="modal-backdrop" onClick={() => setRemapDialogOpen(false)} />
+          <div className="modal-card">
+            <div className="modal-header">
+              <h2 id="remap-name-title">Choose a name for the new profile version</h2>
+            </div>
+            <p className="helper">A new tailored profile will be generated using your CV text and saved under this name.</p>
+            <div>
+              <label htmlFor="remapProfileName" className="label">New profile name</label>
+              <input
+                id="remapProfileName"
+                type="text"
+                value={remapProfileName}
+                onChange={(e) => setRemapProfileName(e.target.value)}
+              />
+            </div>
+            {remapTargetExists ? (
+              <p className="error">This name already exists. Continuing will overwrite the existing profile and previous data cannot be recovered.</p>
+            ) : null}
+            <div className="inline-actions">
+              <button type="button" className="secondary" onClick={() => setRemapDialogOpen(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`secondary ${remapTargetExists ? "cv-action-danger" : "cv-action-remap"}`}
+                onClick={handleConfirmRemap}
+                disabled={!remapProfileName.trim()}
+              >
+                {remapTargetExists ? "Overwrite existing profile" : "Create new profile version"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
