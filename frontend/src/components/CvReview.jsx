@@ -722,11 +722,13 @@ export default function CvReview({
   outputLanguage,
   model,
   lmTimeout,
+  initialProfileId,
   onPreviewPayloadChange
 }) {
   const isHipsterTemplate = templateId === "hipstercv";
-  const [profileId, setProfileId] = useState(canonical?.profile_id || "default");
-  const [loadedProfileId, setLoadedProfileId] = useState(canonical?.profile_id || "default");
+  const resolvedInitialProfileId = canonical?.profile_id || initialProfileId || "default";
+  const [profileId, setProfileId] = useState(resolvedInitialProfileId);
+  const [loadedProfileId, setLoadedProfileId] = useState(resolvedInitialProfileId);
   const [loadedRevision, setLoadedRevision] = useState(canonical?.revision ?? 0);
   const [revision, setRevision] = useState(canonical?.revision ?? 0);
   const [formData, setFormData] = useState(() => normalizeCanonical(canonical?.data));
@@ -853,8 +855,9 @@ export default function CvReview({
         mainSectionOrder: canonical?.main_section_order
       })
     );
-    setProfileId(canonical?.profile_id || "default");
-    setLoadedProfileId(canonical?.profile_id || "default");
+    const nextInitialProfileId = canonical?.profile_id || initialProfileId || "default";
+    setProfileId(nextInitialProfileId);
+    setLoadedProfileId(nextInitialProfileId);
     setLoadedRevision(canonical?.revision ?? 0);
     setRevision(canonical?.revision ?? 0);
     setPreviewPayload(null);
@@ -870,7 +873,7 @@ export default function CvReview({
     setSaveProfileOpen(false);
     previousTemplateIdRef.current = templateId;
     forceImmediatePreviewRef.current = true;
-  }, [canonical]);
+  }, [canonical, initialProfileId]);
 
   useEffect(() => {
     if (isHipsterTemplate) {

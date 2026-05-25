@@ -321,11 +321,104 @@ body {
 }
 
 .cv-entry-header {
-  width: 100%;
-  min-height: 240px;
+  display: flex;
   justify-content: space-between;
   gap: 16px;
-  align-items: center;
+  align-items: flex-start;
+}
+
+.cv-entry-tabs {
+  display: inline-flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 12px;
+  background: #f4f4f5;
+  width: fit-content;
+}
+
+.cv-entry-tab {
+  border: none;
+  background: transparent;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #4b5563;
+  cursor: pointer;
+}
+
+.cv-entry-tab.is-active {
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 2px 8px rgba(17, 24, 39, 0.08);
+}
+
+.cv-entry-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.cv-profile-table-wrap {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: auto;
+  max-height: 360px;
+}
+
+.cv-profile-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 740px;
+}
+
+.cv-profile-table th,
+.cv-profile-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 10px 12px;
+  border-bottom: 1px solid #edf0f2;
+  font-size: 13px;
+}
+
+.cv-profile-table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  z-index: 1;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #374151;
+}
+
+.cv-profile-table tbody tr.is-selected {
+  background: #fff7ed;
+}
+
+.cv-profile-select {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #0f172a;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cv-profile-section-meta {
+  display: block;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.cv-profile-section-list {
+  display: block;
+  margin-top: 4px;
+  color: #334155;
+}
+
+.cv-profile-section-list.muted {
+  color: #64748b;
 }
 
 .cv-entry-actions {
@@ -2032,6 +2125,17 @@ body.modal-open .pdf-preview-iframe {
 
   .cv-generate-button {
     width: 100%;
+  }
+
+  .cv-entry-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .cv-entry-tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
   }
 }
 

@@ -46,8 +46,8 @@ export default function App() {
   const [profilesError, setProfilesError] = useState("");
   const [profilesLoading, setProfilesLoading] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState("");
+  const [newProfileId, setNewProfileId] = useState("default");
   const [cvTemplateId, setCvTemplateId] = useState("awesomecv");
-  const [cvDocType, setCvDocType] = useState("resume");
   const [cvOutputLanguage, setCvOutputLanguage] = useState("english");
   const [cvEntryError, setCvEntryError] = useState("");
   const [isCreatingCv, setIsCreatingCv] = useState(false);
@@ -521,13 +521,14 @@ export default function App() {
     }
   };
 
-  const handleStartCvEditor = ({ canonical, templateId }) => {
+  const handleStartCvEditor = ({ canonical, templateId, initialProfileId }) => {
     setCvReview({
       canonical,
       job: { title: "", company: "", description: "", job_url: "" },
       templateId: templateId || cvTemplateId,
-      docType: cvDocType,
-      outputLanguage: cvOutputLanguage
+      docType: "cv",
+      outputLanguage: cvOutputLanguage,
+      initialProfileId: initialProfileId || canonical?.profile_id || "default"
     });
     setSelectedJob(null);
     setActiveView("create");
@@ -544,7 +545,7 @@ export default function App() {
       return;
     }
     if (!resumeText.trim()) {
-      setCvEntryError("Resume text is required to create a new profile.");
+      setCvEntryError("CV text is required to create a new profile.");
       return;
     }
     setCvEntryError("");
@@ -556,9 +557,13 @@ export default function App() {
         lm_timeout: lmTimeout,
         output_language: cvOutputLanguage
       });
-      handleStartCvEditor({ canonical, templateId: cvTemplateId });
+      handleStartCvEditor({
+        canonical,
+        templateId: cvTemplateId,
+        initialProfileId: newProfileId.trim() || "default"
+      });
     } catch (err) {
-      setCvEntryError(err instanceof Error ? err.message : "Failed to parse resume");
+      setCvEntryError(err instanceof Error ? err.message : "Failed to parse CV text");
     } finally {
       setIsCreatingCv(false);
     }
@@ -578,7 +583,11 @@ export default function App() {
       if (canonical.audit?.raw_resume_text) {
         setResumeText(canonical.audit.raw_resume_text);
       }
-      handleStartCvEditor({ canonical, templateId: nextTemplateId });
+      handleStartCvEditor({
+        canonical,
+        templateId: nextTemplateId,
+        initialProfileId: canonical.profile_id || selectedProfileId
+      });
     } catch (err) {
       setCvEntryError(err instanceof Error ? err.message : "Failed to load profile");
     } finally {
@@ -853,7 +862,7 @@ export default function App() {
                 <p className="eyebrow">CV workspace</p>
                 <h1>Create CV</h1>
                 <p className="subtitle">
-                  Load a profile or generate one from resume text.
+                  Load an existing profile or create one from CV text.
                 </p>
               </header>
               <div className="create-layout">
@@ -872,12 +881,12 @@ export default function App() {
                     cvEntryError={cvEntryError}
                     cvTemplateId={cvTemplateId}
                     onCvTemplateIdChange={handleTemplateIdChange}
-                    cvDocType={cvDocType}
-                    onCvDocTypeChange={setCvDocType}
                     cvOutputLanguage={cvOutputLanguage}
                     onCvOutputLanguageChange={setCvOutputLanguage}
                     resumeText={resumeText}
                     onResumeTextChange={setResumeText}
+                    newProfileId={newProfileId}
+                    onNewProfileIdChange={setNewProfileId}
                   />
                 </section>
                 {cvReview ? (
@@ -903,6 +912,7 @@ export default function App() {
                         model={selectedModel}
                         lmTimeout={lmTimeout}
                         resumeText={resumeText}
+                        initialProfileId={cvReview.initialProfileId}
                         onPreviewPayloadChange={setCvPreviewPayload}
                       />
                     </div>
