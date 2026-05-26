@@ -19,29 +19,59 @@ def _user_home() -> Path:
 
 
 def _default_profile_store() -> str:
-    if cv_store := os.getenv("CV_PROFILE_STORE"):
-        return cv_store
+    cv_store = os.getenv("CV_PROFILE_STORE")
+
+    def _normalize_candidate(path_value: str | Path) -> Path:
+        path = Path(path_value)
+        if path.suffix.lower() == ".json":
+            return path
+        return path / "cv_profiles.json"
+
+    def _profile_count(path: Path) -> int:
+        try:
+            if not path.exists() or not os.access(path, os.R_OK):
+                return 0
+            content = path.read_text(encoding="utf-8").strip()
+            if not content:
+                return 0
+            payload = json.loads(content)
+            if not isinstance(payload, dict):
+                return 0
+            profiles = payload.get("profiles", [])
+            if not isinstance(profiles, list):
+                return 0
+            return len([item for item in profiles if isinstance(item, dict) and item.get("profile_id")])
+        except Exception:
+            return 0
 
     def _can_use_store(path: Path) -> bool:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             if path.exists():
-                return os.access(path, os.R_OK | os.W_OK)
+                if not os.access(path, os.R_OK | os.W_OK):
+                    return False
+                return True
             return os.access(path.parent, os.W_OK | os.X_OK)
         except Exception:
             return False
 
-    # CV_TMP_DIR is set in the sandbox startup command; use it when available
+    candidates: list[Path] = []
+    if cv_store:
+        candidates.append(_normalize_candidate(cv_store))
     if cv_tmp := os.getenv("CV_TMP_DIR"):
-        return str(Path(cv_tmp) / "profiles" / "cv_profiles.json")
+        candidates.append(Path(cv_tmp) / "profiles" / "cv_profiles.json")
 
     home = _user_home()
-    candidates: list[Path] = []
     if home != Path("/var/empty"):
         candidates.append(home / ".job-agent" / "profiles" / "cv_profiles.json")
 
     candidates.append(Path(tempfile.gettempdir()) / f"job-agent-{os.getuid()}" / "profiles" / "cv_profiles.json")
     candidates.append(Path("/tmp") / "job-agent-tex" / "profiles" / "cv_profiles.json")
+
+    # Prefer existing readable stores that already contain profiles.
+    for candidate in candidates:
+        if _profile_count(candidate) > 0:
+            return str(candidate)
 
     for candidate in candidates:
         if _can_use_store(candidate):

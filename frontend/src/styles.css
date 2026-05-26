@@ -1389,6 +1389,53 @@ select {
   color: #1f2937;
 }
 
+.advanced-options {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+  padding: 10px 12px;
+}
+
+.advanced-summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #1f2937;
+  list-style: none;
+}
+
+.advanced-summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-summary::before {
+  content: "▸";
+  margin-right: 8px;
+  color: #4b5563;
+}
+
+.advanced-options[open] .advanced-summary::before {
+  content: "▾";
+}
+
+.advanced-options .filters {
+  margin-top: 12px;
+}
+
+.rerank-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rerank-status-badge-warning {
+  background: #fff7ed;
+  color: #9a3412;
+  border: 1px solid #fed7aa;
+}
+
 .results-header {
   display: flex;
   justify-content: space-between;

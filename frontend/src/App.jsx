@@ -19,7 +19,6 @@ import OverwriteConfirmationModal from "./components/OverwriteConfirmationModal"
 import { Box, Grid, GridItem } from "@chakra-ui/react";
 
 const CACHE_KEY = "job-agent:search-response";
-const LLM_PROFILE_KEY = "job-agent:llm-profiles";
 const SIDEBAR_WIDTH_KEY = "job-agent:sidebar-width";
 const SIDEBAR_MIN_WIDTH = 360;
 const SIDEBAR_MAX_WIDTH = 720;
@@ -122,10 +121,8 @@ export default function App() {
   const [activeView, setActiveView] = useState("find");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeJobAction, setActiveJobAction] = useState("none");
-  const [llmProfiles, setLlmProfiles] = useState([]);
-  const [selectedLlmProfileId, setSelectedLlmProfileId] = useState("");
-  const [llmProfileName, setLlmProfileName] = useState("");
-  const [llmProfileError, setLlmProfileError] = useState("");
+  const [selectedRerankProfileId, setSelectedRerankProfileId] = useState("");
+  const [rerankProfileError, setRerankProfileError] = useState("");
   const [searchElapsedMs, setSearchElapsedMs] = useState(0);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MIN_WIDTH);
   const [cvPreviewPayload, setCvPreviewPayload] = useState(null);
@@ -267,35 +264,6 @@ export default function App() {
     sidebarWidthRef.current = sidebarWidth;
   }, [sidebarWidth]);
 
-  useEffect(() => {
-    const stored = localStorage.getItem(LLM_PROFILE_KEY);
-    if (!stored) return;
-    try {
-      const parsed = JSON.parse(stored);
-      const profiles = Array.isArray(parsed?.profiles) ? parsed.profiles : [];
-      setLlmProfiles(profiles);
-      if (typeof parsed?.lastSelectedId === "string") {
-        setSelectedLlmProfileId(parsed.lastSelectedId);
-      }
-      if (typeof parsed?.lastSelectedName === "string") {
-        setLlmProfileName(parsed.lastSelectedName);
-      }
-    } catch (err) {
-      localStorage.removeItem(LLM_PROFILE_KEY);
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(
-      LLM_PROFILE_KEY,
-      JSON.stringify({
-        profiles: llmProfiles,
-        lastSelectedId: selectedLlmProfileId,
-        lastSelectedName: llmProfileName
-      })
-    );
-  }, [llmProfiles, selectedLlmProfileId, llmProfileName]);
-
   const loadProfiles = async () => {
     setProfilesLoading(true);
     setProfilesError("");
@@ -303,6 +271,12 @@ export default function App() {
       const data = await listCvProfiles();
       const profiles = Array.isArray(data?.profiles) ? data.profiles : [];
       setCvProfiles(profiles);
+      setSelectedRerankProfileId((prev) => {
+        if (prev && profiles.some((profile) => profile.profile_id === prev)) {
+          return prev;
+        }
+        return profiles[0]?.profile_id || "";
+      });
       if (!profiles.length) {
         setSelectedProfileId("");
       } else if (!selectedProfileId) {
@@ -400,6 +374,12 @@ export default function App() {
       loadProfiles();
     }
   }, [activeView]);
+
+  useEffect(() => {
+    if (activeView === "find" && cvProfiles.length === 0 && !profilesLoading) {
+      loadProfiles();
+    }
+  }, [activeView, cvProfiles.length, profilesLoading]);
 
   useEffect(() => {
     if (!cvPreviewPayload || !cvReview) return undefined;
@@ -569,6 +549,7 @@ export default function App() {
         resumeText, wishes, searchTerm, location, searchRadiusKm,
         resultsWanted, hoursOld, isRemote, sites, fetchFullDescriptions,
         model: selectedModel,
+        lmTimeout,
         enableRerank,
         rerankTopN,
         weightEmbedding,
@@ -608,77 +589,25 @@ export default function App() {
     }
   };
 
-  const handleSaveLlmProfile = () => {
-    const name = llmProfileName.trim();
-    if (!name) {
-      setLlmProfileError("Profile name is required.");
+  const handleSelectRerankProfile = async (profileId) => {
+    setSelectedRerankProfileId(profileId || "");
+    if (!profileId) {
+      setRerankProfileError("");
       return;
     }
-    const safeId = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-    const profileId = safeId || `profile-${Date.now()}`;
-    const nextProfile = {
-      id: profileId,
-      name,
-      updatedAt: new Date().toISOString(),
-      data: {
-        resumeText,
-        wishes,
-        selectedModel,
-        lmTimeout,
-        enableRerank,
-        rerankTopN
-      }
-    };
-    setLlmProfiles((prev) => {
-      const existingIndex = prev.findIndex((profile) => profile.id === profileId);
-      if (existingIndex === -1) {
-        return [...prev, nextProfile];
-      }
-      const updated = [...prev];
-      updated[existingIndex] = nextProfile;
-      return updated;
-    });
-    setSelectedLlmProfileId(profileId);
-    setLlmProfileError("");
-  };
 
-  const handleLoadLlmProfile = (profileId) => {
-    const targetId = profileId || selectedLlmProfileId;
-    if (!targetId) {
-      setLlmProfileError("Select a profile to load.");
-      return;
+    setRerankProfileError("");
+    try {
+      const listedProfile = cvProfiles.find((profile) => profile.profile_id === profileId);
+      const profile = listedProfile || await getCvProfile(profileId);
+      const rawResume = profile?.audit?.raw_resume_text || "";
+      setResumeText(rawResume);
+      if (!rawResume.trim()) {
+        setRerankProfileError("Selected CV profile has no saved CV text.");
+      }
+    } catch (err) {
+      setRerankProfileError(err instanceof Error ? err.message : "Failed to load selected CV profile.");
     }
-    const profile = llmProfiles.find((item) => item.id === targetId);
-    if (!profile) {
-      setLlmProfileError("Selected profile was not found.");
-      return;
-    }
-    const data = profile.data || {};
-    if (typeof data.resumeText === "string") setResumeText(data.resumeText);
-    if (typeof data.wishes === "string") setWishes(data.wishes);
-    if (typeof data.selectedModel === "string") setSelectedModel(data.selectedModel);
-    if (typeof data.lmTimeout === "number") setLmTimeout(data.lmTimeout);
-    if (typeof data.enableRerank === "boolean") setEnableRerank(data.enableRerank);
-    if (typeof data.rerankTopN === "number" || data.rerankTopN === null) {
-      setRerankTopN(data.rerankTopN ?? null);
-    }
-    setLlmProfileName(profile.name || "");
-    setSelectedLlmProfileId(profile.id);
-    setLlmProfileError("");
-  };
-
-  const handleDeleteLlmProfile = () => {
-    if (!selectedLlmProfileId) {
-      setLlmProfileError("Select a profile to delete.");
-      return;
-    }
-    setLlmProfiles((prev) => prev.filter((profile) => profile.id !== selectedLlmProfileId));
-    setSelectedLlmProfileId("");
-    setLlmProfileName("");
-    setLlmProfileError("");
   };
 
   const handleLoadCache = () => {
@@ -1608,15 +1537,10 @@ export default function App() {
                 rerankTopN={rerankTopN}
                 onRerankTopNChange={setRerankTopN}
                 defaultRerankTopN={defaultRerankTopN}
-                llmProfiles={llmProfiles}
-                selectedLlmProfileId={selectedLlmProfileId}
-                onSelectedLlmProfileIdChange={setSelectedLlmProfileId}
-                llmProfileName={llmProfileName}
-                onLlmProfileNameChange={setLlmProfileName}
-                onSaveLlmProfile={handleSaveLlmProfile}
-                onLoadLlmProfile={handleLoadLlmProfile}
-                onDeleteLlmProfile={handleDeleteLlmProfile}
-                llmProfileError={llmProfileError}
+                cvProfiles={cvProfiles}
+                selectedRerankProfileId={selectedRerankProfileId}
+                onSelectedRerankProfileIdChange={handleSelectRerankProfile}
+                rerankProfileError={rerankProfileError}
                 cachedAvailable={Boolean(cachedResponse)}
                 cachedAt={cachedAt}
                 onLoadCache={handleLoadCache}
@@ -1648,8 +1572,10 @@ export default function App() {
               <section className="card">
                 <ResultsList
                   jobs={jobs}
+                  rerankRequested={response?.rerank_requested}
                   rerankApplied={response?.rerank_applied}
                   rerankTopN={response?.rerank_top_n}
+                  rerankSkipReason={response?.rerank_skip_reason}
                   onSelectJob={handleSelectJob}
                   isLoading={isLoading}
                   hasResponse={Boolean(response)}

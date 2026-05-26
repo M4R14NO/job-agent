@@ -2,8 +2,10 @@ import { Progress, Spinner } from "@chakra-ui/react";
 
 export default function ResultsList({
   jobs,
+  rerankRequested,
   rerankApplied,
   rerankTopN,
+  rerankSkipReason,
   onSelectJob,
   isLoading,
   hasResponse,
@@ -44,6 +46,11 @@ export default function ResultsList({
       )}
       {rerankApplied && rerankTopN ? (
         <p className="helper">LLM rerank applied to top {rerankTopN} results.</p>
+      ) : null}
+      {rerankRequested && !rerankApplied ? (
+        <p className="helper rerank-status-badge rerank-status-badge-warning">
+          Rerank requested but skipped{rerankSkipReason ? `: ${rerankSkipReason}` : "."}
+        </p>
       ) : null}
       {showPrompt && <p className="helper">Run a search to see results.</p>}
       {showResultsEmpty ? (

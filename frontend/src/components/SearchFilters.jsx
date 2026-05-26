@@ -37,15 +37,10 @@ export default function SearchFilters({
   rerankTopN,
   onRerankTopNChange,
   defaultRerankTopN,
-  llmProfiles,
-  selectedLlmProfileId,
-  onSelectedLlmProfileIdChange,
-  llmProfileName,
-  onLlmProfileNameChange,
-  onSaveLlmProfile,
-  onLoadLlmProfile,
-  onDeleteLlmProfile,
-  llmProfileError,
+  cvProfiles,
+  selectedRerankProfileId,
+  onSelectedRerankProfileIdChange,
+  rerankProfileError,
   cachedAvailable,
   cachedAt,
   onLoadCache,
@@ -212,7 +207,7 @@ SKILLS
 
         <details className="accordion-item">
           <summary className="accordion-button">
-            <span>LLM search refinement</span>
+            <span>LLM rerank settings</span>
             <span className="accordion-chevron">▾</span>
           </summary>
           <div className="accordion-panel">
@@ -243,31 +238,6 @@ SKILLS
                 Reorders the top results using your resume context and wishes.
               </p>
 
-              {enableRerank && (
-                <div>
-                  <label htmlFor="rerankTopN" className="label">Rerank top K</label>
-                  <input
-                    id="rerankTopN"
-                    type="number"
-                    min={1}
-                    max={50}
-                    placeholder="Auto"
-                    value={rerankTopN ?? ""}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (!value) {
-                        onRerankTopNChange(null);
-                        return;
-                      }
-                      onRerankTopNChange(Number(value));
-                    }}
-                  />
-                  <p className="helper">
-                    Auto default: {defaultRerankTopN ?? "-"} (40% of results, min 3)
-                  </p>
-                </div>
-              )}
-
               <div>
                 <label htmlFor="resume" className="label">Resume / CV text</label>
                 <textarea
@@ -294,78 +264,83 @@ SKILLS
                 <pre className="example-box">{exampleText}</pre>
               )}
 
-              <div>
-                <label htmlFor="model" className="label">LLM model</label>
-                <select
-                  id="model"
-                  value={selectedModel}
-                  onChange={(e) => onSelectedModelChange(e.target.value)}
-                  disabled={!models.length}
-                >
-                  {!models.length && <option value="">No models available</option>}
-                  {models.map((model) => (
-                    <option key={model} value={model}>{model}</option>
-                  ))}
-                </select>
-                {modelError && <p className="error">{modelError}</p>}
-              </div>
+              <details className="advanced-options" open={false}>
+                <summary className="advanced-summary">Advanced rerank options</summary>
+                <div className="filters">
+                  <div>
+                    <label htmlFor="rerankTopN" className="label">Rerank top K</label>
+                    <input
+                      id="rerankTopN"
+                      type="number"
+                      min={1}
+                      max={50}
+                      placeholder="Auto"
+                      value={rerankTopN ?? ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (!value) {
+                          onRerankTopNChange(null);
+                          return;
+                        }
+                        onRerankTopNChange(Number(value));
+                      }}
+                    />
+                    <p className="helper">
+                      Auto default: {defaultRerankTopN ?? "-"} (40% of results, min 3)
+                    </p>
+                  </div>
 
-              <div>
-                <label htmlFor="lmTimeout" className="label">LLM timeout (minutes)</label>
-                <input
-                  id="lmTimeout"
-                  type="number"
-                  min={0.5}
-                  max={10}
-                  step={0.5}
-                  value={lmTimeoutMinutes}
-                  onChange={(e) => handleLmTimeoutMinutesChange(e.target.value, Number(e.target.value))}
-                />
-                <p className="helper">Default 2 minutes for most local models.</p>
-              </div>
+                  <div>
+                    <label htmlFor="model" className="label">LLM model</label>
+                    <select
+                      id="model"
+                      value={selectedModel}
+                      onChange={(e) => onSelectedModelChange(e.target.value)}
+                      disabled={!models.length}
+                    >
+                      {!models.length && <option value="">No models available</option>}
+                      {models.map((model) => (
+                        <option key={model} value={model}>{model}</option>
+                      ))}
+                    </select>
+                    {modelError && <p className="error">{modelError}</p>}
+                  </div>
+
+                  <div>
+                    <label htmlFor="lmTimeout" className="label">LLM timeout (minutes)</label>
+                    <input
+                      id="lmTimeout"
+                      type="number"
+                      min={0.5}
+                      max={10}
+                      step={0.5}
+                      value={lmTimeoutMinutes}
+                      onChange={(e) => handleLmTimeoutMinutesChange(e.target.value, Number(e.target.value))}
+                    />
+                    <p className="helper">Default 2 minutes for most local models.</p>
+                  </div>
+                </div>
+              </details>
 
               <div className="profile-block">
-                <label className="label">Named refinement profiles</label>
+                <label className="label" htmlFor="rerankProfile">CV profile for rerank</label>
                 <div className="filters">
                   <select
-                    value={selectedLlmProfileId}
-                    onChange={(e) => onSelectedLlmProfileIdChange(e.target.value)}
+                    id="rerankProfile"
+                    value={selectedRerankProfileId}
+                    onChange={(e) => onSelectedRerankProfileIdChange(e.target.value)}
                   >
-                    <option value="">Select a profile</option>
-                    {llmProfiles.map((profile) => (
-                      <option key={profile.id} value={profile.id}>
-                        {profile.name}
+                    <option value="">Select a CV profile</option>
+                    {cvProfiles.map((profile) => (
+                      <option key={profile.profile_id} value={profile.profile_id}>
+                        {profile.profile_id}
                       </option>
                     ))}
                   </select>
-                  <input
-                    placeholder="Profile name"
-                    value={llmProfileName}
-                    onChange={(e) => onLlmProfileNameChange(e.target.value)}
-                  />
-                  <div className="profile-actions">
-                    <button className="secondary" onClick={onSaveLlmProfile} type="button">
-                      Save
-                    </button>
-                    <button className="secondary" onClick={() => onLoadLlmProfile()} type="button">
-                      Load
-                    </button>
-                    <button className="secondary" onClick={onDeleteLlmProfile} type="button">
-                      Delete
-                    </button>
-                  </div>
-                  {llmProfileError && <p className="error">{llmProfileError}</p>}
-                  <p className="helper">Saved locally in this browser.</p>
+                  {rerankProfileError && <p className="error">{rerankProfileError}</p>}
+                  <p className="helper">Selecting a profile loads its saved CV text from the shared profile store.</p>
                 </div>
               </div>
-
-              <button
-                className="secondary"
-                disabled={isSearchDisabled || needsResume}
-                onClick={onSearch}
-              >
-                Apply refinement
-              </button>
             </div>
           </div>
         </details>

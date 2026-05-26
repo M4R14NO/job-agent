@@ -92,16 +92,31 @@ def _parse_rerank_response(text: str) -> dict[int, dict]:
         return {}
 
     payload = text.strip()
-    if not payload.startswith("["):
-        start = payload.find("[")
-        end = payload.rfind("]")
-        if start != -1 and end != -1:
-            payload = payload[start : end + 1]
+    fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", payload, flags=re.IGNORECASE | re.DOTALL)
+    if fenced:
+        payload = fenced.group(1).strip()
 
+    data = None
     try:
         data = json.loads(payload)
     except json.JSONDecodeError:
-        return {}
+        start = payload.find("[")
+        end = payload.rfind("]")
+        if start != -1 and end != -1 and end > start:
+            try:
+                data = json.loads(payload[start : end + 1])
+            except json.JSONDecodeError:
+                data = None
+
+    if isinstance(data, dict):
+        if isinstance(data.get("results"), list):
+            data = data.get("results")
+        elif isinstance(data.get("items"), list):
+            data = data.get("items")
+        elif isinstance(data.get("jobs"), list):
+            data = data.get("jobs")
+        else:
+            data = [data]
 
     if not isinstance(data, list):
         return {}
@@ -127,11 +142,12 @@ def score_jobs(
     resume_text: str,
     wishes: str | None,
     model: str | None,
+    lm_timeout: float | None,
     enable_rerank: bool,
     rerank_top_n: int | None,
     weight_embedding: float,
     weight_keyword: float,
-) -> tuple[list[dict], bool, int | None]:
+) -> tuple[list[dict], bool, int | None, str | None]:
     weight_total = weight_embedding + weight_keyword
     if weight_total <= 0:
         weight_embedding = 0.8
@@ -189,6 +205,15 @@ def score_jobs(
 
     rerank_applied = False
     rerank_used = None
+    rerank_skip_reason = None
+
+    if enable_rerank and not model:
+        rerank_skip_reason = "No LLM model selected."
+    elif enable_rerank and (not jobs):
+        rerank_skip_reason = "No jobs available to rerank."
+    elif enable_rerank and (not rerank_top_n or rerank_top_n <= 0):
+        rerank_skip_reason = "Rerank top K resolved to 0."
+
     if enable_rerank and model and jobs and rerank_top_n and rerank_top_n > 0:
         top_n = min(rerank_top_n, len(jobs))
         rerank_used = top_n
@@ -200,9 +225,14 @@ def score_jobs(
             messages=messages,
             temperature=0.1,
             max_tokens=700,
+            timeout=lm_timeout,
         )
-        if not error and response:
+        if error:
+            rerank_skip_reason = f"LLM request failed: {error}"
+        elif response:
             parsed = _parse_rerank_response(response)
+            if not parsed:
+                rerank_skip_reason = "Rerank response was not valid JSON in the expected format."
             for idx, job in enumerate(rerank_candidates):
                 rerank = parsed.get(idx)
                 if not rerank:
@@ -217,6 +247,12 @@ def score_jobs(
                         job["match_reasons"] = [reason]
                     rerank_applied = True
 
+            if rerank_applied:
+                rerank_skip_reason = None
+
             jobs.sort(key=lambda item: item.get("match_score", 0), reverse=True)
 
-    return jobs, rerank_applied, rerank_used
+    if rerank_skip_reason and len(rerank_skip_reason) > 280:
+        rerank_skip_reason = f"{rerank_skip_reason[:277].rstrip()}..."
+
+    return jobs, rerank_applied, rerank_used, rerank_skip_reason

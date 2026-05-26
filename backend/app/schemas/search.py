@@ -16,6 +16,7 @@ class SearchRequest(BaseModel):
     linkedin_fetch_description: bool = False
     description_format: str = "markdown"
     model: str | None = None
+    lm_timeout: float | None = None
     enable_rerank: bool = True
     rerank_top_n: int | None = None
     precision_weight_embedding: float = 0.8
@@ -48,8 +49,10 @@ class SearchResponse(BaseModel):
     resume_length: int
     has_wishes: bool
     jobs: list[SearchJob]
+    rerank_requested: bool | None = None
     rerank_applied: bool | None = None
     rerank_top_n: int | None = None
+    rerank_skip_reason: str | None = None
 
 
 class ModelsResponse(BaseModel):

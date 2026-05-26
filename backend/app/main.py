@@ -125,11 +125,12 @@ def start_search(payload: SearchRequest) -> SearchResponse:
     else:
         rerank_top_n = 0
 
-    jobs, rerank_applied, rerank_used = score_jobs(
+    jobs, rerank_applied, rerank_used, rerank_skip_reason = score_jobs(
         jobs=jobs,
         resume_text=payload.resume_text,
         wishes=payload.wishes,
         model=payload.model,
+        lm_timeout=payload.lm_timeout,
         enable_rerank=payload.enable_rerank,
         rerank_top_n=rerank_top_n,
         weight_embedding=payload.precision_weight_embedding,
@@ -140,8 +141,10 @@ def start_search(payload: SearchRequest) -> SearchResponse:
         resume_length=len(payload.resume_text),
         has_wishes=bool(payload.wishes),
         jobs=jobs,
+        rerank_requested=payload.enable_rerank,
         rerank_applied=rerank_applied,
         rerank_top_n=rerank_used,
+        rerank_skip_reason=rerank_skip_reason,
     )
 
 
