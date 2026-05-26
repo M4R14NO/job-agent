@@ -24,6 +24,9 @@ from .schemas.search import (
     ModelsResponse,
     SearchRequest,
     SearchResponse,
+    LinkedInEnrichRequest,
+    LinkedInEnrichResponse,
+    LinkedInEnrichItem,
 )
 from .services.cv_mappers import get_deterministic_mapper, get_llm_mapper
 from .services.cv_service import (
@@ -38,6 +41,7 @@ from .services.cv_service import (
 )
 from .services.cv_storage import RevisionMismatchError, get_profile_store
 from .services.lmstudio_client import chat_completion, list_models, safe_request
+from .services.linkedin_detail_service import fetch_linkedin_job_details
 from .services.search_service import fetch_jobs
 from .services.ranking_service import score_jobs
 
@@ -98,7 +102,8 @@ def get_models() -> ModelsResponse:
 @app.post("/search", response_model=SearchResponse)
 def start_search(payload: SearchRequest) -> SearchResponse:
     search_term = payload.search_term or "software engineer"
-    sites = payload.site_name or ["indeed", "linkedin", "google"]
+    # LinkedIn-only mode keeps source behavior deterministic and enables one-pass detail enrichment.
+    sites = ["linkedin"]
 
     jobs = fetch_jobs(
         site_name=sites,
@@ -145,6 +150,27 @@ def start_search(payload: SearchRequest) -> SearchResponse:
         rerank_applied=rerank_applied,
         rerank_top_n=rerank_used,
         rerank_skip_reason=rerank_skip_reason,
+    )
+
+
+@app.post("/search/linkedin/enrich", response_model=LinkedInEnrichResponse)
+def enrich_linkedin_details(payload: LinkedInEnrichRequest) -> LinkedInEnrichResponse:
+    jobs = [job.model_dump() for job in payload.jobs]
+    results = fetch_linkedin_job_details(
+        jobs,
+        timeout_seconds=payload.timeout_seconds or 8.0,
+    )
+    return LinkedInEnrichResponse(
+        items=[
+            LinkedInEnrichItem(
+                job_url=result.job_url,
+                job_id=result.job_id,
+                description=result.description,
+                status=result.status,
+                error=result.error,
+            )
+            for result in results
+        ]
     )
 
 

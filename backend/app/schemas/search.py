@@ -55,6 +55,27 @@ class SearchResponse(BaseModel):
     rerank_skip_reason: str | None = None
 
 
+class LinkedInEnrichJob(BaseModel):
+    job_url: str
+
+
+class LinkedInEnrichRequest(BaseModel):
+    jobs: list[LinkedInEnrichJob]
+    timeout_seconds: float | None = Field(default=8.0, gt=0, le=30)
+
+
+class LinkedInEnrichItem(BaseModel):
+    job_url: str
+    job_id: str | None = None
+    description: str | None = None
+    status: str
+    error: str | None = None
+
+
+class LinkedInEnrichResponse(BaseModel):
+    items: list[LinkedInEnrichItem]
+
+
 class ModelsResponse(BaseModel):
     models: list[str]
 

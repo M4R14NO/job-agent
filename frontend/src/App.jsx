@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { searchJobs } from "./api/search";
+import { enrichLinkedInJobs, searchJobs } from "./api/search";
 import {
   fetchModels,
   getCvProfile,
@@ -121,6 +121,66 @@ const mergeResponseStable = (previous, incoming, options = {}) => {
   };
 };
 
+const mergeLinkedInEnrichedJobs = (previous, enrichItems) => {
+  if (!previous || !Array.isArray(previous.jobs) || !Array.isArray(enrichItems)) {
+    return previous;
+  }
+
+  const enrichByUrl = new Map(
+    enrichItems
+      .filter((item) => item)
+      .map((item) => [String(item.job_url || "").trim(), item])
+      .filter(([jobUrl]) => jobUrl)
+  );
+
+  if (!enrichByUrl.size) {
+    return previous;
+  }
+
+  const jobs = previous.jobs.map((job) => {
+    const jobUrl = String(job?.job_url || "").trim();
+    const item = enrichByUrl.get(jobUrl);
+    if (!item) {
+      return job;
+    }
+
+    const hadDescription = String(job.description || job.job_description || "").trim().length > 0;
+    const nextDescription = String(item.description || "").trim();
+
+    if (item.status === "ok" && nextDescription) {
+      return {
+        ...job,
+        description: nextDescription,
+        job_description: nextDescription,
+        _detailsFetched: true,
+        _detailsStatus: "ok",
+        _detailsError: null,
+        _enrichedAt: hadDescription ? (job._enrichedAt ?? null) : Date.now(),
+      };
+    }
+
+    return {
+      ...job,
+      _detailsFetched: false,
+      _detailsStatus: item.status || "error",
+      _detailsError: item.error || null,
+    };
+  });
+
+  return {
+    ...previous,
+    jobs,
+  };
+};
+
+const isTransientDetailsFailure = (item) => {
+  if (!item) return false;
+  if (item.status === "timeout") return true;
+  if (item.status !== "http_error") return false;
+  const msg = String(item.error || "");
+  return /HTTP\s(429|502|503|504)/i.test(msg);
+};
+
 const normalizeHexColor = (value, fallback = null) => {
   const raw = String(value || "").trim();
   const normalized = raw.startsWith("#") ? raw : `#${raw}`;
@@ -153,7 +213,6 @@ export default function App() {
   const [resultsWanted, setResultsWanted] = useState(10);
   const [hoursOld, setHoursOld] = useState(72);
   const [isRemote, setIsRemote] = useState(false);
-  const [sites, setSites] = useState(["indeed", "linkedin", "google"]);
   const [fetchFullDescriptions, setFetchFullDescriptions] = useState(false);
   const [response, setResponse] = useState(null);
   const [error, setError] = useState("");
@@ -627,7 +686,6 @@ export default function App() {
         if (typeof parsed.resultsWanted === "number") setResultsWanted(parsed.resultsWanted);
         if (typeof parsed.hoursOld === "number") setHoursOld(parsed.hoursOld);
         if (typeof parsed.isRemote === "boolean") setIsRemote(parsed.isRemote);
-        if (Array.isArray(parsed.sites)) setSites(parsed.sites);
         if (typeof parsed.fetchFullDescriptions === "boolean") setFetchFullDescriptions(parsed.fetchFullDescriptions);
         if (typeof parsed.selectedModel === "string") setSelectedModel(parsed.selectedModel);
         if (typeof parsed.lmTimeout === "number") setLmTimeout(parsed.lmTimeout);
@@ -659,7 +717,7 @@ export default function App() {
       resultsWanted,
       hoursOld,
       isRemote,
-      sites,
+      sites: ["linkedin"],
       model: selectedModel,
       lmTimeout,
       rerankTopN,
@@ -671,51 +729,97 @@ export default function App() {
     setError("");
     setResponse(null);
     setSearchPhaseMessage(fetchFullDescriptions
-      ? `Batch search started (size ${SEARCH_BATCH_SIZE}): quick pass first...`
+      ? "Loading LinkedIn results..."
       : "Searching job boards...");
 
     try {
       let finalData = null;
 
       if (fetchFullDescriptions) {
-        const totalWanted = Math.max(1, Number(resultsWanted) || 1);
-        const batchTargets = [];
-        for (let next = SEARCH_BATCH_SIZE; next < totalWanted; next += SEARCH_BATCH_SIZE) {
-          batchTargets.push(next);
+        const quickData = await searchJobs({
+          ...baseInput,
+          fetchFullDescriptions: false,
+          enableRerank: false
+        }, { signal: abortController.signal });
+        if (requestId !== searchRequestIdRef.current) return;
+
+        finalData = mergeResponseStable(null, quickData);
+        setResponse(finalData);
+
+        const jobsNeedingDetails = (finalData.jobs || [])
+          .filter((job) => String(job.site || "").toLowerCase() === "linkedin")
+          .filter((job) => (job.description || job.job_description || "").trim().length === 0)
+          .filter((job) => String(job.job_url || "").trim().length > 0);
+
+        const totalNeedingDetails = jobsNeedingDetails.length;
+        const totalBatches = Math.ceil(totalNeedingDetails / SEARCH_BATCH_SIZE);
+        const retriedUrls = new Set();
+
+        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
+          const start = batchIndex * SEARCH_BATCH_SIZE;
+          const end = Math.min(start + SEARCH_BATCH_SIZE, totalNeedingDetails);
+          const batch = jobsNeedingDetails.slice(start, end);
+          const batchLabel = `${batchIndex + 1}/${totalBatches}`;
+
+          setSearchPhaseMessage(
+            `Batch ${batchLabel}: enriching ${end}/${totalNeedingDetails} LinkedIn jobs...`
+          );
+
+          const enrichedItems = await enrichLinkedInJobs(
+            batch.map((job) => ({ job_url: job.job_url })),
+            { signal: abortController.signal }
+          );
+          if (requestId !== searchRequestIdRef.current) return;
+
+          const retryCandidates = enrichedItems.filter((item) => {
+            const jobUrl = String(item?.job_url || "").trim();
+            if (!jobUrl || retriedUrls.has(jobUrl)) return false;
+            return isTransientDetailsFailure(item);
+          });
+
+          let finalEnrichedItems = enrichedItems;
+          if (retryCandidates.length > 0) {
+            retryCandidates.forEach((item) => {
+              retriedUrls.add(String(item.job_url || "").trim());
+            });
+
+            setSearchPhaseMessage(
+              `Batch ${batchLabel}: retrying ${retryCandidates.length} transient detail fetches...`
+            );
+
+            const retriedItems = await enrichLinkedInJobs(
+              retryCandidates.map((item) => ({ job_url: item.job_url })),
+              { signal: abortController.signal }
+            );
+            if (requestId !== searchRequestIdRef.current) return;
+
+            const retriedByUrl = new Map(
+              retriedItems
+                .map((item) => [String(item.job_url || "").trim(), item])
+                .filter(([jobUrl]) => jobUrl)
+            );
+
+            finalEnrichedItems = enrichedItems.map((item) => {
+              const jobUrl = String(item?.job_url || "").trim();
+              return retriedByUrl.get(jobUrl) || item;
+            });
+          }
+
+          finalData = mergeLinkedInEnrichedJobs(finalData, finalEnrichedItems);
+          setResponse((prev) => mergeLinkedInEnrichedJobs(prev, finalEnrichedItems));
         }
-        batchTargets.push(totalWanted);
 
-        for (let batchIndex = 0; batchIndex < batchTargets.length; batchIndex += 1) {
-          const targetCount = batchTargets[batchIndex];
-          const batchLabel = `${batchIndex + 1}/${batchTargets.length}`;
-
-          setSearchPhaseMessage(
-            `Batch ${batchLabel}: loading top ${targetCount} without descriptions...`
-          );
-          const quickData = await searchJobs({
+        if (enableRerank) {
+          setSearchPhaseMessage("Applying rerank on LinkedIn results...");
+          const rerankData = await searchJobs({
             ...baseInput,
-            resultsWanted: targetCount,
             fetchFullDescriptions: false,
-            enableRerank: false
+            enableRerank: true
           }, { signal: abortController.signal });
           if (requestId !== searchRequestIdRef.current) return;
 
-          setResponse((prev) => mergeResponseStable(prev, quickData, { preserveRichDetails: true }));
-
-          const isFinalBatch = batchIndex === batchTargets.length - 1;
-          setSearchPhaseMessage(
-            `Batch ${batchLabel}: enriching top ${targetCount} with full descriptions${isFinalBatch && enableRerank ? " and rerank" : ""}...`
-          );
-          const detailedData = await searchJobs({
-            ...baseInput,
-            resultsWanted: targetCount,
-            fetchFullDescriptions: true,
-            enableRerank: isFinalBatch ? enableRerank : false
-          }, { signal: abortController.signal });
-          if (requestId !== searchRequestIdRef.current) return;
-
-          finalData = mergeResponseStable(finalData || quickData, detailedData);
-          setResponse((prev) => mergeResponseStable(prev, detailedData));
+          finalData = mergeResponseStable(finalData, rerankData, { preserveRichDetails: true });
+          setResponse((prev) => mergeResponseStable(prev, rerankData, { preserveRichDetails: true }));
         }
       } else {
         const data = await searchJobs({
@@ -745,7 +849,7 @@ export default function App() {
           resultsWanted,
           hoursOld,
           isRemote,
-          sites,
+          sites: ["linkedin"],
           fetchFullDescriptions,
           selectedModel,
           lmTimeout,
@@ -1702,7 +1806,6 @@ export default function App() {
                 resultsWanted={resultsWanted} onResultsWantedChange={setResultsWanted}
                 hoursOld={hoursOld} onHoursOldChange={setHoursOld}
                 isRemote={isRemote} onIsRemoteChange={setIsRemote}
-                sites={sites} onSitesChange={setSites}
                 fetchFullDescriptions={fetchFullDescriptions} onFetchFullDescriptionsChange={setFetchFullDescriptions}
                 resumeText={resumeText} onResumeTextChange={setResumeText}
                 wishes={wishes} onWishesChange={setWishes}

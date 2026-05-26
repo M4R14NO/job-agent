@@ -1,11 +1,5 @@
 import { useEffect, useState } from "react";
 
-const SITES = [
-  { id: "indeed", label: "Indeed" },
-  { id: "linkedin", label: "LinkedIn" },
-  { id: "google", label: "Google" }
-];
-
 const TIME_FILTERS = [
   { label: "Last day", value: 24 },
   { label: "Last 3 days", value: 72 },
@@ -21,7 +15,6 @@ export default function SearchFilters({
   resultsWanted, onResultsWantedChange,
   hoursOld, onHoursOldChange,
   isRemote, onIsRemoteChange,
-  sites, onSitesChange,
   fetchFullDescriptions, onFetchFullDescriptionsChange,
   resumeText, onResumeTextChange,
   wishes, onWishesChange,
@@ -51,12 +44,6 @@ export default function SearchFilters({
 }) {
   const [showExample, setShowExample] = useState(false);
   const [isRerankModalOpen, setIsRerankModalOpen] = useState(false);
-
-  function handleSiteToggle(id, checked) {
-    onSitesChange(
-      checked ? [...sites, id] : sites.filter((s) => s !== id)
-    );
-  }
 
   const isSearchDisabled = isLoading;
   const needsResume = enableRerank && !resumeText.trim();
@@ -196,19 +183,8 @@ SKILLS
                 </select>
               </div>
               <div className="site-group">
-                <span className="label">Sites</span>
-                <div className="site-options">
-                  {SITES.map((site) => (
-                    <label key={site.id} className="checkbox small">
-                      <input
-                        type="checkbox"
-                        checked={sites.includes(site.id)}
-                        onChange={(e) => handleSiteToggle(site.id, e.target.checked)}
-                      />
-                      {site.label}
-                    </label>
-                  ))}
-                </div>
+                <span className="label">Site</span>
+                <p className="helper">LinkedIn only</p>
               </div>
               <label className="checkbox">
                 <input

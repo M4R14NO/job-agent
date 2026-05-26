@@ -15,6 +15,17 @@ export default function ResultsList({
   const showResultsEmpty = hasResponse && jobs.length === 0 && !isLoading;
   const showPrompt = !hasResponse && !isLoading;
 
+  const formatDetailsStatus = (job) => {
+    const status = String(job?._detailsStatus || "").trim();
+    if (!status || status === "ok" || status === "pending") return null;
+    if (status === "not_found") return "details unavailable (not_found)";
+    if (status === "timeout") return "details unavailable (timed out)";
+    if (status === "http_error") return `details unavailable (${job?._detailsError || "http_error"})`;
+    if (status === "skipped_duplicate") return "details unavailable (skipped_duplicate)";
+    if (status === "invalid") return "details unavailable (invalid job url)";
+    return `details unavailable (${status})`;
+  };
+
   return (
     <div className="results">
       <div className="results-header">
@@ -76,6 +87,9 @@ export default function ResultsList({
               ) : null}
               {job.rerank_score != null && job.match_reasons?.[0] ? (
                 <p className="helper">Rerank reason: {job.match_reasons[0]}</p>
+              ) : null}
+              {!hasDetails && formatDetailsStatus(job) ? (
+                <p className="helper details-unavailable">{formatDetailsStatus(job)}</p>
               ) : null}
               <div className="job-meta">
                 <span>{job.company}</span>
