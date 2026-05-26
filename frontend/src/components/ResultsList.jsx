@@ -6,6 +6,7 @@ export default function ResultsList({
   rerankApplied,
   rerankTopN,
   rerankSkipReason,
+  searchPhaseMessage,
   onSelectJob,
   isLoading,
   hasResponse,
@@ -23,7 +24,7 @@ export default function ResultsList({
       {isLoading && (
         <div className="results-loading">
           <Spinner size="sm" color="blue.500" />
-          <span>Searching job boards. This can take a minute.</span>
+          <span>{searchPhaseMessage || "Searching job boards. This can take a minute."}</span>
         </div>
       )}
       {refinementProgress && (
@@ -57,17 +58,22 @@ export default function ResultsList({
         <p className="empty">No jobs found yet.</p>
       ) : jobs.length > 0 ? (
         <ul className="job-list">
-          {jobs.map((job, index) => (
+          {jobs.map((job, index) => {
+            const hasDetails = (job.description || job.job_description || "").trim().length > 0;
+
+            return (
             <li key={`${job.job_url ?? "job"}-${index}`}>
-              <div className="job-title">{job.title}</div>
-              <div className="job-rank">
-                <span className="badge">
-                  Match: {job.match_score ?? "pending"}
-                </span>
-                {job.rerank_score != null && (
-                  <span className="badge badge-alt">Rerank: {job.rerank_score}</span>
+              <div className="job-title">
+                {job.title}
+                {job._enrichedAt != null && (
+                  <span className="fresh-dot" title="Just enriched with full details" />
                 )}
               </div>
+              {job.rerank_score != null ? (
+                <div className="job-rank">
+                  <span className="badge badge-alt">Rerank: {job.rerank_score}</span>
+                </div>
+              ) : null}
               {job.rerank_score != null && job.match_reasons?.[0] ? (
                 <p className="helper">Rerank reason: {job.match_reasons[0]}</p>
               ) : null}
@@ -77,12 +83,14 @@ export default function ResultsList({
                 <span>{job.site}</span>
               </div>
               <div className="job-actions">
-                <button
-                  className="secondary"
-                  onClick={() => onSelectJob(job)}
-                >
-                  View details
-                </button>
+                {hasDetails ? (
+                  <button
+                    className="primary btn-sm job-details-btn"
+                    onClick={() => onSelectJob(job)}
+                  >
+                    View details
+                  </button>
+                ) : null}
                 {job.job_url && (
                   <a
                     className="job-link"
@@ -95,7 +103,8 @@ export default function ResultsList({
                 )}
               </div>
             </li>
-          ))}
+          );
+          })}
         </ul>
       ) : null}
     </div>

@@ -72,6 +72,7 @@ body {
   padding: 24px;
   display: grid;
   gap: 6px;
+  align-content: start;
   overflow-y: auto;
   height: 100%;
   position: relative;
@@ -88,19 +89,24 @@ body {
 }
 
 .sidebar-section {
-  border-bottom: 1px solid #ececec;
+  border-bottom: none;
   padding-bottom: 0;
-  margin-bottom: 2px;
+  margin-bottom: 0;
 }
 
 .sidebar-section .field-grid {
-  margin-bottom: 2px;
+  margin-bottom: 0;
 }
 
 .filters-accordion {
   display: grid;
   gap: 4px;
   margin-top: 0;
+}
+
+.rerank-modal-launch {
+  margin: 0 0 2px;
+  justify-self: start;
 }
 
 .filters-accordion details {
@@ -1471,6 +1477,25 @@ select {
 
 .job-title {
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@keyframes freshFade {
+  0%   { opacity: 1; }
+  60%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.fresh-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: freshFade 3s ease-out forwards;
 }
 
 .job-rank {
@@ -1542,6 +1567,11 @@ select {
   gap: 16px;
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.2);
   z-index: 1;
+}
+
+.rerank-modal-card {
+  width: min(900px, 94vw);
+  min-height: 320px;
 }
 
 body.modal-open {

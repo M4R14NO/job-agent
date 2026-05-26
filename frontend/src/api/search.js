@@ -5,11 +5,12 @@ import {
 
 const SEARCH_API_URL = "http://localhost:8000/search";
 
-export async function searchJobs(input) {
+export async function searchJobs(input, options = {}) {
   const response = await fetch(SEARCH_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(buildSearchRequest(input))
+    body: JSON.stringify(buildSearchRequest(input)),
+    signal: options.signal
   });
 
   if (!response.ok) {

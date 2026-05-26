@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const SITES = [
   { id: "indeed", label: "Indeed" },
@@ -50,6 +50,7 @@ export default function SearchFilters({
   onSearch
 }) {
   const [showExample, setShowExample] = useState(false);
+  const [isRerankModalOpen, setIsRerankModalOpen] = useState(false);
 
   function handleSiteToggle(id, checked) {
     onSitesChange(
@@ -79,6 +80,21 @@ SKILLS
     const clamped = Math.min(Math.max(nextMinutes, 0.5), 10);
     onLmTimeoutChange(Math.round(clamped * 60));
   };
+
+  useEffect(() => {
+    if (!isRerankModalOpen) return undefined;
+    document.body.classList.add("modal-open");
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsRerankModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.classList.remove("modal-open");
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isRerankModalOpen]);
 
   return (
     <>
@@ -137,6 +153,14 @@ SKILLS
           Remote only
         </label>
       </div>
+
+      <button
+        className="secondary rerank-modal-launch"
+        type="button"
+        onClick={() => setIsRerankModalOpen(true)}
+      >
+        Open LLM rerank settings
+      </button>
 
       <div className="filters-accordion">
         <details className="accordion-item">
@@ -204,13 +228,26 @@ SKILLS
             </div>
           </div>
         </details>
+      </div>
 
-        <details className="accordion-item">
-          <summary className="accordion-button">
-            <span>LLM rerank settings</span>
-            <span className="accordion-chevron">▾</span>
-          </summary>
-          <div className="accordion-panel">
+      {isRerankModalOpen && (
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="rerank-settings-title">
+          <div className="modal-backdrop" onClick={() => setIsRerankModalOpen(false)} />
+          <div className="modal-card rerank-modal-card">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">LLM refinement</p>
+                <h2 id="rerank-settings-title">LLM rerank settings</h2>
+              </div>
+              <button
+                className="ghost"
+                type="button"
+                onClick={() => setIsRerankModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+
             <div className="filters">
               <div>
                 <label htmlFor="wishes" className="label">Job wishes</label>
@@ -343,8 +380,8 @@ SKILLS
               </div>
             </div>
           </div>
-        </details>
-      </div>
+        </div>
+      )}
 
       <button
         className="primary sidebar-primary"

@@ -22,11 +22,103 @@ const CACHE_KEY = "job-agent:search-response";
 const SIDEBAR_WIDTH_KEY = "job-agent:sidebar-width";
 const SIDEBAR_MIN_WIDTH = 360;
 const SIDEBAR_MAX_WIDTH = 720;
+const SEARCH_BATCH_SIZE = 4;
 const PDF_PREVIEW_DEBOUNCE_MS = 5000;
 const CANONICAL_SCHEMA_VERSION = "v1";
 const DEFAULT_TEMPLATE_THEME_COLORS = {
   awesomecv: "#C0392B",
   hipstercv: "#496E8C"
+};
+
+const getJobStableId = (job, fallbackIndex = 0) => {
+  if (!job || typeof job !== "object") return `job-${fallbackIndex}`;
+  const jobUrl = String(job.job_url || "").trim();
+  if (jobUrl) return `url:${jobUrl}`;
+  const title = String(job.title || "").trim().toLowerCase();
+  const company = String(job.company || job.company_name || "").trim().toLowerCase();
+  const location = String(job.location || "").trim().toLowerCase();
+  const site = String(job.site || "").trim().toLowerCase();
+  return `sig:${title}|${company}|${location}|${site}|${fallbackIndex}`;
+};
+
+const mergeResponseStable = (previous, incoming, options = {}) => {
+  const preserveRichDetails = Boolean(options.preserveRichDetails);
+  if (!incoming || !Array.isArray(incoming.jobs)) {
+    return incoming;
+  }
+
+  const prevJobs = Array.isArray(previous?.jobs) ? previous.jobs : [];
+  const prevKeys = new Set(prevJobs.map((job, index) => getJobStableId(job, index)));
+  const incomingByKey = new Map(
+    incoming.jobs.map((job, index) => [getJobStableId(job, index), job])
+  );
+
+  const mergedJobs = [];
+  prevJobs.forEach((job, index) => {
+    const key = getJobStableId(job, index);
+    const next = incomingByKey.get(key);
+    if (!next) {
+      mergedJobs.push(job);
+      return;
+    }
+
+    const merged = { ...job, ...next };
+
+    // mark rows that just received their description for the first time (detailed pass)
+    if (!preserveRichDetails) {
+      const hadDescription = (job.description || "").trim().length > 0;
+      const nowHasDescription = (next.description || "").trim().length > 0;
+      if (!hadDescription && nowHasDescription) {
+        merged._enrichedAt = Date.now();
+      } else {
+        merged._enrichedAt = job._enrichedAt ?? null;
+      }
+    }
+
+    if (preserveRichDetails) {
+      const prevDescription = String(job.description || "");
+      const nextDescription = String(next.description || "");
+      if (prevDescription.length > nextDescription.length) {
+        merged.description = job.description;
+      }
+
+      const prevJobDescription = String(job.job_description || "");
+      const nextJobDescription = String(next.job_description || "");
+      if (prevJobDescription.length > nextJobDescription.length) {
+        merged.job_description = job.job_description;
+      }
+
+      const prevSnippet = String(job.snippet || "");
+      const nextSnippet = String(next.snippet || "");
+      if (prevSnippet.length > nextSnippet.length) {
+        merged.snippet = job.snippet;
+      }
+
+      if (job.rerank_score != null && next.rerank_score == null) {
+        merged.rerank_score = job.rerank_score;
+      }
+
+      const nextReasons = Array.isArray(next.match_reasons) ? next.match_reasons : [];
+      const prevReasons = Array.isArray(job.match_reasons) ? job.match_reasons : [];
+      if (prevReasons.length > nextReasons.length) {
+        merged.match_reasons = prevReasons;
+      }
+    }
+
+    mergedJobs.push(merged);
+  });
+
+  incoming.jobs.forEach((job, index) => {
+    const key = getJobStableId(job, index);
+    if (!prevKeys.has(key)) {
+      mergedJobs.push(job);
+    }
+  });
+
+  return {
+    ...incoming,
+    jobs: mergedJobs,
+  };
 };
 
 const normalizeHexColor = (value, fallback = null) => {
@@ -124,6 +216,7 @@ export default function App() {
   const [selectedRerankProfileId, setSelectedRerankProfileId] = useState("");
   const [rerankProfileError, setRerankProfileError] = useState("");
   const [searchElapsedMs, setSearchElapsedMs] = useState(0);
+  const [searchPhaseMessage, setSearchPhaseMessage] = useState("");
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MIN_WIDTH);
   const [cvPreviewPayload, setCvPreviewPayload] = useState(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
@@ -139,6 +232,8 @@ export default function App() {
   const pdfPreviewStructureRef = useRef("");
   const pdfPreviewRequestVersionRef = useRef(0);
   const cvDraftHashRef = useRef("");
+  const searchRequestIdRef = useRef(0);
+  const searchAbortControllerRef = useRef(null);
   const isResizingSidebarRef = useRef(false);
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(SIDEBAR_MIN_WIDTH);
@@ -459,6 +554,12 @@ export default function App() {
     };
   }, [isLoading]);
 
+  useEffect(() => () => {
+    if (searchAbortControllerRef.current) {
+      searchAbortControllerRef.current.abort();
+    }
+  }, []);
+
   useEffect(() => {
     if (!isRemappingProfileCvText) {
       setCvRemapElapsedMs(0);
@@ -541,27 +642,101 @@ export default function App() {
   }, []);
 
   const handleSearch = async () => {
+    const requestId = searchRequestIdRef.current + 1;
+    searchRequestIdRef.current = requestId;
+    if (searchAbortControllerRef.current) {
+      searchAbortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    searchAbortControllerRef.current = abortController;
+
+    const baseInput = {
+      resumeText,
+      wishes,
+      searchTerm,
+      location,
+      searchRadiusKm,
+      resultsWanted,
+      hoursOld,
+      isRemote,
+      sites,
+      model: selectedModel,
+      lmTimeout,
+      rerankTopN,
+      weightEmbedding,
+      weightKeyword
+    };
+
     setIsLoading(true);
     setError("");
     setResponse(null);
+    setSearchPhaseMessage(fetchFullDescriptions
+      ? `Batch search started (size ${SEARCH_BATCH_SIZE}): quick pass first...`
+      : "Searching job boards...");
+
     try {
-      const data = await searchJobs({
-        resumeText, wishes, searchTerm, location, searchRadiusKm,
-        resultsWanted, hoursOld, isRemote, sites, fetchFullDescriptions,
-        model: selectedModel,
-        lmTimeout,
-        enableRerank,
-        rerankTopN,
-        weightEmbedding,
-        weightKeyword
-      });
-      setResponse(data);
+      let finalData = null;
+
+      if (fetchFullDescriptions) {
+        const totalWanted = Math.max(1, Number(resultsWanted) || 1);
+        const batchTargets = [];
+        for (let next = SEARCH_BATCH_SIZE; next < totalWanted; next += SEARCH_BATCH_SIZE) {
+          batchTargets.push(next);
+        }
+        batchTargets.push(totalWanted);
+
+        for (let batchIndex = 0; batchIndex < batchTargets.length; batchIndex += 1) {
+          const targetCount = batchTargets[batchIndex];
+          const batchLabel = `${batchIndex + 1}/${batchTargets.length}`;
+
+          setSearchPhaseMessage(
+            `Batch ${batchLabel}: loading top ${targetCount} without descriptions...`
+          );
+          const quickData = await searchJobs({
+            ...baseInput,
+            resultsWanted: targetCount,
+            fetchFullDescriptions: false,
+            enableRerank: false
+          }, { signal: abortController.signal });
+          if (requestId !== searchRequestIdRef.current) return;
+
+          setResponse((prev) => mergeResponseStable(prev, quickData, { preserveRichDetails: true }));
+
+          const isFinalBatch = batchIndex === batchTargets.length - 1;
+          setSearchPhaseMessage(
+            `Batch ${batchLabel}: enriching top ${targetCount} with full descriptions${isFinalBatch && enableRerank ? " and rerank" : ""}...`
+          );
+          const detailedData = await searchJobs({
+            ...baseInput,
+            resultsWanted: targetCount,
+            fetchFullDescriptions: true,
+            enableRerank: isFinalBatch ? enableRerank : false
+          }, { signal: abortController.signal });
+          if (requestId !== searchRequestIdRef.current) return;
+
+          finalData = mergeResponseStable(finalData || quickData, detailedData);
+          setResponse((prev) => mergeResponseStable(prev, detailedData));
+        }
+      } else {
+        const data = await searchJobs({
+          ...baseInput,
+          fetchFullDescriptions,
+          enableRerank
+        }, { signal: abortController.signal });
+        if (requestId !== searchRequestIdRef.current) return;
+
+        finalData = mergeResponseStable(null, data);
+        setResponse((prev) => mergeResponseStable(prev, data));
+      }
+
+      if (!finalData) return;
+
       const savedAt = new Date().toISOString();
       sessionStorage.setItem(
         CACHE_KEY,
         JSON.stringify({
           savedAt,
-          response: data,
+          response: finalData,
           resumeText,
           wishes,
           searchTerm,
@@ -580,12 +755,18 @@ export default function App() {
           weightKeyword
         })
       );
-      setCachedResponse(data);
+      setCachedResponse(finalData);
       setCachedAt(savedAt);
     } catch (err) {
+      if (err?.name === "AbortError") {
+        return;
+      }
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
-      setIsLoading(false);
+      if (requestId === searchRequestIdRef.current) {
+        setIsLoading(false);
+        setSearchPhaseMessage("");
+      }
     }
   };
 
@@ -1576,6 +1757,7 @@ export default function App() {
                   rerankApplied={response?.rerank_applied}
                   rerankTopN={response?.rerank_top_n}
                   rerankSkipReason={response?.rerank_skip_reason}
+                  searchPhaseMessage={searchPhaseMessage}
                   onSelectJob={handleSelectJob}
                   isLoading={isLoading}
                   hasResponse={Boolean(response)}
