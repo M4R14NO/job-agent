@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import httpx
 from bs4 import BeautifulSoup
+from markdownify import markdownify
 
 LINKEDIN_JOB_ID_RE = re.compile(r"/jobs/view/(?P<job_id>\d+)")
 
@@ -34,13 +35,13 @@ def _extract_description_from_html(html: str) -> str | None:
     if container is None:
         return None
 
-    text = container.get_text("\n", strip=True)
-    if not text:
+    markdown = markdownify(str(container), heading_style="ATX")
+    if not markdown:
         return None
 
-    # Keep line breaks but collapse excessive whitespace-only lines.
-    lines = [line.strip() for line in text.splitlines()]
-    cleaned = "\n".join(line for line in lines if line)
+    # Keep semantic markdown while removing excessive empty lines.
+    lines = [line.rstrip() for line in markdown.splitlines()]
+    cleaned = "\n".join(lines).strip()
     return cleaned or None
 
 

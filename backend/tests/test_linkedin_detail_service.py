@@ -11,7 +11,7 @@ def test_fetch_linkedin_job_details_skips_duplicate_urls(monkeypatch):
     calls = []
 
     class FakeResponse:
-        text = '<div class="show-more-less-html__markup">Line 1<br/>Line 2</div>'
+        text = '<div class="show-more-less-html__markup"><p>Line 1</p><p>Line 2</p></div>'
 
         def raise_for_status(self):
             return None
@@ -42,8 +42,47 @@ def test_fetch_linkedin_job_details_skips_duplicate_urls(monkeypatch):
     assert len(calls) == 1
     assert len(results) == 2
     assert results[0].status == "ok"
-    assert results[0].description == "Line 1\nLine 2"
+    assert "Line 1" in (results[0].description or "")
+    assert "Line 2" in (results[0].description or "")
     assert results[1].status == "skipped_duplicate"
+
+
+def test_fetch_linkedin_job_details_preserves_markdown_list(monkeypatch):
+    class FakeResponse:
+        text = (
+            '<div class="show-more-less-html__markup">'
+            '<h3>What You\'ll Do</h3>'
+            '<ul><li>Build models</li><li>Ship features</li></ul>'
+            '</div>'
+        )
+
+        def raise_for_status(self):
+            return None
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            return None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return None
+
+        def get(self, url):
+            return FakeResponse()
+
+    monkeypatch.setattr(linkedin_detail_service.httpx, "Client", FakeClient)
+
+    results = linkedin_detail_service.fetch_linkedin_job_details([
+        {"job_url": "https://www.linkedin.com/jobs/view/1234567890/"}
+    ])
+
+    assert len(results) == 1
+    assert results[0].status == "ok"
+    description = results[0].description or ""
+    assert "What You'll Do" in description
+    assert "* Build models" in description or "- Build models" in description
 
 
 def test_fetch_linkedin_job_details_marks_timeout(monkeypatch):
