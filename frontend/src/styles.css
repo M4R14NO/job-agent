@@ -2679,6 +2679,15 @@ body.modal-open .pdf-preview-iframe {
   margin-right: 6px;
 }
 
+.pdf-preview-hipster-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-start;
+  align-items: center;
+  width: 100%;
+}
+
 .pdf-preview-template-control {
   display: inline-flex;
   align-items: center;

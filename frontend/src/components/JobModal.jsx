@@ -121,6 +121,12 @@ export function PdfPreviewCard({
   onThemeColorChange,
   showProfileImage,
   onShowProfileImageChange,
+  hipsterHeaderAlign,
+  onHipsterHeaderAlignChange,
+  hipsterHeaderTitleSize,
+  onHipsterHeaderTitleSizeChange,
+  hipsterHeaderSubtitleSize,
+  onHipsterHeaderSubtitleSizeChange,
   onUpdate,
   onDownload,
   disabled = false,
@@ -240,6 +246,50 @@ export function PdfPreviewCard({
               {isDownloading ? "Downloading…" : "Download PDF"}
             </button>
           </div>
+          {templateId === "hipstercv" && (
+            <div className="pdf-preview-hipster-controls-row">
+              <div className="pdf-preview-template-control">
+                <span className="pdf-preview-template-label">Text align</span>
+                <select
+                  className="pdf-preview-template-select"
+                  value={hipsterHeaderAlign || "right"}
+                  onChange={(event) => onHipsterHeaderAlignChange?.(event.target.value)}
+                  disabled={disabled || isGenerating}
+                >
+                  <option value="left">Left</option>
+                  <option value="center">Center</option>
+                  <option value="right">Right</option>
+                </select>
+              </div>
+              <div className="pdf-preview-template-control">
+                <span className="pdf-preview-template-label">Title size</span>
+                <select
+                  className="pdf-preview-template-select"
+                  value={hipsterHeaderTitleSize || "Huge"}
+                  onChange={(event) => onHipsterHeaderTitleSizeChange?.(event.target.value)}
+                  disabled={disabled || isGenerating}
+                >
+                  <option value="Large">Large</option>
+                  <option value="LARGE">LARGE</option>
+                  <option value="huge">huge</option>
+                  <option value="Huge">Huge</option>
+                </select>
+              </div>
+              <div className="pdf-preview-template-control">
+                <span className="pdf-preview-template-label">Subtitle size</span>
+                <select
+                  className="pdf-preview-template-select"
+                  value={hipsterHeaderSubtitleSize || "Large"}
+                  onChange={(event) => onHipsterHeaderSubtitleSizeChange?.(event.target.value)}
+                  disabled={disabled || isGenerating}
+                >
+                  <option value="normalsize">Normal</option>
+                  <option value="large">large</option>
+                  <option value="Large">Large</option>
+                </select>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <div className="pdf-preview-container">

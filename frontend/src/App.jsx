@@ -47,7 +47,10 @@ const EMPTY_APPLICATION_CONTEXT = {
   job_url: "",
   profile_image: "",
   theme_color: "",
-  show_profile_image: true
+  show_profile_image: true,
+  header_text_align: "right",
+  header_title_size: "Huge",
+  header_subtitle_size: "Large"
 };
 
 export default function App() {
@@ -164,7 +167,10 @@ export default function App() {
       return {
         ...payload,
         accent_color_hex: hex,
-        show_profile_image: applicationContext?.show_profile_image !== false
+        show_profile_image: applicationContext?.show_profile_image !== false,
+        header_text_align: applicationContext?.header_text_align || "right",
+        header_title_size: applicationContext?.header_title_size || "Huge",
+        header_subtitle_size: applicationContext?.header_subtitle_size || "Large"
       };
     }
     if (key === "awesomecv") {
@@ -322,7 +328,10 @@ export default function App() {
     job_url: profile?.job_url || "",
     profile_image: profile?.data?.profile_image || "",
     theme_color: profile?.theme_color || "",
-    show_profile_image: profile?.show_profile_image !== false
+    show_profile_image: profile?.show_profile_image !== false,
+    header_text_align: profile?.header_text_align || "right",
+    header_title_size: profile?.header_title_size || "Huge",
+    header_subtitle_size: profile?.header_subtitle_size || "Large"
   });
 
   const contextSnapshotFromProfile = (profile) => ({
@@ -348,7 +357,10 @@ export default function App() {
       job_url: loadedProfileSnapshot.job_url || "",
       profile_image: loadedProfileSnapshot.profile_image || "",
       theme_color: loadedProfileSnapshot.theme_color || "",
-      show_profile_image: loadedProfileSnapshot.show_profile_image !== false
+      show_profile_image: loadedProfileSnapshot.show_profile_image !== false,
+      header_text_align: loadedProfileSnapshot.header_text_align || "right",
+      header_title_size: loadedProfileSnapshot.header_title_size || "Huge",
+      header_subtitle_size: loadedProfileSnapshot.header_subtitle_size || "Large"
     };
 
     const config = [
@@ -361,7 +373,10 @@ export default function App() {
       ["job_url", "Job URL"],
       ["profile_image", "Profile image"],
       ["theme_color", "Theme color"],
-      ["show_profile_image", "Show profile image"]
+      ["show_profile_image", "Show profile image"],
+      ["header_text_align", "Header text align"],
+      ["header_title_size", "Header title size"],
+      ["header_subtitle_size", "Header subtitle size"]
     ];
 
     const topLevelChanges = config
@@ -397,6 +412,9 @@ export default function App() {
       photo: cvPreviewPayload.photo || null,
       show_profile_image: applicationContext?.show_profile_image !== false,
       theme_color: activeThemeColor,
+      header_text_align: applicationContext?.header_text_align || "right",
+      header_title_size: applicationContext?.header_title_size || "Huge",
+      header_subtitle_size: applicationContext?.header_subtitle_size || "Large",
       section_order: cvPreviewPayload.section_order || [],
       sidebar_section_order: cvPreviewPayload.sidebar_section_order || [],
       main_section_order: cvPreviewPayload.main_section_order || [],
@@ -437,7 +455,7 @@ export default function App() {
         pdfPreviewTimerRef.current = null;
       }
     };
-  }, [cvPreviewPayload, cvReview?.templateId, cvThemeColors, applicationContext?.show_profile_image, applicationContext?.theme_color]);
+  }, [cvPreviewPayload, cvReview?.templateId, cvThemeColors, applicationContext?.show_profile_image, applicationContext?.theme_color, applicationContext?.header_text_align, applicationContext?.header_title_size, applicationContext?.header_subtitle_size]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -688,7 +706,10 @@ export default function App() {
       job_url: job?.job_url || "",
       profile_image: "",
       theme_color: "",
-      show_profile_image: true
+      show_profile_image: true,
+      header_text_align: "right",
+      header_title_size: "Huge",
+      header_subtitle_size: "Large"
     });
     setSelectedJob(job);
     setActiveJobAction("cv");
@@ -836,6 +857,9 @@ export default function App() {
         job_url: applicationContext.job_url || null,
         theme_color: normalizeHexColor(applicationContext.theme_color, null),
         show_profile_image: applicationContext.show_profile_image !== false,
+        header_text_align: applicationContext.header_text_align || "right",
+        header_title_size: applicationContext.header_title_size || "Huge",
+        header_subtitle_size: applicationContext.header_subtitle_size || "Large",
         data: mergeProfileImageIntoData({}, applicationContext.profile_image),
         section_order: [],
         sidebar_section_order: [],
@@ -1062,6 +1086,9 @@ export default function App() {
         job_url: applicationContext.job_url || null,
         theme_color: normalizeHexColor(applicationContext.theme_color, null),
         show_profile_image: applicationContext.show_profile_image !== false,
+        header_text_align: applicationContext.header_text_align || "right",
+        header_title_size: applicationContext.header_title_size || "Huge",
+        header_subtitle_size: applicationContext.header_subtitle_size || "Large",
         audit: {
           ...(existing.audit || {}),
           ...(basePayload.audit || {}),
@@ -1105,6 +1132,9 @@ export default function App() {
         job_url: applicationContext.job_url || null,
         theme_color: normalizeHexColor(applicationContext.theme_color, null),
         show_profile_image: applicationContext.show_profile_image !== false,
+        header_text_align: applicationContext.header_text_align || "right",
+        header_title_size: applicationContext.header_title_size || "Huge",
+        header_subtitle_size: applicationContext.header_subtitle_size || "Large",
         audit: {
           ...(existing.audit || {}),
           raw_resume_text: resumeText
@@ -1197,6 +1227,9 @@ export default function App() {
         job_url: effectiveJobUrl || null,
         theme_color: normalizeHexColor(applicationContext.theme_color || existing?.theme_color, null),
         show_profile_image: applicationContext.show_profile_image !== false,
+        header_text_align: applicationContext.header_text_align || existing?.header_text_align || "right",
+        header_title_size: applicationContext.header_title_size || existing?.header_title_size || "Huge",
+        header_subtitle_size: applicationContext.header_subtitle_size || existing?.header_subtitle_size || "Large",
         data: mergeProfileImageIntoData(parsed.data, applicationContext.profile_image || existing?.data?.profile_image),
         section_order: existing?.section_order || parsed.section_order || [],
         sidebar_section_order: existing?.sidebar_section_order || parsed.sidebar_section_order || [],
@@ -1256,6 +1289,27 @@ export default function App() {
     setApplicationContext((prev) => ({
       ...prev,
       show_profile_image: Boolean(nextValue)
+    }));
+  };
+
+  const handleHipsterHeaderAlignChange = (nextValue) => {
+    setApplicationContext((prev) => ({
+      ...prev,
+      header_text_align: nextValue || "right"
+    }));
+  };
+
+  const handleHipsterHeaderTitleSizeChange = (nextValue) => {
+    setApplicationContext((prev) => ({
+      ...prev,
+      header_title_size: nextValue || "Huge"
+    }));
+  };
+
+  const handleHipsterHeaderSubtitleSizeChange = (nextValue) => {
+    setApplicationContext((prev) => ({
+      ...prev,
+      header_subtitle_size: nextValue || "Large"
     }));
   };
 
@@ -1448,6 +1502,12 @@ export default function App() {
                 onThemeColorChange={handleThemeColorChange}
                 showProfileImage={applicationContext.show_profile_image !== false}
                 onShowProfileImageChange={handleShowProfileImageChange}
+                hipsterHeaderAlign={applicationContext.header_text_align || "right"}
+                onHipsterHeaderAlignChange={handleHipsterHeaderAlignChange}
+                hipsterHeaderTitleSize={applicationContext.header_title_size || "Huge"}
+                onHipsterHeaderTitleSizeChange={handleHipsterHeaderTitleSizeChange}
+                hipsterHeaderSubtitleSize={applicationContext.header_subtitle_size || "Large"}
+                onHipsterHeaderSubtitleSizeChange={handleHipsterHeaderSubtitleSizeChange}
                 onUpdate={handleUpdatePdfPreview}
                 onDownload={handleDownloadPdf}
               />
@@ -1653,6 +1713,12 @@ export default function App() {
                       onThemeColorChange={handleThemeColorChange}
                       showProfileImage={applicationContext.show_profile_image !== false}
                       onShowProfileImageChange={handleShowProfileImageChange}
+                      hipsterHeaderAlign={applicationContext.header_text_align || "right"}
+                      onHipsterHeaderAlignChange={handleHipsterHeaderAlignChange}
+                      hipsterHeaderTitleSize={applicationContext.header_title_size || "Huge"}
+                      onHipsterHeaderTitleSizeChange={handleHipsterHeaderTitleSizeChange}
+                      hipsterHeaderSubtitleSize={applicationContext.header_subtitle_size || "Large"}
+                      onHipsterHeaderSubtitleSizeChange={handleHipsterHeaderSubtitleSizeChange}
                       onUpdate={handleUpdatePdfPreview}
                       onDownload={handleDownloadPdf}
                       disabled={!cvReview}

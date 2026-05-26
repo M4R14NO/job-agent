@@ -227,6 +227,9 @@ class CvCanonicalProfile(BaseModel):
     job_url: str | None = None
     theme_color: str | None = None
     show_profile_image: bool | None = None
+    header_text_align: str | None = None
+    header_title_size: str | None = None
+    header_subtitle_size: str | None = None
     section_order: list[str] | None = None
     sidebar_section_order: list[str] | None = None
     main_section_order: list[str] | None = None
