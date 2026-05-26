@@ -51,6 +51,9 @@
 
 ((* set photo_path = (photo | default("", true) | trim) *))
 ((* set show_profile = (show_profile_image | default(true)) *))
+((* set subtitle_break_token = "PIPEBREAKTOKEN" *))
+((* set subtitle_raw = (position | default("", true) | trim) *))
+((* set subtitle_with_breaks = subtitle_raw | replace(" | ", subtitle_break_token) | replace("|", subtitle_break_token) *))
 
 \noindent\hspace*{-1cm}%
 \colorbox{backBlue}{%
@@ -71,17 +74,17 @@
 \end{tikzpicture}
 ((* endif *))
 \end{minipage}%
-\hspace*{-0.06\linewidth}%
-\begin{minipage}[c]{0.72\linewidth}
+\hspace*{0.01\linewidth}%
+\begin{minipage}[c]{0.70\linewidth}
 \centering
 {\color{white}\bfseries\Huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}\\[0.62em]
-((* if position *)){\color{white}\bfseries\Large ((( position | latex_escape )))}((* endif *))
+((* if subtitle_with_breaks *)){\color{white}\bfseries\Large ((( subtitle_with_breaks | latex_escape | replace(subtitle_break_token, " \\\\ ") )))}((* endif *))
 \end{minipage}
 ((* else *))
 \begin{minipage}[c]{0.95\linewidth}
 \centering
 {\color{white}\bfseries\Huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}\\[0.62em]
-((* if position *)){\color{white}\bfseries\Large ((( position | latex_escape )))}((* endif *))
+((* if subtitle_with_breaks *)){\color{white}\bfseries\Large ((( subtitle_with_breaks | latex_escape | replace(subtitle_break_token, " \\\\ ") )))}((* endif *))
 \end{minipage}
 ((* endif *))
 }%

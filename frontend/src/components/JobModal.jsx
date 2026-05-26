@@ -198,6 +198,8 @@ export function PdfPreviewCard({
                 </div>
               </div>
             )}
+          </div>
+          <div className="pdf-preview-button-row">
             {onShowProfileImageChange && (
               <div className="pdf-preview-switch-control">
                 <span className="pdf-preview-template-label">Show image</span>
@@ -215,8 +217,6 @@ export function PdfPreviewCard({
                 </button>
               </div>
             )}
-          </div>
-          <div className="pdf-preview-button-row">
             <button
               id="pdf-update-preview-button"
               type="button"
