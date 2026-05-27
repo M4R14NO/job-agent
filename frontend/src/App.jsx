@@ -223,6 +223,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [cvReview, setCvReview] = useState(null);
+  const [isJobReviewReadOnly, setIsJobReviewReadOnly] = useState(false);
   const [models, setModels] = useState([]);
   const [modelError, setModelError] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
@@ -958,6 +959,7 @@ export default function App() {
   const handleStartCvReview = ({ canonical, job, templateId, docType, outputLanguage }) => {
     pdfPreviewRequestVersionRef.current += 1;
     setCvReview({ canonical, job, templateId, docType, outputLanguage });
+    setIsJobReviewReadOnly(false);
     setApplicationContext({
       company: job?.company || "",
       application_status: "",
@@ -1056,6 +1058,7 @@ export default function App() {
       outputLanguage: cvOutputLanguage,
       initialProfileId: initialProfileId || canonical?.profile_id || "default"
     });
+    setIsJobReviewReadOnly(false);
     setSelectedJob(null);
     setActiveView("create");
     setCvPreviewPayload(null);
@@ -1068,6 +1071,7 @@ export default function App() {
   const clearCreatePreviewState = () => {
     pdfPreviewRequestVersionRef.current += 1;
     setCvReview(null);
+    setIsJobReviewReadOnly(false);
     setCvPreviewPayload(null);
     setPdfPreviewUrl(null);
     hasRenderedPdfPreviewRef.current = false;
@@ -1081,6 +1085,14 @@ export default function App() {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
     return safe || `profile-${Date.now()}`;
+  };
+
+  const buildCompanySuffixProfileId = ({ baseId, company }) => {
+    const base = sanitizeProfileId(baseId || "profile");
+    const companySlug = sanitizeProfileId(company || "company");
+    const withoutTrailingVersion = base.replace(/-v\d+$/, "");
+    const withoutCompanySuffix = withoutTrailingVersion.replace(new RegExp(`-${companySlug}$`), "");
+    return `${withoutCompanySuffix}-${companySlug}`;
   };
 
   const mergeProfileImageIntoData = (data, profileImage) => {
@@ -1439,8 +1451,14 @@ export default function App() {
       }
 
       const requestedProfileId = String(targetProfileId || "").trim();
+      const isJobWorkflow = activeView === "find" && activeJobAction === "cv" && Boolean(selectedJob);
       const fallbackProfileId = hasPersistedSelectedProfile
-        ? buildNextVersionedProfileId(selectedProfileId)
+        ? (isJobWorkflow
+          ? buildCompanySuffixProfileId({
+            baseId: selectedProfileId,
+            company: selectedJob?.company || applicationContext.company || "company"
+          })
+          : buildNextVersionedProfileId(selectedProfileId))
         : newProfileId.trim();
       const nextProfileId = sanitizeProfileId(requestedProfileId || fallbackProfileId);
 
@@ -1511,11 +1529,29 @@ export default function App() {
       setCvTemplateId(saved.template_id || "awesomecv");
       setApplicationContext(contextFromProfile(saved));
       setLoadedProfileSnapshot(contextSnapshotFromProfile(saved));
-      handleStartCvEditor({
-        canonical: saved,
-        templateId: saved.template_id || "awesomecv",
-        initialProfileId: saved.profile_id
-      });
+      if (isJobWorkflow && selectedJob) {
+        pdfPreviewRequestVersionRef.current += 1;
+        setCvReview({
+          canonical: saved,
+          job: selectedJob,
+          templateId: saved.template_id || "awesomecv",
+          docType: "resume",
+          outputLanguage: cvOutputLanguage
+        });
+        setIsJobReviewReadOnly(false);
+        setActiveJobAction("cv");
+        setCvPreviewPayload(null);
+        setPdfPreviewUrl(null);
+        hasRenderedPdfPreviewRef.current = false;
+        pdfPreviewTemplateRef.current = saved.template_id || "awesomecv";
+        pdfPreviewStructureRef.current = "";
+      } else {
+        handleStartCvEditor({
+          canonical: saved,
+          templateId: saved.template_id || "awesomecv",
+          initialProfileId: saved.profile_id
+        });
+      }
       setCvEntryError(existingTarget
         ? `Updated '${saved.profile_id}' with a newly tailored profile mapping.`
         : `Created '${saved.profile_id}' from remapped CV text.`);
@@ -1650,6 +1686,7 @@ export default function App() {
     pdfPreviewRequestVersionRef.current += 1;
     setSelectedJob(job);
     setCvReview(null);
+    setIsJobReviewReadOnly(false);
     setActiveView("find");
     setActiveJobAction("none");
     setCvPreviewPayload(null);
@@ -1659,10 +1696,117 @@ export default function App() {
     pdfPreviewStructureRef.current = "";
   };
 
+  const initializeJobCvContext = async (job) => {
+    if (!job) return;
+    setCvEntryError("");
+    setActiveJobAction("cv");
+    clearCreatePreviewState();
+
+    let sourceProfile = null;
+    const preferredProfileId = selectedRerankProfileId || selectedProfileId || "";
+    if (preferredProfileId) {
+      sourceProfile = cvProfiles.find((profile) => profile.profile_id === preferredProfileId) || null;
+      if (!sourceProfile) {
+        try {
+          sourceProfile = await getCvProfile(preferredProfileId);
+        } catch (_err) {
+          sourceProfile = null;
+        }
+      }
+    }
+
+    const sourceResumeText = sourceProfile?.audit?.raw_resume_text || resumeText || "";
+    const sourceTemplateId = sourceProfile?.template_id || cvTemplateId || "awesomecv";
+    const nextCompany = job?.company || "";
+    const baseId = sourceProfile?.profile_id || newProfileId || "profile";
+    const suggestedId = buildCompanySuffixProfileId({ baseId, company: nextCompany || "company" });
+
+    setResumeText(sourceResumeText);
+    setCvTemplateId(sourceTemplateId);
+    setNewProfileId(suggestedId);
+
+    const mergedContext = {
+      ...(sourceProfile ? contextFromProfile(sourceProfile) : EMPTY_APPLICATION_CONTEXT),
+      company: nextCompany,
+      application_status: "",
+      application_date: "",
+      job_title: job?.title || "",
+      job_description: job?.description || "",
+      job_url: job?.job_url || ""
+    };
+    setApplicationContext(mergedContext);
+
+    if (sourceProfile) {
+      setSelectedProfileId(sourceProfile.profile_id || "");
+      setLoadedProfileSnapshot(contextSnapshotFromProfile(sourceProfile));
+      setCvReview({
+        canonical: sourceProfile,
+        job,
+        templateId: sourceTemplateId,
+        docType: "resume",
+        outputLanguage: cvOutputLanguage
+      });
+      setIsJobReviewReadOnly(true);
+    } else {
+      setSelectedProfileId("");
+      setLoadedProfileSnapshot({
+        profile_id: "",
+        revision: 0,
+        updated_at: null,
+        raw_resume_text: "",
+        ...EMPTY_APPLICATION_CONTEXT
+      });
+      setCvReview(null);
+      setIsJobReviewReadOnly(false);
+    }
+  };
+
+  const loadProfileIntoJobCvContext = async (profileId) => {
+    if (!profileId || !selectedJob) return;
+    setCvEntryError("");
+    setIsLoadingProfile(true);
+    try {
+      const canonical = await getCvProfile(profileId);
+      const nextTemplateId = canonical.template_id || "awesomecv";
+      const nextSuggestedId = buildCompanySuffixProfileId({
+        baseId: canonical.profile_id || profileId,
+        company: selectedJob.company || applicationContext.company || "company"
+      });
+      setSelectedProfileId(canonical.profile_id || profileId);
+      setCvTemplateId(nextTemplateId);
+      setResumeText(canonical.audit?.raw_resume_text || "");
+      setApplicationContext({
+        ...contextFromProfile(canonical),
+        company: selectedJob.company || "",
+        application_status: "",
+        application_date: "",
+        job_title: selectedJob.title || "",
+        job_description: selectedJob.description || "",
+        job_url: selectedJob.job_url || ""
+      });
+      setLoadedProfileSnapshot(contextSnapshotFromProfile(canonical));
+      setNewProfileId(nextSuggestedId);
+      upsertCvProfileInList(canonical);
+      setCvReview({
+        canonical,
+        job: selectedJob,
+        templateId: nextTemplateId,
+        docType: "resume",
+        outputLanguage: cvOutputLanguage
+      });
+      setIsJobReviewReadOnly(true);
+    } catch (err) {
+      setCvEntryError(err instanceof Error ? err.message : "Failed to load profile");
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  };
+
   const handleBackToResults = () => {
     pdfPreviewRequestVersionRef.current += 1;
     setSelectedJob(null);
     setCvReview(null);
+    setIsJobReviewReadOnly(false);
     setActiveView("find");
     setActiveJobAction("none");
     setCvPreviewPayload(null);
@@ -1676,6 +1820,23 @@ export default function App() {
     setActiveView(view);
     setSelectedJob(null);
     setIsSidebarOpen(false);
+  };
+
+  const handleSwitchJobAction = () => {
+    if (activeJobAction === "cover") {
+      initializeJobCvContext(selectedJob);
+      return;
+    }
+
+    pdfPreviewRequestVersionRef.current += 1;
+    setCvReview(null);
+    setIsJobReviewReadOnly(false);
+    setCvPreviewPayload(null);
+    setPdfPreviewUrl(null);
+    hasRenderedPdfPreviewRef.current = false;
+    pdfPreviewTemplateRef.current = "";
+    pdfPreviewStructureRef.current = "";
+    setActiveJobAction("cover");
   };
 
   const handleSidebarResizeStart = (event) => {
@@ -1695,8 +1856,10 @@ export default function App() {
   const panelTitle = selectedJob?.title || (cvReview ? "CV editor" : "Job detail");
   const panelEyebrow = selectedJob ? "Job detail" : "CV editor";
   const showActionsPanel = activeJobAction !== "none" && !cvReview;
-  const showActionSwitcher = activeJobAction !== "none" && !cvReview;
-  const actionLabel = activeJobAction === "cover" ? "Cover letter" : "CV generation";
+  const showActionSwitcher = activeJobAction !== "none";
+  const actionLabel = cvReview
+    ? "CV review"
+    : (activeJobAction === "cover" ? "Cover letter" : "CV generation");
   const switchActionLabel = activeJobAction === "cover" ? "Switch to CV generation" : "Switch to Cover letter";
 
   if (showPanel) {
@@ -1723,7 +1886,9 @@ export default function App() {
                 </button>
                 <button
                   className="cta cta-cv llm-action-button"
-                  onClick={() => setActiveJobAction("cv")}
+                  onClick={() => {
+                    initializeJobCvContext(selectedJob);
+                  }}
                   title="Use AI to turn your resume text and job context into an editable CV draft."
                 >
                   Generate CV
@@ -1735,7 +1900,7 @@ export default function App() {
                 {showActionSwitcher && (
                   <button
                     className="cta cta-switch"
-                    onClick={() => setActiveJobAction(activeJobAction === "cover" ? "cv" : "cover")}
+                    onClick={handleSwitchJobAction}
                   >
                     {switchActionLabel}
                   </button>
@@ -1771,21 +1936,75 @@ export default function App() {
                 onHipsterHeaderSubtitleSizeChange={handleHipsterHeaderSubtitleSizeChange}
                 onUpdate={handleUpdatePdfPreview}
                 onDownload={handleDownloadPdf}
+                disabled={isJobReviewReadOnly}
+                disabledReason="Read-only preview mode while browsing an existing profile in this job workflow. Tailor to create an editable version."
               />
             )}
           </div>
           {showActionsPanel || cvReview ? (
             <div className="panel-column">
               {showActionsPanel && (
-                <JobActionsCard
-                  mode={activeJobAction}
-                  job={selectedJob}
-                  resumeText={resumeText}
-                  onResumeTextChange={setResumeText}
-                  selectedModel={selectedModel}
-                  lmTimeout={lmTimeout}
-                  onStartCvReview={handleStartCvReview}
-                />
+                activeJobAction === "cv" ? (
+                  <CvEntry
+                    cvProfiles={cvProfiles}
+                    profilesLoading={profilesLoading}
+                    profilesError={profilesError}
+                    selectedProfileId={selectedProfileId}
+                    onSelectedProfileIdChange={setSelectedProfileId}
+                    onProfileRowSelect={(profile) => loadProfileIntoJobCvContext(profile?.profile_id || "")}
+                    onRefreshProfiles={loadProfiles}
+                    onUpdateProfileCvText={handleUpdateApplicationProfileData}
+                    onRemapProfileCvText={handleRemapProfileCvText}
+                    onCreateNewEntry={handleCreateNewEntry}
+                    onBeginNewEntry={handleBeginNewEntry}
+                    isCreatingProfileEntry={isCreatingProfileEntry}
+                    isLoadingProfile={isLoadingProfile}
+                    isUpdatingProfileCvText={isUpdatingProfileCvText}
+                    isRemappingProfileCvText={isRemappingProfileCvText}
+                    isUploadingProfileImage={isUploadingProfileImage}
+                    remapProgress={cvRemapProgress}
+                    cvEntryError={cvEntryError}
+                    cvTemplateId={cvTemplateId}
+                    onCvTemplateIdChange={handleTemplateIdChange}
+                    cvOutputLanguage={cvOutputLanguage}
+                    onCvOutputLanguageChange={setCvOutputLanguage}
+                    applicationContext={applicationContext}
+                    onApplicationContextChange={handleApplicationContextChange}
+                    onUploadProfileImage={handleUploadProfileImage}
+                    resumeText={resumeText}
+                    onResumeTextChange={setResumeText}
+                    newProfileId={newProfileId}
+                    draftProfileId={draftProfileId}
+                    isDraftProfileActive={isDraftProfileActive}
+                    contextMode="job"
+                    hideCreateProfileButton
+                    hideUpdateAction
+                    profileTableCollapsedByDefault
+                    tailorActionDisabled={(() => {
+                      const contextDiff = buildApplicationContextDiff();
+                      const hasPersisted = cvProfiles.some((profile) => profile.profile_id === selectedProfileId);
+                      const hasUnsaved = cvDraftState.isDirty || contextDiff.hasChanges;
+                      return isRemappingProfileCvText || isLoadingProfile || !resumeText.trim() || (hasPersisted && !hasUnsaved);
+                    })()}
+                    remapSuggestionBuilder={({ defaultSuggested, selectedProfile: profile }) => {
+                      const baseId = profile?.profile_id || selectedProfileId || newProfileId || defaultSuggested || "profile";
+                      return buildCompanySuffixProfileId({
+                        baseId,
+                        company: selectedJob?.company || applicationContext.company || "company"
+                      });
+                    }}
+                  />
+                ) : (
+                  <JobActionsCard
+                    mode={activeJobAction}
+                    job={selectedJob}
+                    resumeText={resumeText}
+                    onResumeTextChange={setResumeText}
+                    selectedModel={selectedModel}
+                    lmTimeout={lmTimeout}
+                    onStartCvReview={handleStartCvReview}
+                  />
+                )
               )}
               {cvReview ? (
                 <CvReview
@@ -1799,6 +2018,10 @@ export default function App() {
                   applicationContext={applicationContext}
                   onDraftStateChange={handleCvDraftStateChange}
                   onPreviewPayloadChange={setCvPreviewPayload}
+                  onTailor={() => handleRemapProfileCvText({ targetProfileId: newProfileId || undefined, allowOverwrite: false })}
+                  isTailoring={isRemappingProfileCvText}
+                  tailorProgress={cvRemapProgress}
+                  readOnly={isJobReviewReadOnly}
                 />
               ) : null}
             </div>

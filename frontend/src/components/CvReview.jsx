@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Progress, Spinner } from "@chakra-ui/react";
 import {
   Check,
   ChevronDown,
@@ -751,7 +752,11 @@ export default function CvReview({
   initialProfileId,
   applicationContext,
   onDraftStateChange,
-  onPreviewPayloadChange
+  onPreviewPayloadChange,
+  onTailor,
+  isTailoring = false,
+  tailorProgress = null,
+  readOnly = false
 }) {
   const isHipsterTemplate = templateId === "hipstercv";
   const resolvedInitialProfileId = canonical?.profile_id || initialProfileId || "default";
@@ -1397,6 +1402,7 @@ export default function CvReview({
   };
 
   const handleSave = async () => {
+    if (readOnly) return;
     setError("");
     setOverwriteDialog((prev) => ({ ...prev, error: "" }));
     const targetProfileId = profileId.trim();
@@ -1477,6 +1483,7 @@ export default function CvReview({
   };
 
   const handleConfirmOverwrite = async () => {
+    if (readOnly) return;
     if (!overwriteDialog.pendingPayload || !overwriteDialog.pendingTargetProfileId) return;
     setOverwriteDialog((prev) => ({ ...prev, error: "" }));
     setIsSaving(true);
@@ -1501,6 +1508,7 @@ export default function CvReview({
   };
 
   const handleSaveAsNewFromDialog = async () => {
+    if (readOnly) return;
     const nextId = overwriteDialog.suggestedProfileId.trim();
     if (!nextId || !overwriteDialog.pendingPayload) {
       setOverwriteDialog((prev) => ({ ...prev, error: "Enter a new profile name." }));
@@ -1544,6 +1552,7 @@ export default function CvReview({
   };
 
   const handleDelete = async () => {
+    if (readOnly) return;
     setError("");
     try {
       await deleteCvProfile(profileId);
@@ -1585,6 +1594,7 @@ export default function CvReview({
   };
 
   const handleRewrite = async () => {
+    if (readOnly) return;
     setError("");
     if (!model) {
       setError("Select a model to rewrite the canonical CV.");
@@ -3199,7 +3209,7 @@ export default function CvReview({
   };
 
   return (
-    <div className="panel-card cv-editor">
+    <div className={`panel-card cv-editor${readOnly ? " is-readonly" : ""}`}>
       <div className="panel-header">
         <div>
           <p className="eyebrow">CV editor</p>
@@ -3207,7 +3217,47 @@ export default function CvReview({
         </div>
       </div>
 
+      {readOnly ? (
+        <div className="cv-readonly-note">
+          <p className="helper" style={{ margin: 0 }}>
+            Read-only preview mode: this profile is opened for safe browsing. Use Tailor to create a new editable profile version.
+          </p>
+          {onTailor ? (
+            <button
+              type="button"
+              className="secondary cv-readonly-tailor-button llm-action-button"
+              onClick={onTailor}
+              disabled={isTailoring}
+            >
+              <Sparkles size={14} />
+              {isTailoring ? "Tailoring..." : "Tailor & create editable copy"}
+            </button>
+          ) : null}
+          {isTailoring && tailorProgress ? (
+            <div className="cv-readonly-progress">
+              <div className="results-loading">
+                <Spinner size="sm" color="blue.500" />
+                <span>Tailoring this profile for the job. This can take about a minute.</span>
+              </div>
+              <div className="progress-header">
+                <span>Tailoring progress</span>
+                <span>{tailorProgress.percent}% complete</span>
+              </div>
+              <Progress.Root value={tailorProgress.percent} size="sm" colorPalette="blue">
+                <Progress.Track>
+                  <Progress.Range />
+                </Progress.Track>
+              </Progress.Root>
+              <p className="helper">
+                {tailorProgress.elapsedSeconds}s / {tailorProgress.timeoutSeconds}s elapsed
+              </p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="cv-step-panel">
+        <fieldset className="cv-readonly-scope" disabled={readOnly}>
         <div className="cv-step-content">
           {!hasJobContext && (
             <p className="helper">No job context provided. Preview will be generic.</p>
@@ -3303,6 +3353,7 @@ export default function CvReview({
           )}
 
           {/* Save profile — collapsible, at bottom of edit panel */}
+          {!readOnly ? (
           <div className="sub-card save-profile-card">
             <div className="sub-card-header">
               <strong className="sub-card-title"><Save size={15} /> Save profile (optional)</strong>
@@ -3356,13 +3407,15 @@ export default function CvReview({
               </>
             )}
           </div>
+          ) : null}
         </div>
+        </fieldset>
       </div>
 
       {error && <p className="error">{error}</p>}
 
       <OverwriteConfirmationModal
-        isOpen={overwriteDialog.isOpen}
+        isOpen={!readOnly && overwriteDialog.isOpen}
         targetProfileId={overwriteDialog.pendingTargetProfileId}
         existingRevision={overwriteDialog.diff?.existingRevision ?? 0}
         existingUpdatedAt={overwriteDialog.diff?.existingUpdatedAt}

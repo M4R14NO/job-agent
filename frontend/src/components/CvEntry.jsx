@@ -211,8 +211,16 @@ export default function CvEntry({
   onResumeTextChange,
   newProfileId,
   draftProfileId,
-  isDraftProfileActive
+  isDraftProfileActive,
+  contextMode = "create",
+  hideCreateProfileButton = false,
+  hideUpdateAction = false,
+  hideTailorAction = false,
+  tailorActionDisabled,
+  profileTableCollapsedByDefault = false,
+  remapSuggestionBuilder
 }) {
+  const isJobMode = contextMode === "job";
   const [showExampleCvText, setShowExampleCvText] = useState(false);
   const [profileSearchDraft, setProfileSearchDraft] = useState("");
   const [profileSearchQuery, setProfileSearchQuery] = useState("");
@@ -351,9 +359,19 @@ export default function CvEntry({
   };
 
   const openRemapDialog = () => {
-    const suggested = hasPersistedSelectedProfile
+    const defaultSuggested = hasPersistedSelectedProfile
       ? nextProfileVersionName(selectedProfile?.profile_id || selectedProfileId || "profile")
       : (newProfileId.trim() || "");
+    const suggested = typeof remapSuggestionBuilder === "function"
+      ? (remapSuggestionBuilder({
+        defaultSuggested,
+        selectedProfile,
+        selectedProfileId,
+        newProfileId,
+        hasPersistedSelectedProfile,
+        applicationContext
+      }) || defaultSuggested)
+      : defaultSuggested;
     setRemapProfileName(suggested);
     setRemapDialogOpen(true);
   };
@@ -400,13 +418,196 @@ export default function CvEntry({
     <div className="cv-entry">
       <div className="cv-entry-header">
         <div>
-          <p className="eyebrow">CV editor</p>
-          <h3>CV profiles</h3>
-          <p className="helper">Select a profile or start a new entry directly from this table.</p>
+          <p className="eyebrow">{isJobMode ? "CV generation" : "CV editor"}</p>
+          <h3>{isJobMode ? "Application context" : "CV profiles"}</h3>
+          <p className="helper">
+            {isJobMode
+              ? "Review context and tailor against this job. Profile browsing is optional and collapsed by default."
+              : "Select a profile or start a new entry directly from this table."}
+          </p>
         </div>
       </div>
 
       <div className="cv-entry-panel">
+          {profileTableCollapsedByDefault ? (
+            <details className="cv-profile-collapsible" open={false}>
+              <summary className="cv-profile-collapsible-summary">Browse and switch CV profiles</summary>
+              <div style={{ marginTop: 12 }}>
+                <div>
+                  <label htmlFor="profileSearch" className="label">Search profiles</label>
+                  <div className="cv-search-row">
+                    <input
+                      ref={searchInputRef}
+                      id="profileSearch"
+                      type="text"
+                      placeholder="Search by profile name, company, status, job title, description, or CV text"
+                      value={profileSearchDraft}
+                      onChange={(e) => setProfileSearchDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Tab" && e.shiftKey) {
+                          e.preventDefault();
+                          refreshButtonRef.current?.focus();
+                          return;
+                        }
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          searchButtonRef.current?.click();
+                          searchButtonRef.current?.focus();
+                          return;
+                        }
+                        if (e.key === "Tab" && !e.shiftKey) {
+                          e.preventDefault();
+                          searchButtonRef.current?.focus();
+                        }
+                      }}
+                    />
+                    <div className="cv-search-actions">
+                      <button
+                        ref={searchButtonRef}
+                        type="button"
+                        className="primary cv-search-button"
+                        onClick={() => setProfileSearchQuery(profileSearchDraft)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Tab" && e.shiftKey) {
+                            e.preventDefault();
+                            searchInputRef.current?.focus();
+                            return;
+                          }
+                          if (e.key === "Tab" && !e.shiftKey) {
+                            e.preventDefault();
+                            resetButtonRef.current?.focus();
+                          }
+                        }}
+                      >
+                        <Search size={14} />
+                        Search
+                      </button>
+                      <button
+                        ref={resetButtonRef}
+                        type="button"
+                        className="ghost cv-reset-button"
+                        onClick={() => {
+                          setProfileSearchDraft("");
+                          setProfileSearchQuery("");
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Tab" && e.shiftKey) {
+                            e.preventDefault();
+                            searchButtonRef.current?.focus();
+                            return;
+                          }
+                          if (e.key === "Tab" && !e.shiftKey) {
+                            e.preventDefault();
+                            refreshButtonRef.current?.focus();
+                          }
+                        }}
+                      >
+                        <RotateCcw size={14} />
+                        Reset
+                      </button>
+                      <div className="cv-search-profile-actions">
+                        {!hideCreateProfileButton ? (
+                          <button
+                            ref={createButtonRef}
+                            type="button"
+                            className="primary cv-create-button"
+                            onClick={openNewEntryDialog}
+                          >
+                            <Plus size={14} />
+                            Create new CV Profile
+                          </button>
+                        ) : null}
+                        <button
+                          ref={refreshButtonRef}
+                          type="button"
+                          className="ghost cv-refresh-button"
+                          onClick={onRefreshProfiles}
+                          disabled={profilesLoading}
+                        >
+                          <RefreshCw size={14} />
+                          {profilesLoading ? "Refreshing..." : "Refresh profiles"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="cv-profile-table-wrap">
+                  <table className="cv-profile-table">
+                    <thead>
+                      <tr>
+                        <th>{renderSortHeader("CV profile", "profile_id")}</th>
+                        <th>{renderSortHeader("Company", "company")}</th>
+                        <th>{renderSortHeader("Status", "application_status")}</th>
+                        <th>{renderSortHeader("Job title", "job_title")}</th>
+                        <th>{renderSortHeader("Template", "template_id")}</th>
+                        <th>{renderSortHeader("Revision", "revision")}</th>
+                        <th>{renderSortHeader("Updated", "updated")}</th>
+                        <th>Sections</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {profilesError ? (
+                        <tr>
+                          <td colSpan={8}>
+                            <p className="error">Failed to load profiles: {profilesError}</p>
+                          </td>
+                        </tr>
+                      ) : filteredProfiles.length === 0 ? (
+                        <tr>
+                          <td colSpan={8}>
+                            <p className="helper">No matching profiles found.</p>
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredProfiles.map((profile) => {
+                          const sectionStats = getSectionStats(profile);
+                          const isSelected = selectedProfileId === profile.profile_id;
+                          return (
+                            <tr
+                              key={profile.profile_id}
+                              ref={filteredProfiles[0]?.profile_id === profile.profile_id ? firstRowRef : null}
+                              className={isSelected ? "is-selected" : ""}
+                              onClick={() => handleProfileSelect(profile)}
+                              onKeyDown={(event) => handleProfileRowKeyDown(event, profile)}
+                              tabIndex={0}
+                              role="button"
+                              aria-selected={isSelected}
+                              aria-label={`Load profile ${profile.profile_id}`}
+                            >
+                              <td>{profile.profile_id}</td>
+                              <td>{profile.company || "-"}</td>
+                              <td>
+                                {profile.application_status ? (
+                                  <span className={statusBadgeClass(profile.application_status)}>{profile.application_status}</span>
+                                ) : "-"}
+                              </td>
+                              <td>{profile.job_title || "-"}</td>
+                              <td>{profile.template_id || "awesomecv"}</td>
+                              <td>r{profile.revision ?? 0}</td>
+                              <td>{formatDateTime(profile.updated_at || profile.created_at)}</td>
+                              <td>
+                                <span className="cv-profile-section-meta">
+                                  {sectionStats.visible.length} shown / {sectionStats.hidden.length} hidden
+                                </span>
+                                <span className="cv-profile-section-list">
+                                  + {sectionStats.visible.join(", ") || "None"}
+                                </span>
+                                <span className="cv-profile-section-list muted">
+                                  - {sectionStats.hidden.join(", ") || "None"}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </details>
+          ) : (
+            <>
           <div>
             <label htmlFor="profileSearch" className="label">Search profiles</label>
             <div className="cv-search-row">
@@ -480,26 +681,28 @@ export default function CvEntry({
                   Reset
                 </button>
                 <div className="cv-search-profile-actions">
-                  <button
-                    ref={createButtonRef}
-                    type="button"
-                    className="primary cv-create-button"
-                    onClick={openNewEntryDialog}
-                    onKeyDown={(e) => {
-                      if (e.key === "Tab" && e.shiftKey) {
-                        e.preventDefault();
-                        resetButtonRef.current?.focus();
-                        return;
-                      }
-                      if (e.key === "Tab" && !e.shiftKey) {
-                        e.preventDefault();
-                        refreshButtonRef.current?.focus();
-                      }
-                    }}
-                  >
-                    <Plus size={14} />
-                    Create new CV Profile
-                  </button>
+                  {!hideCreateProfileButton ? (
+                    <button
+                      ref={createButtonRef}
+                      type="button"
+                      className="primary cv-create-button"
+                      onClick={openNewEntryDialog}
+                      onKeyDown={(e) => {
+                        if (e.key === "Tab" && e.shiftKey) {
+                          e.preventDefault();
+                          resetButtonRef.current?.focus();
+                          return;
+                        }
+                        if (e.key === "Tab" && !e.shiftKey) {
+                          e.preventDefault();
+                          refreshButtonRef.current?.focus();
+                        }
+                      }}
+                    >
+                      <Plus size={14} />
+                      Create new CV Profile
+                    </button>
+                  ) : null}
                   <button
                     ref={refreshButtonRef}
                     type="button"
@@ -598,6 +801,8 @@ export default function CvEntry({
               </tbody>
             </table>
           </div>
+            </>
+          )}
 
           <div className="sub-card" style={{ marginTop: 4 }}>
             <div className="sub-card-header">
@@ -614,6 +819,11 @@ export default function CvEntry({
                   readOnly
                   aria-readonly="true"
                 />
+                {isJobMode ? (
+                  <p className="helper cv-working-copy-note">
+                    Working copy mode: nothing is saved until you confirm Tailor for a new profile version.
+                  </p>
+                ) : null}
               </div>
               <div>
                 <label htmlFor="cvTemplateEntry" className="label">Template</label>
@@ -775,49 +985,59 @@ export default function CvEntry({
 
           <div className="cv-entry-cta-wrap">
             <div className="cv-entry-actions">
-              <button
-                ref={updateProfileButtonRef}
-                type="button"
-                className="primary cv-action-update"
-                onClick={onUpdateProfileCvText}
-                disabled={isUpdatingProfileCvText || isLoadingProfile || !hasPersistedSelectedProfile}
-                onKeyDown={(e) => {
-                  if (e.key === "Tab" && e.shiftKey) {
-                    e.preventDefault();
-                    exampleButtonRef.current?.focus();
-                    return;
-                  }
-                  if (e.key === "Tab" && !e.shiftKey) {
-                    e.preventDefault();
-                    tailorButtonRef.current?.focus();
-                  }
-                }}
-              >
-                <PencilLine size={14} />
-                {isUpdatingProfileCvText ? "Updating profile..." : "Update CV profile data"}
-              </button>
-              <button
-                ref={tailorButtonRef}
-                type="button"
-                className="primary cv-action-remap llm-action-button"
-                title="Use AI to tailor this CV profile from your CV text and the job details you added above."
-                onClick={openRemapDialog}
-                disabled={isRemappingProfileCvText || isLoadingProfile || !resumeText.trim()}
-                onKeyDown={(e) => {
-                  if (e.key === "Tab" && e.shiftKey) {
-                    e.preventDefault();
-                    updateProfileButtonRef.current?.focus();
-                    return;
-                  }
-                  if (e.key === "Tab" && !e.shiftKey) {
-                    e.preventDefault();
-                    focusElementById("pdf-preview-template-select");
-                  }
-                }}
-              >
-                <Sparkles size={14} />
-                {isRemappingProfileCvText ? "Tailoring profile..." : "Tailor CV using CV text & job description"}
-              </button>
+              {!hideUpdateAction ? (
+                <button
+                  ref={updateProfileButtonRef}
+                  type="button"
+                  className="primary cv-action-update"
+                  onClick={onUpdateProfileCvText}
+                  disabled={isUpdatingProfileCvText || isLoadingProfile || !hasPersistedSelectedProfile}
+                  onKeyDown={(e) => {
+                    if (e.key === "Tab" && e.shiftKey) {
+                      e.preventDefault();
+                      exampleButtonRef.current?.focus();
+                      return;
+                    }
+                    if (e.key === "Tab" && !e.shiftKey) {
+                      e.preventDefault();
+                      tailorButtonRef.current?.focus();
+                    }
+                  }}
+                >
+                  <PencilLine size={14} />
+                  {isUpdatingProfileCvText ? "Updating profile..." : "Update CV profile data"}
+                </button>
+              ) : null}
+              {!hideTailorAction ? (
+                <button
+                  ref={tailorButtonRef}
+                  type="button"
+                  className="primary cv-action-remap llm-action-button"
+                  title="Use AI to tailor this CV profile from your CV text and the job details you added above."
+                  onClick={openRemapDialog}
+                  disabled={typeof tailorActionDisabled === "boolean"
+                    ? tailorActionDisabled
+                    : (isRemappingProfileCvText || isLoadingProfile || !resumeText.trim())}
+                  onKeyDown={(e) => {
+                    if (e.key === "Tab" && e.shiftKey) {
+                      e.preventDefault();
+                      if (!hideUpdateAction) {
+                        updateProfileButtonRef.current?.focus();
+                      } else {
+                        exampleButtonRef.current?.focus();
+                      }
+                      return;
+                    }
+                    if (e.key === "Tab" && !e.shiftKey) {
+                      e.preventDefault();
+                      focusElementById("pdf-preview-template-select");
+                    }
+                  }}
+                >
+                  <Sparkles size={14} />
+                  {isRemappingProfileCvText ? "Tailoring profile..." : "Tailor CV using CV text & job description"}
+                </button>
+              ) : null}
             </div>
           </div>
 
