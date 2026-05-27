@@ -1377,6 +1377,63 @@ select {
   color: #3b3b3b;
 }
 
+.cv-coach-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.cv-coach-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.cv-coach-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cv-coach-modal-card {
+  width: min(560px, 92vw);
+  min-height: 0;
+  gap: 12px;
+}
+
+.cv-coach-modal-card .panel-header {
+  margin-bottom: 0;
+}
+
+.cv-hints-section {
+  display: grid;
+  gap: 8px;
+}
+
+.cv-hints-panel {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #dbeafe;
+  background: #ffffff;
+}
+
+.cv-hint-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cv-hints-editor {
+  display: grid;
+  gap: 8px;
+}
+
 .refinement-progress {
   display: grid;
   gap: 8px;
@@ -1425,6 +1482,29 @@ select {
 
 .advanced-options .filters {
   margin-top: 12px;
+}
+
+.bm25-debug-panel {
+  margin-top: 2px;
+}
+
+.bm25-debug-content {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.bm25-query-box {
+  margin: 0;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #111827;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .rerank-status-badge {

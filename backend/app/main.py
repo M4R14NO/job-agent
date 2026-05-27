@@ -27,6 +27,10 @@ from .schemas.search import (
     LinkedInEnrichRequest,
     LinkedInEnrichResponse,
     LinkedInEnrichItem,
+    QueryDebugRequest,
+    QueryDebugResponse,
+    RerankJobsRequest,
+    ScoreJobsRequest,
 )
 from .services.cv_mappers import get_deterministic_mapper, get_llm_mapper
 from .services.cv_service import (
@@ -43,7 +47,7 @@ from .services.cv_storage import RevisionMismatchError, get_profile_store
 from .services.lmstudio_client import chat_completion, list_models, safe_request
 from .services.linkedin_detail_service import fetch_linkedin_job_details
 from .services.search_service import fetch_jobs
-from .services.ranking_service import score_jobs
+from .services.ranking_service import build_query_debug, score_jobs
 
 app = FastAPI(title="Job Agent API")
 
@@ -91,6 +95,54 @@ def _normalize_mapping_mode(value: str | None) -> str:
     return normalized
 
 
+def _build_profile_query_context(profile: CvCanonicalProfile) -> str:
+    data = profile.data
+    parts: list[str] = []
+
+    for value in [data.headline, data.summary]:
+        if value:
+            parts.append(value)
+
+    for skill_group in data.skills:
+        if skill_group.category:
+            parts.append(skill_group.category)
+        if skill_group.items:
+            parts.extend(skill_group.items[:20])
+
+    for experience in data.experience[:8]:
+        for value in [experience.title, experience.organization, experience.location]:
+            if value:
+                parts.append(value)
+        for bullet in experience.bullets[:6]:
+            if bullet.text:
+                parts.append(bullet.text)
+
+    for project in data.projects[:6]:
+        for value in [project.name, project.role, project.description]:
+            if value:
+                parts.append(value)
+
+    for publication in data.publications[:6]:
+        if publication.title:
+            parts.append(publication.title)
+        if publication.notes:
+            parts.append(publication.notes)
+
+    # Keep query context bounded for predictable retrieval performance.
+    return "\n".join(part.strip() for part in parts if part and part.strip())[:8000]
+
+
+def _load_query_profile_context(profile_id: str | None) -> tuple[str | None, str | None]:
+    if not profile_id:
+        return None, None
+
+    profile = get_profile_store().get_profile(profile_id)
+    if not profile:
+        return None, None
+
+    return profile.profile_id, _build_profile_query_context(profile)
+
+
 @app.get("/models", response_model=ModelsResponse)
 def get_models() -> ModelsResponse:
     models, error = safe_request(list_models)
@@ -130,23 +182,130 @@ def start_search(payload: SearchRequest) -> SearchResponse:
     else:
         rerank_top_n = 0
 
-    jobs, rerank_applied, rerank_used, rerank_skip_reason = score_jobs(
+    query_profile_id, query_profile_context = _load_query_profile_context(payload.selected_rerank_profile_id)
+
+    jobs, rerank_applied, rerank_used, rerank_skip_reason, bm25_query, bm25_language, bm25_tokenizer = score_jobs(
         jobs=jobs,
         resume_text=payload.resume_text,
         wishes=payload.wishes,
+        query_context_text=query_profile_context,
         model=payload.model,
         lm_timeout=payload.lm_timeout,
-        enable_rerank=payload.enable_rerank,
-        rerank_top_n=rerank_top_n,
+        enable_rerank=False,
+        rerank_top_n=0,
         weight_embedding=payload.precision_weight_embedding,
         weight_keyword=payload.precision_weight_keyword,
+        translation_model=None,
     )
     return SearchResponse(
         message="Search completed",
         resume_length=len(payload.resume_text),
         has_wishes=bool(payload.wishes),
         jobs=jobs,
+        query_profile_id=query_profile_id,
+        bm25_query=bm25_query,
+        bm25_language=bm25_language,
+        bm25_tokenizer=bm25_tokenizer,
         rerank_requested=payload.enable_rerank,
+        rerank_applied=rerank_applied,
+        rerank_top_n=rerank_used,
+        rerank_skip_reason=rerank_skip_reason,
+    )
+
+
+@app.post("/search/query-debug", response_model=QueryDebugResponse)
+def build_search_query_debug(payload: QueryDebugRequest) -> QueryDebugResponse:
+    query_profile_id, query_profile_context = _load_query_profile_context(payload.selected_rerank_profile_id)
+    if not payload.model:
+        raise HTTPException(status_code=400, detail="A model is required for query debug.")
+    bm25_query, bm25_query_terms, bm25_language, bm25_tokenizer = build_query_debug(
+        resume_text=payload.resume_text,
+        wishes=payload.wishes,
+        query_context_text=query_profile_context,
+        model=payload.model,
+        lm_timeout=payload.lm_timeout,
+    )
+    return QueryDebugResponse(
+        query_profile_id=query_profile_id,
+        bm25_query=bm25_query,
+        bm25_language=bm25_language,
+        bm25_tokenizer=bm25_tokenizer,
+        bm25_query_terms=dict(bm25_query_terms),
+    )
+
+
+@app.post("/search/score-jobs", response_model=SearchResponse)
+def score_existing_jobs(payload: ScoreJobsRequest) -> SearchResponse:
+    query_profile_id, query_profile_context = _load_query_profile_context(payload.selected_rerank_profile_id)
+    jobs, rerank_applied, rerank_used, rerank_skip_reason, bm25_query, bm25_language, bm25_tokenizer = score_jobs(
+        jobs=payload.jobs,
+        resume_text=payload.resume_text,
+        wishes=payload.wishes,
+        query_context_text=query_profile_context,
+        model=payload.model,
+        lm_timeout=payload.lm_timeout,
+        enable_rerank=False,
+        rerank_top_n=0,
+        weight_embedding=payload.precision_weight_embedding,
+        weight_keyword=payload.precision_weight_keyword,
+        translation_model=None,
+        bm25_query_terms_override=payload.bm25_query_terms,
+        bm25_query_override=payload.bm25_query,
+        bm25_language_override=payload.bm25_language,
+        bm25_tokenizer_override=payload.bm25_tokenizer,
+    )
+    return SearchResponse(
+        message="Job scores updated",
+        resume_length=len(payload.resume_text),
+        has_wishes=bool(payload.wishes),
+        jobs=jobs,
+        query_profile_id=query_profile_id,
+        bm25_query=bm25_query,
+        bm25_language=bm25_language,
+        bm25_tokenizer=bm25_tokenizer,
+        rerank_requested=False,
+        rerank_applied=rerank_applied,
+        rerank_top_n=rerank_used,
+        rerank_skip_reason=rerank_skip_reason,
+    )
+
+
+@app.post("/search/rerank", response_model=SearchResponse)
+def rerank_existing_jobs(payload: RerankJobsRequest) -> SearchResponse:
+    if not payload.model:
+        raise HTTPException(status_code=400, detail="A model is required for reranking.")
+    query_profile_id, query_profile_context = _load_query_profile_context(payload.selected_rerank_profile_id)
+    rerank_top_n = payload.rerank_top_n
+    if rerank_top_n is None:
+        rerank_top_n = _default_rerank_top_n(len(payload.jobs), len(payload.jobs))
+
+    jobs, rerank_applied, rerank_used, rerank_skip_reason, bm25_query, bm25_language, bm25_tokenizer = score_jobs(
+        jobs=payload.jobs,
+        resume_text=payload.resume_text,
+        wishes=payload.wishes,
+        query_context_text=query_profile_context,
+        model=payload.model,
+        lm_timeout=payload.lm_timeout,
+        enable_rerank=True,
+        rerank_top_n=rerank_top_n,
+        weight_embedding=payload.precision_weight_embedding,
+        weight_keyword=payload.precision_weight_keyword,
+        translation_model=None,
+        bm25_query_terms_override=payload.bm25_query_terms,
+        bm25_query_override=payload.bm25_query,
+        bm25_language_override=payload.bm25_language,
+        bm25_tokenizer_override=payload.bm25_tokenizer,
+    )
+    return SearchResponse(
+        message="Rerank completed",
+        resume_length=len(payload.resume_text),
+        has_wishes=bool(payload.wishes),
+        jobs=jobs,
+        query_profile_id=query_profile_id,
+        bm25_query=bm25_query,
+        bm25_language=bm25_language,
+        bm25_tokenizer=bm25_tokenizer,
+        rerank_requested=True,
         rerank_applied=rerank_applied,
         rerank_top_n=rerank_used,
         rerank_skip_reason=rerank_skip_reason,

@@ -1,11 +1,39 @@
 import { Progress, Spinner } from "@chakra-ui/react";
 
+const RERANK_REASON_EXPLANATIONS = {
+  rag: "Strong alignment with retrieval-augmented generation experience and related tooling.",
+  llm: "Strong alignment with large language model experience and responsibilities.",
+  mlops: "Strong alignment with machine-learning operations, deployment, and production workflows.",
+  nlp: "Strong alignment with natural language processing skills and project experience.",
+  python: "Strong alignment with Python-based engineering requirements.",
+};
+
+const formatRerankReason = (reason) => {
+  const raw = String(reason || "").trim();
+  if (!raw) return "";
+
+  const normalized = raw.toLowerCase().replace(/\s+/g, "_");
+  if (RERANK_REASON_EXPLANATIONS[normalized]) {
+    return RERANK_REASON_EXPLANATIONS[normalized];
+  }
+
+  if (raw.length <= 3) {
+    return `Matched on ${raw.toUpperCase()}-related requirements in the job description.`;
+  }
+
+  return raw;
+};
+
 export default function ResultsList({
   jobs,
   rerankRequested,
   rerankApplied,
   rerankTopN,
   rerankSkipReason,
+  queryProfileId,
+  bm25Query,
+  bm25Language,
+  bm25Tokenizer,
   searchPhaseMessage,
   onSelectJob,
   isLoading,
@@ -14,6 +42,29 @@ export default function ResultsList({
 }) {
   const showResultsEmpty = hasResponse && jobs.length === 0 && !isLoading;
   const showPrompt = !hasResponse && !isLoading;
+  const sortedJobs = jobs
+    .map((job, index) => ({ job, index }))
+    .sort((left, right) => {
+      const leftPrimary = typeof left.job.rerank_score === "number"
+        ? left.job.rerank_score
+        : (typeof left.job.match_score === "number" ? left.job.match_score : -1);
+      const rightPrimary = typeof right.job.rerank_score === "number"
+        ? right.job.rerank_score
+        : (typeof right.job.match_score === "number" ? right.job.match_score : -1);
+
+      if (rightPrimary !== leftPrimary) {
+        return rightPrimary - leftPrimary;
+      }
+
+      const leftSecondary = typeof left.job.match_score === "number" ? left.job.match_score : -1;
+      const rightSecondary = typeof right.job.match_score === "number" ? right.job.match_score : -1;
+      if (rightSecondary !== leftSecondary) {
+        return rightSecondary - leftSecondary;
+      }
+
+      return left.index - right.index;
+    })
+    .map((entry) => entry.job);
 
   const formatDetailsStatus = (job) => {
     const status = String(job?._detailsStatus || "").trim();
@@ -41,7 +92,7 @@ export default function ResultsList({
       {refinementProgress && (
         <div className="refinement-progress">
           <div className="progress-header">
-            <span>LLM refinement</span>
+            <span>AI job matching</span>
             <span>
               Tokens {refinementProgress.currentTokens} / {refinementProgress.totalTokens} (est.)
             </span>
@@ -57,19 +108,36 @@ export default function ResultsList({
         </div>
       )}
       {rerankApplied && rerankTopN ? (
-        <p className="helper">LLM rerank applied to top {rerankTopN} results.</p>
+        <p className="helper">AI ranking applied to top {rerankTopN} results.</p>
       ) : null}
       {rerankRequested && !rerankApplied ? (
         <p className="helper rerank-status-badge rerank-status-badge-warning">
-          Rerank requested but skipped{rerankSkipReason ? `: ${rerankSkipReason}` : "."}
+          AI ranking requested but skipped{rerankSkipReason ? `: ${rerankSkipReason}` : "."}
         </p>
+      ) : null}
+      {hasResponse ? (
+        <details className="advanced-options bm25-debug-panel">
+          <summary className="advanced-summary">Candidate query debug (BM25)</summary>
+          <div className="bm25-debug-content">
+            <p className="helper">
+              Query used to score and shortlist jobs before final AI ranking.
+            </p>
+            <p className="helper">
+              Query context profile: {queryProfileId || "none"}
+            </p>
+            <p className="helper">
+              Preprocessing: language={bm25Language || "n/a"}, tokenizer={bm25Tokenizer || "n/a"}
+            </p>
+            <pre className="bm25-query-box">{bm25Query || "No BM25 query generated for this search."}</pre>
+          </div>
+        </details>
       ) : null}
       {showPrompt && <p className="helper">Run a search to see results.</p>}
       {showResultsEmpty ? (
         <p className="empty">No jobs found yet.</p>
-      ) : jobs.length > 0 ? (
+      ) : sortedJobs.length > 0 ? (
         <ul className="job-list">
-          {jobs.map((job, index) => {
+          {sortedJobs.map((job, index) => {
             const hasDetails = (job.description || job.job_description || "").trim().length > 0;
 
             return (
@@ -85,9 +153,15 @@ export default function ResultsList({
                   <span className="badge badge-alt">Rerank: {job.rerank_score}</span>
                 </div>
               ) : null}
-              {job.rerank_score != null && job.match_reasons?.[0] ? (
-                <p className="helper">Rerank reason: {job.match_reasons[0]}</p>
-              ) : null}
+              {job.rerank_score != null && job.match_reasons?.[0] ? (() => {
+                const rawReason = String(job.match_reasons[0] || "").trim();
+                const explanation = formatRerankReason(rawReason);
+                return (
+                  <p className="helper" title={rawReason ? `Raw reason: ${rawReason}` : undefined}>
+                    Rerank reason: {explanation}
+                  </p>
+                );
+              })() : null}
               {!hasDetails && formatDetailsStatus(job) ? (
                 <p className="helper details-unavailable">{formatDetailsStatus(job)}</p>
               ) : null}

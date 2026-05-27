@@ -15,7 +15,6 @@ export default function SearchFilters({
   resultsWanted, onResultsWantedChange,
   hoursOld, onHoursOldChange,
   isRemote, onIsRemoteChange,
-  fetchFullDescriptions, onFetchFullDescriptionsChange,
   resumeText, onResumeTextChange,
   wishes, onWishesChange,
   models,
@@ -40,7 +39,8 @@ export default function SearchFilters({
   onClearCache,
   isLoading,
   error,
-  onSearch
+  onSearch,
+  onRunRerank
 }) {
   const [showExample, setShowExample] = useState(false);
   const [isRerankModalOpen, setIsRerankModalOpen] = useState(false);
@@ -80,6 +80,20 @@ SKILLS
     return () => {
       document.body.classList.remove("modal-open");
       window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isRerankModalOpen]);
+
+  useEffect(() => {
+    if (!isRerankModalOpen) return undefined;
+    const timer = window.setTimeout(() => {
+      const fieldId = "wishes";
+      const field = document.getElementById(fieldId);
+      if (field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement || field instanceof HTMLSelectElement) {
+        field.focus();
+      }
+    }, 30);
+    return () => {
+      window.clearTimeout(timer);
     };
   }, [isRerankModalOpen]);
 
@@ -146,7 +160,7 @@ SKILLS
         type="button"
         onClick={() => setIsRerankModalOpen(true)}
       >
-        Open LLM rerank settings
+        Find job matches with LLM
       </button>
 
       <div className="filters-accordion">
@@ -186,14 +200,7 @@ SKILLS
                 <span className="label">Site</span>
                 <p className="helper">LinkedIn only</p>
               </div>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={fetchFullDescriptions}
-                  onChange={(e) => onFetchFullDescriptionsChange(e.target.checked)}
-                />
-                Fetch full descriptions (slower)
-              </label>
+              <p className="helper">Job details are always enriched automatically after search.</p>
               <button
                 className="secondary"
                 disabled={isSearchDisabled}
@@ -212,8 +219,8 @@ SKILLS
           <div className="modal-card rerank-modal-card">
             <div className="panel-header">
               <div>
-                <p className="eyebrow">LLM refinement</p>
-                <h2 id="rerank-settings-title">LLM rerank settings</h2>
+                    <p className="eyebrow">Job match coach</p>
+                    <h2 id="rerank-settings-title">Job match preferences</h2>
               </div>
               <button
                 className="ghost"
@@ -235,7 +242,7 @@ SKILLS
                   onChange={(e) => onWishesChange(e.target.value)}
                 />
                 <p className="helper">
-                  Uses your preferences to bias the LLM rerank toward culture, industry, and constraints.
+                  Uses your preferences to prioritize culture, industry, and constraints.
                 </p>
               </div>
 
@@ -245,10 +252,10 @@ SKILLS
                   checked={enableRerank}
                   onChange={(e) => onEnableRerankChange(e.target.checked)}
                 />
-                Enable LLM rerank
+                Use LLM ranking for future searches
               </label>
               <p className="helper">
-                Reorders the top results using your resume context and wishes.
+                Reorders top results using your CV context and preferences.
               </p>
 
               <div>
@@ -263,7 +270,7 @@ SKILLS
                 <p className="helper">
                   Include dates and time spans so the model can ground experiences.
                 </p>
-                {needsResume && <p className="error">Resume text is required to apply refinement.</p>}
+                {needsResume && <p className="error">Resume text is required to apply AI ranking.</p>}
               </div>
 
               <button
@@ -278,10 +285,10 @@ SKILLS
               )}
 
               <details className="advanced-options" open={false}>
-                <summary className="advanced-summary">Advanced rerank options</summary>
+                <summary className="advanced-summary">Advanced matching options</summary>
                 <div className="filters">
                   <div>
-                    <label htmlFor="rerankTopN" className="label">Rerank top K</label>
+                    <label htmlFor="rerankTopN" className="label">Compare top K jobs</label>
                     <input
                       id="rerankTopN"
                       type="number"
@@ -304,7 +311,7 @@ SKILLS
                   </div>
 
                   <div>
-                    <label htmlFor="model" className="label">LLM model</label>
+                    <label htmlFor="model" className="label">AI model</label>
                     <select
                       id="model"
                       value={selectedModel}
@@ -320,7 +327,7 @@ SKILLS
                   </div>
 
                   <div>
-                    <label htmlFor="lmTimeout" className="label">LLM timeout (minutes)</label>
+                    <label htmlFor="lmTimeout" className="label">AI timeout (minutes)</label>
                     <input
                       id="lmTimeout"
                       type="number"
@@ -336,7 +343,7 @@ SKILLS
               </details>
 
               <div className="profile-block">
-                <label className="label" htmlFor="rerankProfile">CV profile for rerank</label>
+                <label className="label" htmlFor="rerankProfile">CV profile for matching</label>
                 <div className="filters">
                   <select
                     id="rerankProfile"
@@ -353,6 +360,24 @@ SKILLS
                   {rerankProfileError && <p className="error">{rerankProfileError}</p>}
                   <p className="helper">Selecting a profile loads its saved CV text from the shared profile store.</p>
                 </div>
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  className="primary"
+                  type="button"
+                  disabled={needsResume}
+                  onClick={() => onRunRerank?.()}
+                >
+                  Run LLM matching
+                </button>
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={() => setIsRerankModalOpen(false)}
+                >
+                  Close
+                </button>
               </div>
             </div>
           </div>

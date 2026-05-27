@@ -3,8 +3,36 @@ import { Download, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { generateCoverLetter, parseCvCanonical } from "../api/llm";
 
+const RERANK_REASON_EXPLANATIONS = {
+  rag: "Strong alignment with retrieval-augmented generation experience and related tooling.",
+  llm: "Strong alignment with large language model experience and responsibilities.",
+  mlops: "Strong alignment with machine-learning operations, deployment, and production workflows.",
+  nlp: "Strong alignment with natural language processing skills and project experience.",
+  python: "Strong alignment with Python-based engineering requirements.",
+};
+
+const formatRerankReason = (reason) => {
+  const raw = String(reason || "").trim();
+  if (!raw) return "";
+
+  const normalized = raw.toLowerCase().replace(/\s+/g, "_");
+  if (RERANK_REASON_EXPLANATIONS[normalized]) {
+    return RERANK_REASON_EXPLANATIONS[normalized];
+  }
+
+  if (raw.length <= 3) {
+    return `Matched on ${raw.toUpperCase()}-related requirements in the job description.`;
+  }
+
+  return raw;
+};
+
 export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defaultCollapsed = false }) {
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+  const rawRerankReason = job?.rerank_score != null && Array.isArray(job?.match_reasons)
+    ? String(job.match_reasons[0] || "").trim()
+    : "";
+  const rerankReason = formatRerankReason(rawRerankReason);
 
   if (collapsible && isCollapsed) {
     return (
@@ -67,19 +95,25 @@ export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defa
           </div>
         </div>
         <p className="rank-note">
-          {job.match_reasons?.length
-            ? "Top matched keywords"
+          {job.rerank_score != null
+            ? "LLM rerank explanation"
+            : job.match_reasons?.length
+              ? "Top matched keywords"
             : "Ranking will appear once the scoring logic is enabled."}
         </p>
-        {job.match_reasons?.length ? (
+        {job.rerank_score == null && job.match_reasons?.length ? (
           <div className="reason-list">
             {job.match_reasons.map((reason) => (
               <span key={reason} className="reason-chip">{reason}</span>
             ))}
           </div>
         ) : null}
-        {job.rerank_score != null && job.match_reasons?.[0] ? (
-          <p className="helper">Rerank reason: {job.match_reasons[0]}</p>
+        {job.rerank_score != null && rerankReason ? (
+          <div>
+            <p className="helper" title={rawRerankReason ? `Raw reason: ${rawRerankReason}` : undefined}>
+              Rerank reason: {rerankReason}
+            </p>
+          </div>
         ) : null}
       </div>
 

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class SearchRequest(BaseModel):
     resume_text: str
     wishes: str | None = None
+    selected_rerank_profile_id: str | None = None
     search_term: str | None = None
     location: str | None = None
     search_radius_km: int | None = Field(default=None, ge=0)
@@ -16,11 +17,47 @@ class SearchRequest(BaseModel):
     linkedin_fetch_description: bool = False
     description_format: str = "markdown"
     model: str | None = None
+    translation_model: str | None = None
     lm_timeout: float | None = None
     enable_rerank: bool = True
     rerank_top_n: int | None = None
     precision_weight_embedding: float = 0.8
     precision_weight_keyword: float = 0.2
+
+
+class QueryDebugRequest(BaseModel):
+    resume_text: str
+    wishes: str | None = None
+    selected_rerank_profile_id: str | None = None
+    model: str | None = None
+    lm_timeout: float | None = None
+
+
+class QueryDebugResponse(BaseModel):
+    query_profile_id: str | None = None
+    bm25_query: str | None = None
+    bm25_language: str | None = None
+    bm25_tokenizer: str | None = None
+    bm25_query_terms: dict[str, int] = Field(default_factory=dict)
+
+
+class ScoreJobsRequest(BaseModel):
+    jobs: list[dict]
+    resume_text: str
+    wishes: str | None = None
+    selected_rerank_profile_id: str | None = None
+    bm25_query: str | None = None
+    bm25_language: str | None = None
+    bm25_tokenizer: str | None = None
+    bm25_query_terms: dict[str, int] | None = None
+    model: str | None = None
+    lm_timeout: float | None = None
+    precision_weight_embedding: float = 0.8
+    precision_weight_keyword: float = 0.2
+
+
+class RerankJobsRequest(ScoreJobsRequest):
+    rerank_top_n: int | None = None
 
 
 class SearchJob(BaseModel):
@@ -49,6 +86,10 @@ class SearchResponse(BaseModel):
     resume_length: int
     has_wishes: bool
     jobs: list[SearchJob]
+    query_profile_id: str | None = None
+    bm25_query: str | None = None
+    bm25_language: str | None = None
+    bm25_tokenizer: str | None = None
     rerank_requested: bool | None = None
     rerank_applied: bool | None = None
     rerank_top_n: int | None = None
