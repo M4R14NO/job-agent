@@ -756,7 +756,9 @@ export default function CvReview({
   onTailor,
   isTailoring = false,
   tailorProgress = null,
-  readOnly = false
+  readOnly = false,
+  showTailorAction = true,
+  onEditProfile
 }) {
   const isHipsterTemplate = templateId === "hipstercv";
   const resolvedInitialProfileId = canonical?.profile_id || initialProfileId || "default";
@@ -3222,17 +3224,30 @@ export default function CvReview({
           <p className="helper" style={{ margin: 0 }}>
             Read-only preview mode: this profile is opened for safe browsing. Use Tailor to create a new editable profile version.
           </p>
-          {onTailor ? (
-            <button
-              type="button"
-              className="secondary cv-readonly-tailor-button llm-action-button"
-              onClick={onTailor}
-              disabled={isTailoring}
-            >
-              <Sparkles size={14} />
-              {isTailoring ? "Tailoring..." : "Tailor & create editable copy"}
-            </button>
-          ) : null}
+          <div className="cv-readonly-actions">
+            {showTailorAction && onTailor ? (
+              <button
+                type="button"
+                className="secondary cv-readonly-tailor-button llm-action-button"
+                onClick={onTailor}
+                disabled={isTailoring}
+              >
+                <Sparkles size={14} />
+                {isTailoring ? "Tailoring..." : "Tailor & create editable copy"}
+              </button>
+            ) : null}
+            {onEditProfile ? (
+              <button
+                type="button"
+                className="secondary cv-readonly-edit-button"
+                onClick={onEditProfile}
+                disabled={isTailoring}
+              >
+                <Pencil size={14} />
+                Edit profile
+              </button>
+            ) : null}
+          </div>
           {isTailoring && tailorProgress ? (
             <div className="cv-readonly-progress">
               <div className="results-loading">

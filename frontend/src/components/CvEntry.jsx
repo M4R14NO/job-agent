@@ -218,7 +218,8 @@ export default function CvEntry({
   hideTailorAction = false,
   tailorActionDisabled,
   profileTableCollapsedByDefault = false,
-  remapSuggestionBuilder
+  remapSuggestionBuilder,
+  tailorContext = null
 }) {
   const isJobMode = contextMode === "job";
   const [showExampleCvText, setShowExampleCvText] = useState(false);
@@ -430,7 +431,7 @@ export default function CvEntry({
 
       <div className="cv-entry-panel">
           {profileTableCollapsedByDefault ? (
-            <details className="cv-profile-collapsible" open={false}>
+            <details className="cv-profile-collapsible">
               <summary className="cv-profile-collapsible-summary">Browse and switch CV profiles</summary>
               <div style={{ marginTop: 12 }}>
                 <div>
@@ -984,6 +985,20 @@ export default function CvEntry({
           </div>
 
           <div className="cv-entry-cta-wrap">
+            {isJobMode && tailorContext ? (
+              <div className="w1-tailor-context">
+                <p className="w1-tailor-context-title">
+                  Create an editable, job-tailored copy for {tailorContext.jobTitle || "this role"}
+                  {tailorContext.company ? ` at ${tailorContext.company}` : ""}.
+                </p>
+                <div className="w1-tailor-context-grid">
+                  <span><strong>Target job:</strong> {(tailorContext.jobTitle || "-")}{tailorContext.company ? ` · ${tailorContext.company}` : ""}</span>
+                  <span><strong>Source profile:</strong> {tailorContext.sourceProfileId || "none selected"}</span>
+                  <span><strong>Target profile:</strong> {tailorContext.targetProfileId || "auto-generated"}</span>
+                  <span><strong>Template + language:</strong> {tailorContext.templateId || "awesomecv"} · {tailorContext.outputLanguage || "english"}</span>
+                </div>
+              </div>
+            ) : null}
             <div className="cv-entry-actions">
               {!hideUpdateAction ? (
                 <button
