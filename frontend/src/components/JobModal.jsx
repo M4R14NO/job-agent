@@ -3,8 +3,36 @@ import { Download, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { generateCoverLetter, parseCvCanonical } from "../api/llm";
 
+const RERANK_REASON_EXPLANATIONS = {
+  rag: "Strong alignment with retrieval-augmented generation experience and related tooling.",
+  llm: "Strong alignment with large language model experience and responsibilities.",
+  mlops: "Strong alignment with machine-learning operations, deployment, and production workflows.",
+  nlp: "Strong alignment with natural language processing skills and project experience.",
+  python: "Strong alignment with Python-based engineering requirements.",
+};
+
+const formatRerankReason = (reason) => {
+  const raw = String(reason || "").trim();
+  if (!raw) return "";
+
+  const normalized = raw.toLowerCase().replace(/\s+/g, "_");
+  if (RERANK_REASON_EXPLANATIONS[normalized]) {
+    return RERANK_REASON_EXPLANATIONS[normalized];
+  }
+
+  if (raw.length <= 3) {
+    return `Matched on ${raw.toUpperCase()}-related requirements in the job description.`;
+  }
+
+  return raw;
+};
+
 export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defaultCollapsed = false }) {
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+  const rawRerankReason = job?.rerank_score != null && Array.isArray(job?.match_reasons)
+    ? String(job.match_reasons[0] || "").trim()
+    : "";
+  const rerankReason = formatRerankReason(rawRerankReason);
 
   if (collapsible && isCollapsed) {
     return (
@@ -67,19 +95,25 @@ export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defa
           </div>
         </div>
         <p className="rank-note">
-          {job.match_reasons?.length
-            ? "Top matched keywords"
+          {job.rerank_score != null
+            ? "LLM rerank explanation"
+            : job.match_reasons?.length
+              ? "Top matched keywords"
             : "Ranking will appear once the scoring logic is enabled."}
         </p>
-        {job.match_reasons?.length ? (
+        {job.rerank_score == null && job.match_reasons?.length ? (
           <div className="reason-list">
             {job.match_reasons.map((reason) => (
               <span key={reason} className="reason-chip">{reason}</span>
             ))}
           </div>
         ) : null}
-        {job.rerank_score != null && job.match_reasons?.[0] ? (
-          <p className="helper">Rerank reason: {job.match_reasons[0]}</p>
+        {job.rerank_score != null && rerankReason ? (
+          <div>
+            <p className="helper" title={rawRerankReason ? `Raw reason: ${rawRerankReason}` : undefined}>
+              Rerank reason: {rerankReason}
+            </p>
+          </div>
         ) : null}
       </div>
 
@@ -117,11 +151,25 @@ export function PdfPreviewCard({
   isDownloading,
   templateId,
   onTemplateIdChange,
+  themeColor,
+  onThemeColorChange,
+  showProfileImage,
+  onShowProfileImageChange,
+  hipsterHeaderAlign,
+  onHipsterHeaderAlignChange,
+  hipsterHeaderTitleSize,
+  onHipsterHeaderTitleSizeChange,
+  hipsterHeaderSubtitleSize,
+  onHipsterHeaderSubtitleSizeChange,
   onUpdate,
   onDownload,
   disabled = false,
   disabledReason = ""
 }) {
+  const colorPresets = templateId === "hipstercv"
+    ? ["#496E8C", "#2F5D50", "#0F766E", "#374151", "#7C3AED", "#B45309"]
+    : ["#C0392B", "#E11D48", "#0F766E", "#2563EB", "#9333EA", "#EA580C"];
+
   const handleTemplateKeyDown = (event) => {
     if (event.key === "Tab" && !event.shiftKey && !disabled && !isGenerating) {
       event.preventDefault();
@@ -144,45 +192,138 @@ export function PdfPreviewCard({
           <h2>Rendered CV</h2>
         </div>
         <div className="pdf-preview-actions">
-          {onTemplateIdChange && (
-            <div className="pdf-preview-template-control">
-              <span className="pdf-preview-template-label">Switch template</span>
-              <select
-                id="pdf-preview-template-select"
-                className="pdf-preview-template-select"
-                value={templateId}
-                onChange={(event) => onTemplateIdChange(event.target.value)}
-                aria-label="Template"
-                disabled={disabled}
-                onKeyDown={handleTemplateKeyDown}
-              >
-                <option value="awesomecv">AwesomeCV</option>
-                <option value="hipstercv">HipsterCV</option>
-              </select>
+          <div className="pdf-preview-controls-row">
+            {onTemplateIdChange && (
+              <div className="pdf-preview-template-control">
+                <span className="pdf-preview-template-label">Switch template</span>
+                <select
+                  id="pdf-preview-template-select"
+                  className="pdf-preview-template-select"
+                  value={templateId}
+                  onChange={(event) => onTemplateIdChange(event.target.value)}
+                  aria-label="Template"
+                  disabled={disabled}
+                  onKeyDown={handleTemplateKeyDown}
+                >
+                  <option value="awesomecv">AwesomeCV</option>
+                  <option value="hipstercv">HipsterCV</option>
+                </select>
+              </div>
+            )}
+            {onThemeColorChange && (
+              <div className="pdf-preview-template-control">
+                <span className="pdf-preview-template-label">Theme color</span>
+                <input
+                  id="pdf-preview-theme-color"
+                  className="pdf-preview-theme-color-input"
+                  type="color"
+                  value={themeColor || "#496E8C"}
+                  onChange={(event) => onThemeColorChange(event.target.value)}
+                  disabled={disabled || isGenerating}
+                  aria-label="Theme color"
+                />
+                <div className="pdf-preview-color-palette" role="group" aria-label="Theme color presets">
+                  {colorPresets.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      className={`pdf-preview-color-swatch${(themeColor || "").toUpperCase() === preset.toUpperCase() ? " is-active" : ""}`}
+                      style={{ backgroundColor: preset }}
+                      onClick={() => onThemeColorChange(preset)}
+                      disabled={disabled || isGenerating}
+                      aria-label={`Set color ${preset}`}
+                      title={preset}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="pdf-preview-button-row">
+            {onShowProfileImageChange && (
+              <div className="pdf-preview-switch-control">
+                <span className="pdf-preview-template-label">Show image</span>
+                <button
+                  id="pdf-preview-show-image-toggle"
+                  type="button"
+                  className={`pdf-preview-switch${showProfileImage !== false ? " is-on" : ""}`}
+                  role="switch"
+                  aria-checked={showProfileImage !== false}
+                  aria-label="Show profile image"
+                  onClick={() => onShowProfileImageChange(showProfileImage === false)}
+                  disabled={disabled || isGenerating}
+                >
+                  <span className="pdf-preview-switch-thumb" />
+                </button>
+              </div>
+            )}
+            <button
+              id="pdf-update-preview-button"
+              type="button"
+              className="secondary btn-sm"
+              onClick={onUpdate}
+              disabled={disabled || isGenerating}
+              onKeyDown={handleUpdateKeyDown}
+            >
+              <RefreshCw size={14} />
+              {isGenerating ? "Rendering…" : "Update preview"}
+            </button>
+            <button
+              id="pdf-download-button"
+              type="button"
+              className="primary btn-sm pdf-download-button"
+              onClick={onDownload}
+              disabled={disabled || isDownloading || !pdfUrl}
+              title={disabled ? disabledReason : (!pdfUrl ? "Render a preview first" : "Download the current PDF")}
+            >
+              <Download size={14} />
+              {isDownloading ? "Downloading…" : "Download PDF"}
+            </button>
+          </div>
+          {templateId === "hipstercv" && (
+            <div className="pdf-preview-hipster-controls-row">
+              <div className="pdf-preview-template-control">
+                <span className="pdf-preview-template-label">Text align</span>
+                <select
+                  className="pdf-preview-template-select"
+                  value={hipsterHeaderAlign || "right"}
+                  onChange={(event) => onHipsterHeaderAlignChange?.(event.target.value)}
+                  disabled={disabled || isGenerating}
+                >
+                  <option value="left">Left</option>
+                  <option value="center">Center</option>
+                  <option value="right">Right</option>
+                </select>
+              </div>
+              <div className="pdf-preview-template-control">
+                <span className="pdf-preview-template-label">Title size</span>
+                <select
+                  className="pdf-preview-template-select"
+                  value={hipsterHeaderTitleSize || "Huge"}
+                  onChange={(event) => onHipsterHeaderTitleSizeChange?.(event.target.value)}
+                  disabled={disabled || isGenerating}
+                >
+                  <option value="Large">Large</option>
+                  <option value="LARGE">LARGE</option>
+                  <option value="huge">huge</option>
+                  <option value="Huge">Huge</option>
+                </select>
+              </div>
+              <div className="pdf-preview-template-control">
+                <span className="pdf-preview-template-label">Subtitle size</span>
+                <select
+                  className="pdf-preview-template-select"
+                  value={hipsterHeaderSubtitleSize || "Large"}
+                  onChange={(event) => onHipsterHeaderSubtitleSizeChange?.(event.target.value)}
+                  disabled={disabled || isGenerating}
+                >
+                  <option value="normalsize">Normal</option>
+                  <option value="large">large</option>
+                  <option value="Large">Large</option>
+                </select>
+              </div>
             </div>
           )}
-          <button
-            id="pdf-update-preview-button"
-            type="button"
-            className="secondary btn-sm"
-            onClick={onUpdate}
-            disabled={disabled || isGenerating}
-            onKeyDown={handleUpdateKeyDown}
-          >
-            <RefreshCw size={14} />
-            {isGenerating ? "Rendering…" : "Update preview"}
-          </button>
-          <button
-            id="pdf-download-button"
-            type="button"
-            className="primary btn-sm pdf-download-button"
-            onClick={onDownload}
-            disabled={disabled || isDownloading || !pdfUrl}
-            title={disabled ? disabledReason : (!pdfUrl ? "Render a preview first" : "Download the current PDF")}
-          >
-            <Download size={14} />
-            {isDownloading ? "Downloading…" : "Download PDF"}
-          </button>
         </div>
       </div>
       <div className="pdf-preview-container">

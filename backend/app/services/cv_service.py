@@ -3,10 +3,12 @@ import logging
 import os
 import tempfile
 import shutil
+from uuid import uuid4
 from datetime import datetime
 from pathlib import Path
 
 from ..schemas.search import CvCanonicalData
+from .cv_storage import DEFAULT_PROFILE_STORE
 from .cv_mappers import get_deterministic_mapper, get_llm_mapper
 from .cv_mappers.awesomecv import ALLOWED_DOC_TYPES, DEFAULT_TEMPLATE_ID
 from .cv_utils import extract_json
@@ -18,9 +20,34 @@ except ImportError as exc:  # pragma: no cover - dependency is optional for dev
     raise RuntimeError("awesomecv-jinja is required for CV generation") from exc
 
 
-DEFAULT_TMP_DIR = os.getenv("CV_TMP_DIR", "/tmp/job-agent-tex")
+def _default_tmp_dir() -> str:
+    if configured := os.getenv("CV_TMP_DIR"):
+        return configured
+
+    preferred = Path("/tmp/job-agent-tex")
+    try:
+        preferred.mkdir(parents=True, exist_ok=True)
+        if os.access(preferred, os.W_OK | os.X_OK):
+            return str(preferred)
+    except Exception:
+        pass
+
+    fallback = Path.home() / ".job-agent" / "tmp"
+    try:
+        fallback.mkdir(parents=True, exist_ok=True)
+        if os.access(fallback, os.W_OK | os.X_OK):
+            return str(fallback)
+    except Exception:
+        pass
+
+    per_user_tmp = Path(tempfile.gettempdir()) / f"job-agent-{os.getuid()}"
+    per_user_tmp.mkdir(parents=True, exist_ok=True)
+    return str(per_user_tmp)
+
+
+DEFAULT_TMP_DIR = _default_tmp_dir()
 DEBUG_TEX = os.getenv("CV_DEBUG_TEX", "0") == "1"
-DEBUG_TEX_DIR = os.getenv("CV_DEBUG_TEX_DIR", "/tmp/job-agent-tex/debug")
+DEBUG_TEX_DIR = os.getenv("CV_DEBUG_TEX_DIR", str(Path(DEFAULT_TMP_DIR) / "debug"))
 CANONICAL_SCHEMA_VERSION = "v1"
 DEFAULT_LM_TIMEOUT = float(os.getenv("LMSTUDIO_TIMEOUT", "240"))
 logger = logging.getLogger(__name__)
@@ -29,6 +56,69 @@ TEMPLATE_DIRS = {
     "awesomecv": TEMPLATE_ROOT_DIR / "awesome_cv",
     "hipstercv": TEMPLATE_ROOT_DIR / "hipster_cv",
 }
+
+
+def _default_profile_image_upload_dir() -> Path:
+    if configured := os.getenv("CV_PROFILE_IMAGE_DIR"):
+        return Path(configured)
+    profile_store = Path(os.getenv("CV_PROFILE_STORE") or DEFAULT_PROFILE_STORE)
+    return profile_store.parent / "images"
+
+
+PROFILE_IMAGE_UPLOAD_DIR = _default_profile_image_upload_dir()
+ALLOWED_PROFILE_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+
+
+def _normalize_profile_image_suffix(filename: str | None) -> str:
+    suffix = Path(filename or "").suffix.lower()
+    if suffix in ALLOWED_PROFILE_IMAGE_SUFFIXES:
+        return suffix
+    raise ValueError("Unsupported profile image format. Use PNG, JPG, JPEG, or WEBP.")
+
+
+def save_profile_image(*, file_bytes: bytes, original_filename: str | None) -> str:
+    suffix = _normalize_profile_image_suffix(original_filename)
+    PROFILE_IMAGE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    file_name = f"{uuid4().hex}{suffix}"
+    destination = PROFILE_IMAGE_UPLOAD_DIR / file_name
+    destination.write_bytes(file_bytes)
+    return file_name
+
+
+def _resolve_profile_image_path(photo: str | None) -> Path | None:
+    if not isinstance(photo, str):
+        return None
+    normalized = photo.strip()
+    if not normalized:
+        return None
+
+    candidate = Path(normalized)
+    if candidate.is_absolute() and candidate.exists() and candidate.is_file():
+        return candidate
+
+    safe_name = Path(normalized).name
+    resolved = PROFILE_IMAGE_UPLOAD_DIR / safe_name
+    if resolved.exists() and resolved.is_file():
+        return resolved
+    return None
+
+
+def _prepare_payload_assets(payload: dict, working_dir: Path) -> dict:
+    prepared = dict(payload)
+    source_image = _resolve_profile_image_path(prepared.get("photo"))
+    if source_image is None:
+        prepared["photo"] = None
+        return prepared
+
+    suffix = source_image.suffix.lower()
+    if suffix not in ALLOWED_PROFILE_IMAGE_SUFFIXES:
+        prepared["photo"] = None
+        return prepared
+
+    destination_name = f"profile-photo{suffix}"
+    shutil.copy2(source_image, working_dir / destination_name)
+    prepared["photo"] = destination_name
+    return prepared
 
 
 def _is_pdf_valid(pdf_bytes: bytes) -> bool:
@@ -483,8 +573,9 @@ def render_cv_pdf_from_payload(*, payload: dict, doc_type: str, template_id: str
     with tempfile.TemporaryDirectory(dir=tmp_root) as tmp_dir:
         output_path = Path(tmp_dir) / "cv.pdf"
         tex_path = Path(tmp_dir) / "cv.tex"
+        prepared_payload = _prepare_payload_assets(payload, Path(tmp_dir))
         renderer = _get_renderer(template_id)
-        renderer.render(doc_type, payload, output=tex_path)
+        renderer.render(doc_type, prepared_payload, output=tex_path)
         _copy_template_assets(template_id, Path(tmp_dir))
         if DEBUG_TEX:
             debug_root = Path(DEBUG_TEX_DIR)

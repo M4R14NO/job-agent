@@ -2,6 +2,8 @@ import os
 from typing import Any
 
 import httpx
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
 
 
 LMSTUDIO_BASE_URL = os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234")
@@ -11,6 +13,34 @@ LMSTUDIO_EMBEDDING_MODEL = os.getenv("LMSTUDIO_EMBEDDING_MODEL", "text-embedding
 
 def _get_client(timeout: float | None = None) -> httpx.Client:
     return httpx.Client(base_url=LMSTUDIO_BASE_URL, timeout=timeout or LMSTUDIO_TIMEOUT)
+
+
+def _to_langchain_messages(messages: list[dict[str, str]]) -> list[SystemMessage | HumanMessage | AIMessage]:
+    converted: list[SystemMessage | HumanMessage | AIMessage] = []
+    for message in messages:
+        role = (message.get("role") or "user").strip().lower()
+        content = message.get("content") or ""
+        if role == "system":
+            converted.append(SystemMessage(content=content))
+        elif role == "assistant":
+            converted.append(AIMessage(content=content))
+        else:
+            converted.append(HumanMessage(content=content))
+    return converted
+
+
+def _normalize_response_format_for_lmstudio(response_format: dict | None) -> dict | None:
+    """LM Studio does not accept OpenAI's legacy json_object mode.
+
+    Keep schema-mode formatting when explicitly requested and otherwise rely on
+    prompt-level JSON instructions.
+    """
+    if not response_format:
+        return None
+    fmt_type = str(response_format.get("type") or "").strip().lower()
+    if fmt_type in {"json_schema", "text"}:
+        return response_format
+    return None
 
 
 def list_models() -> list[str]:
@@ -55,44 +85,37 @@ def chat_completion(
     response_format: dict | None = None,
     timeout: float | None = None,
 ) -> str:
-    with _get_client(timeout=timeout) as client:
-        payload = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        }
-        if response_format:
-            payload["response_format"] = response_format
-        response = client.post(
-            "/v1/chat/completions",
-            json=payload,
-        )
-        response.raise_for_status()
-        payload = response.json()
+    llm = ChatOpenAI(
+        model=model,
+        base_url=f"{LMSTUDIO_BASE_URL}/v1",
+        api_key=os.getenv("LMSTUDIO_API_KEY", "lm-studio"),
+        temperature=temperature,
+        timeout=timeout or LMSTUDIO_TIMEOUT,
+        max_tokens=max_tokens,
+    )
+    normalized_response_format = _normalize_response_format_for_lmstudio(response_format)
+    if normalized_response_format:
+        llm = llm.bind(response_format=normalized_response_format)
 
-    if not isinstance(payload, dict):
-        raise ValueError("LMStudio response is not a JSON object")
+    result = llm.invoke(_to_langchain_messages(messages))
+    content = result.content
+    if isinstance(content, str):
+        text = content.strip()
+    elif isinstance(content, list):
+        text = "".join(
+            part.get("text", "") if isinstance(part, dict) else str(part)
+            for part in content
+        ).strip()
+    else:
+        text = str(content).strip()
 
-    choices = payload.get("choices", [])
-    if not choices:
-        raise ValueError("LMStudio response has no choices")
-
-    first = choices[0] if isinstance(choices[0], dict) else {}
-    message = first.get("message", {}) if isinstance(first.get("message"), dict) else {}
-    content = message.get("content") if isinstance(message, dict) else ""
-    reasoning = message.get("reasoning_content") if isinstance(message, dict) else ""
-    if not content:
-        content = first.get("text") if isinstance(first.get("text"), str) else ""
-    if not content and reasoning:
-        raise ValueError("LMStudio returned reasoning-only content; pick a non-reasoning model or disable reasoning")
-    if not content:
+    if not text:
         raise ValueError("LMStudio response content is empty")
-    return content
+    return text
 
 
 def safe_request(fn, *args, **kwargs) -> tuple[Any | None, str | None]:
     try:
         return fn(*args, **kwargs), None
-    except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+    except Exception as exc:
         return None, str(exc)

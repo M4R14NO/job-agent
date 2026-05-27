@@ -1,6 +1,7 @@
 export function buildSearchRequest({
   resumeText,
   wishes,
+  selectedRerankProfileId,
   searchTerm,
   location,
   searchRadiusKm,
@@ -8,8 +9,8 @@ export function buildSearchRequest({
   hoursOld,
   isRemote,
   sites,
-  fetchFullDescriptions,
   model,
+  lmTimeout,
   enableRerank,
   rerankTopN,
   weightEmbedding,
@@ -18,6 +19,7 @@ export function buildSearchRequest({
   return {
     resume_text: resumeText.trim(),
     wishes: wishes.trim() || null,
+    selected_rerank_profile_id: selectedRerankProfileId || null,
     search_term: searchTerm.trim() || null,
     location: location.trim() || null,
     search_radius_km: searchRadiusKm,
@@ -25,13 +27,116 @@ export function buildSearchRequest({
     hours_old: hoursOld,
     is_remote: isRemote,
     site_name: sites,
-    linkedin_fetch_description: fetchFullDescriptions,
+    linkedin_fetch_description: false,
     description_format: "markdown",
     model: model || null,
+    lm_timeout: lmTimeout,
     enable_rerank: Boolean(enableRerank),
     rerank_top_n: rerankTopN,
     precision_weight_embedding: weightEmbedding,
     precision_weight_keyword: weightKeyword
+  };
+}
+
+function buildBaseJobContext({
+  resumeText,
+  wishes,
+  selectedRerankProfileId,
+  model,
+  lmTimeout,
+  precisionWeightEmbedding,
+  precisionWeightKeyword
+}) {
+  return {
+    resume_text: resumeText.trim(),
+    wishes: wishes.trim() || null,
+    selected_rerank_profile_id: selectedRerankProfileId || null,
+    model: model || null,
+    lm_timeout: lmTimeout,
+    precision_weight_embedding: precisionWeightEmbedding,
+    precision_weight_keyword: precisionWeightKeyword
+  };
+}
+
+export function buildQueryDebugRequest({
+  resumeText,
+  wishes,
+  selectedRerankProfileId,
+  model,
+  lmTimeout
+}) {
+  return {
+    resume_text: resumeText.trim(),
+    wishes: wishes.trim() || null,
+    selected_rerank_profile_id: selectedRerankProfileId || null,
+    model: model || null,
+    lm_timeout: lmTimeout
+  };
+}
+
+export function buildScoreJobsRequest({
+  jobs,
+  resumeText,
+  wishes,
+  selectedRerankProfileId,
+  bm25Query,
+  bm25Language,
+  bm25Tokenizer,
+  bm25QueryTerms,
+  model,
+  lmTimeout,
+  precisionWeightEmbedding,
+  precisionWeightKeyword
+}) {
+  return {
+    jobs,
+    ...buildBaseJobContext({
+      resumeText,
+      wishes,
+      selectedRerankProfileId,
+      model,
+      lmTimeout,
+      precisionWeightEmbedding,
+      precisionWeightKeyword
+    }),
+    bm25_query: bm25Query || null,
+    bm25_language: bm25Language || null,
+    bm25_tokenizer: bm25Tokenizer || null,
+    bm25_query_terms: bm25QueryTerms || null
+  };
+}
+
+export function buildRerankJobsRequest({
+  jobs,
+  resumeText,
+  wishes,
+  selectedRerankProfileId,
+  bm25Query,
+  bm25Language,
+  bm25Tokenizer,
+  bm25QueryTerms,
+  model,
+  lmTimeout,
+  rerankTopN,
+  precisionWeightEmbedding,
+  precisionWeightKeyword
+}) {
+  return {
+    ...buildScoreJobsRequest({
+      jobs,
+      resumeText,
+      wishes,
+      selectedRerankProfileId,
+      bm25Query,
+      bm25Language,
+      bm25Tokenizer,
+      bm25QueryTerms,
+      model,
+      lmTimeout,
+      precisionWeightEmbedding,
+      precisionWeightKeyword
+    }),
+    rerank_top_n: rerankTopN ?? null
   };
 }
 

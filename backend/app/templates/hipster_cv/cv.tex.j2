@@ -7,20 +7,36 @@
 \documentclass[pastel]{hipstercv}
 \usepackage[utf8]{inputenc}
 \usepackage[default]{raleway}
-\usepackage[margin=1cm, a4paper]{geometry}
+\usepackage[left=1cm,right=1cm,bottom=1cm,top=0cm,a4paper]{geometry}
 \usepackage[english]{babel}
 \usepackage{enumitem}
+\usepackage{eso-pic}
 
 \newlength{\rightcolwidth}
 \newlength{\leftcolwidth}
 \setlength{\leftcolwidth}{0.24\textwidth}
 \setlength{\rightcolwidth}{0.76\textwidth}
+\setlength{\columnsep}{0.5cm}
 \newcolumntype{H}{>{\raggedleft\arraybackslash\hspace{0pt}}p{0.11\linewidth}}
 \newcolumntype{R}{>{\raggedright\arraybackslash\hspace{0pt}}p{0.81\linewidth}}
 \setlength{\emergencystretch}{1em}
 \newcommand{\hipstersidebarspace}{\par\vspace{3.5em}}
 \newcommand{\hipstersidebarcontentoffset}{-1.8em}
 \newcommand{\hipstersidebarcontentwidth}{0.90\leftcolwidth}
+\newlength{\hipstersidebarbgwidth}
+\setlength{\hipstersidebarbgwidth}{\dimexpr1cm+\leftcolwidth+0.5\columnsep\relax}
+
+((* if accent_color_hex *))
+\definecolor{hipster-accent}{HTML}{((( accent_color_hex )))}
+\colorlet{backBlue}{hipster-accent}
+\colorlet{headerblue}{hipster-accent}
+((* endif *))
+
+\AddToShipoutPictureBG{%
+	\AtPageLowerLeft{%
+		\color[rgb]{0.9,0.9,0.9}\rule{\hipstersidebarbgwidth}{\paperheight}%
+	}%
+}
 
 \author{Job Agent}
 \date{\today}
@@ -28,45 +44,112 @@
 
 \newcommand{\hipstercontactline}[2]{#1 & #2\\[1pt]}
 \newcommand{\hipstermarker}[1]{\raisebox{0.35ex}{\color{backBlue}\bfseries\footnotesize #1}}
-\newcommand{\headermaybephoto}[3]{%
-\begin{tikzpicture}[remember picture,overlay]
-\node[rectangle, fill=backBlue, anchor=north, minimum width=\paperwidth, minimum height=5cm](header) at (current page.north){};
-\node[anchor=west](photo) at ($(header.west)+(3.5cm,-2.45cm)$) {};
-\draw[draw=black!60, line width=0.6pt] (photo) circle (2cm);
-((* if photo and photo | length > 0 *))
-\draw[path picture={\node[anchor=center] at (path picture bounding box.center){\includegraphics[height=4.3cm]{((( photo | latex_escape )))}};}] (photo) circle (2cm);
-((* else *))
-\node[anchor=center, font=\small\color{black!70}] at (photo) {No Photo};
-((* endif *))
-\node[anchor=east](name) at ($(header.east)+(-2.0cm,-1.95cm)$) {#1};
-\node[anchor=north east] at (name.south east) {#2};
-\end{tikzpicture}%
-\vspace{1.8cm}%
-}
 
 \begin{document}
 
 \thispagestyle{empty}
-\section*{Start}
 
-\headermaybephoto{
-  \bgupper{backBlue}{headerfontboxfont}{\bfseries\Huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}
-}{
-  ((* if position *))\bg{backBlue}{headerfontboxfont}{\large ((( position | latex_escape )))}((* endif *))
-}{((* if photo *))((( photo | latex_escape )))((* endif *))}
+((* set photo_path = (photo | default("", true) | trim) *))
+((* set show_profile = (show_profile_image | default(true)) *))
+((* set subtitle_break_token = "PIPEBREAKTOKEN" *))
+((* set subtitle_raw = (position | default("", true) | trim) *))
+((* set subtitle_with_breaks = subtitle_raw | replace(" | ", subtitle_break_token) | replace("|", subtitle_break_token) *))
+((* set header_align = (header_text_align | default("right", true) | trim | lower) *))
+((* set header_title_size = (header_title_size | default("Huge", true) | trim) *))
+((* set header_subtitle_size = (header_subtitle_size | default("Large", true) | trim) *))
+((* set subtitle_multiline = (subtitle_break_token in subtitle_with_breaks) *))
+((* if subtitle_multiline *))
+	((* if header_subtitle_size == "Large" *))((* set subtitle_size_effective = "large" *))
+	((* elif header_subtitle_size == "large" *))((* set subtitle_size_effective = "normalsize" *))
+	((* elif header_subtitle_size == "normalsize" *))((* set subtitle_size_effective = "small" *))
+	((* else *))((* set subtitle_size_effective = header_subtitle_size *))((* endif *))
+((* else *))
+	((* set subtitle_size_effective = header_subtitle_size *))
+((* endif *))
+
+\noindent\hspace*{-1cm}%
+\colorbox{backBlue}{%
+\parbox[c][5.0cm][c]{\dimexpr\paperwidth-2\fboxsep\relax}{%
+\hspace*{0.35cm}%
+((* if show_profile *))
+\begin{minipage}[c]{0.24\linewidth}
+\centering
+((* if photo_path *))
+\begin{tikzpicture}
+\node[circle, minimum size=4.7cm, inner sep=0pt, path picture={\node[anchor=center] at (path picture bounding box.center) {\includegraphics[width=4.7cm,height=4.7cm]{((( photo_path | latex_escape )))}};}] (profilePic) {};
+\draw[white, line width=1.2pt] (profilePic) circle (2.35cm);
+\end{tikzpicture}
+((* else *))
+\begin{tikzpicture}
+\node[circle, minimum size=4.7cm, inner sep=0pt, draw=white, line width=1.2pt] (profilePic) {};
+\node[align=center, text=white, font=\small\bfseries] at (profilePic.center) {No\\Photo};
+\end{tikzpicture}
+((* endif *))
+\end{minipage}%
+\hspace*{0.01\linewidth}%
+\begin{minipage}[c]{0.70\linewidth}
+((* if header_align == "left" *))\raggedright((* elif header_align == "center" *))\centering((* else *))\raggedleft((* endif *))
+((* if header_title_size == "huge" *))
+{\color{white}\bfseries\huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}
+((* elif header_title_size == "LARGE" *))
+{\color{white}\bfseries\LARGE ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}
+((* elif header_title_size == "Large" *))
+{\color{white}\bfseries\Large ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}
+((* else *))
+{\color{white}\bfseries\Huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}
+((* endif *))\\[0.62em]
+((* if subtitle_with_breaks *))
+	((* if subtitle_size_effective == "small" *))
+{\color{white}\bfseries\small ((( subtitle_with_breaks | latex_escape | replace(subtitle_break_token, " \\\\ ") )))}
+	((* elif subtitle_size_effective == "normalsize" *))
+{\color{white}\bfseries\normalsize ((( subtitle_with_breaks | latex_escape | replace(subtitle_break_token, " \\\\ ") )))}
+	((* elif subtitle_size_effective == "large" *))
+{\color{white}\bfseries\large ((( subtitle_with_breaks | latex_escape | replace(subtitle_break_token, " \\\\ ") )))}
+	((* else *))
+{\color{white}\bfseries\Large ((( subtitle_with_breaks | latex_escape | replace(subtitle_break_token, " \\\\ ") )))}
+	((* endif *))
+((* endif *))
+\end{minipage}
+((* else *))
+\begin{minipage}[c]{0.95\linewidth}
+((* if header_align == "left" *))\raggedright((* elif header_align == "center" *))\centering((* else *))\raggedleft((* endif *))
+((* if header_title_size == "huge" *))
+{\color{white}\bfseries\huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}
+((* elif header_title_size == "LARGE" *))
+{\color{white}\bfseries\LARGE ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}
+((* elif header_title_size == "Large" *))
+{\color{white}\bfseries\Large ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}
+((* else *))
+{\color{white}\bfseries\Huge ((( first_name | default("") | latex_escape ))) ((( last_name | default("") | latex_escape )))}
+((* endif *))\\[0.62em]
+((* if subtitle_with_breaks *))
+	((* if subtitle_size_effective == "small" *))
+{\color{white}\bfseries\small ((( subtitle_with_breaks | latex_escape | replace(subtitle_break_token, " \\\\ ") )))}
+	((* elif subtitle_size_effective == "normalsize" *))
+{\color{white}\bfseries\normalsize ((( subtitle_with_breaks | latex_escape | replace(subtitle_break_token, " \\\\ ") )))}
+	((* elif subtitle_size_effective == "large" *))
+{\color{white}\bfseries\large ((( subtitle_with_breaks | latex_escape | replace(subtitle_break_token, " \\\\ ") )))}
+	((* else *))
+{\color{white}\bfseries\Large ((( subtitle_with_breaks | latex_escape | replace(subtitle_break_token, " \\\\ ") )))}
+	((* endif *))
+((* endif *))
+\end{minipage}
+((* endif *))
+}%
+}
+\vspace{0em}
 
 \subsection*{}
-\vspace{4em}
+\vspace{0.08em}
 
-\setlength{\columnsep}{0.5cm}
 \columnratio{0.24}[0.75]
 \begin{paracol}{2}
 \hbadness5000
-\paracolbackgroundoptions
+% Sidebar gray background is painted at page level for consistent full-page coverage.
 
 \small
 {\setasidefontcolour
-\vspace{1em}
+\vspace{0.2em}
 
 ((* if email or mobile or homepage or github or linkedin *))
 \hspace{-0.7cm}\bgUpper{backBlue}{white}{Contact}\\

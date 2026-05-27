@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class SearchRequest(BaseModel):
     resume_text: str
     wishes: str | None = None
+    selected_rerank_profile_id: str | None = None
     search_term: str | None = None
     location: str | None = None
     search_radius_km: int | None = Field(default=None, ge=0)
@@ -16,10 +17,47 @@ class SearchRequest(BaseModel):
     linkedin_fetch_description: bool = False
     description_format: str = "markdown"
     model: str | None = None
+    translation_model: str | None = None
+    lm_timeout: float | None = None
     enable_rerank: bool = True
     rerank_top_n: int | None = None
     precision_weight_embedding: float = 0.8
     precision_weight_keyword: float = 0.2
+
+
+class QueryDebugRequest(BaseModel):
+    resume_text: str
+    wishes: str | None = None
+    selected_rerank_profile_id: str | None = None
+    model: str | None = None
+    lm_timeout: float | None = None
+
+
+class QueryDebugResponse(BaseModel):
+    query_profile_id: str | None = None
+    bm25_query: str | None = None
+    bm25_language: str | None = None
+    bm25_tokenizer: str | None = None
+    bm25_query_terms: dict[str, int] = Field(default_factory=dict)
+
+
+class ScoreJobsRequest(BaseModel):
+    jobs: list[dict]
+    resume_text: str
+    wishes: str | None = None
+    selected_rerank_profile_id: str | None = None
+    bm25_query: str | None = None
+    bm25_language: str | None = None
+    bm25_tokenizer: str | None = None
+    bm25_query_terms: dict[str, int] | None = None
+    model: str | None = None
+    lm_timeout: float | None = None
+    precision_weight_embedding: float = 0.8
+    precision_weight_keyword: float = 0.2
+
+
+class RerankJobsRequest(ScoreJobsRequest):
+    rerank_top_n: int | None = None
 
 
 class SearchJob(BaseModel):
@@ -48,8 +86,35 @@ class SearchResponse(BaseModel):
     resume_length: int
     has_wishes: bool
     jobs: list[SearchJob]
+    query_profile_id: str | None = None
+    bm25_query: str | None = None
+    bm25_language: str | None = None
+    bm25_tokenizer: str | None = None
+    rerank_requested: bool | None = None
     rerank_applied: bool | None = None
     rerank_top_n: int | None = None
+    rerank_skip_reason: str | None = None
+
+
+class LinkedInEnrichJob(BaseModel):
+    job_url: str
+
+
+class LinkedInEnrichRequest(BaseModel):
+    jobs: list[LinkedInEnrichJob]
+    timeout_seconds: float | None = Field(default=8.0, gt=0, le=30)
+
+
+class LinkedInEnrichItem(BaseModel):
+    job_url: str
+    job_id: str | None = None
+    description: str | None = None
+    status: str
+    error: str | None = None
+
+
+class LinkedInEnrichResponse(BaseModel):
+    items: list[LinkedInEnrichItem]
 
 
 class ModelsResponse(BaseModel):
@@ -185,6 +250,7 @@ class CvCanonicalData(BaseModel):
     last_name: str | None = None
     headline: str | None = None
     summary: str | None = None
+    profile_image: str | None = None
     email: str | None = None
     phone: str | None = None
     location: str | None = None
@@ -224,6 +290,11 @@ class CvCanonicalProfile(BaseModel):
     job_title: str | None = None
     job_description: str | None = None
     job_url: str | None = None
+    theme_color: str | None = None
+    show_profile_image: bool | None = None
+    header_text_align: str | None = None
+    header_title_size: str | None = None
+    header_subtitle_size: str | None = None
     section_order: list[str] | None = None
     sidebar_section_order: list[str] | None = None
     main_section_order: list[str] | None = None

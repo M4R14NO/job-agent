@@ -7,7 +7,7 @@
 			"command": "bash",
 			"args": [
 				"-lc",
-				"cd backend && source ../.venv/bin/activate && uvicorn app.main:app --reload --port 8000"
+				"source .venv/bin/activate && export LMSTUDIO_TIMEOUT=360 && export CV_TMP_DIR=\"${TMPDIR}job-agent-${UID}\" && export CV_PROFILE_STORE=\"${HOME}/.config/job-agent/profiles/cv_profiles.json\" && export CV_PROFILE_IMAGE_DIR=\"${CV_TMP_DIR}/profiles/images\" && export CV_DEBUG_TEX=1 && export CV_DEBUG_TEX_DIR=\"${CV_TMP_DIR}/debug\" && mkdir -p \"${CV_TMP_DIR}\" \"${CV_DEBUG_TEX_DIR}\" \"$(dirname \"${CV_PROFILE_STORE}\")\" \"${CV_PROFILE_IMAGE_DIR}\" && cd backend && uvicorn app.main:app --reload --port 8000"
 			],
 			"isBackground": true,
 			"problemMatcher": [],

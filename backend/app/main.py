@@ -1,6 +1,6 @@
 import math
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -24,6 +24,13 @@ from .schemas.search import (
     ModelsResponse,
     SearchRequest,
     SearchResponse,
+    LinkedInEnrichRequest,
+    LinkedInEnrichResponse,
+    LinkedInEnrichItem,
+    QueryDebugRequest,
+    QueryDebugResponse,
+    RerankJobsRequest,
+    ScoreJobsRequest,
 )
 from .services.cv_mappers import get_deterministic_mapper, get_llm_mapper
 from .services.cv_service import (
@@ -34,11 +41,13 @@ from .services.cv_service import (
     parse_resume_to_canonical,
     render_cv_pdf_from_payload,
     rewrite_canonical_with_prompt,
+    save_profile_image,
 )
 from .services.cv_storage import RevisionMismatchError, get_profile_store
 from .services.lmstudio_client import chat_completion, list_models, safe_request
+from .services.linkedin_detail_service import fetch_linkedin_job_details
 from .services.search_service import fetch_jobs
-from .services.ranking_service import score_jobs
+from .services.ranking_service import build_query_debug, score_jobs
 
 app = FastAPI(title="Job Agent API")
 
@@ -86,6 +95,54 @@ def _normalize_mapping_mode(value: str | None) -> str:
     return normalized
 
 
+def _build_profile_query_context(profile: CvCanonicalProfile) -> str:
+    data = profile.data
+    parts: list[str] = []
+
+    for value in [data.headline, data.summary]:
+        if value:
+            parts.append(value)
+
+    for skill_group in data.skills:
+        if skill_group.category:
+            parts.append(skill_group.category)
+        if skill_group.items:
+            parts.extend(skill_group.items[:20])
+
+    for experience in data.experience[:8]:
+        for value in [experience.title, experience.organization, experience.location]:
+            if value:
+                parts.append(value)
+        for bullet in experience.bullets[:6]:
+            if bullet.text:
+                parts.append(bullet.text)
+
+    for project in data.projects[:6]:
+        for value in [project.name, project.role, project.description]:
+            if value:
+                parts.append(value)
+
+    for publication in data.publications[:6]:
+        if publication.title:
+            parts.append(publication.title)
+        if publication.notes:
+            parts.append(publication.notes)
+
+    # Keep query context bounded for predictable retrieval performance.
+    return "\n".join(part.strip() for part in parts if part and part.strip())[:8000]
+
+
+def _load_query_profile_context(profile_id: str | None) -> tuple[str | None, str | None]:
+    if not profile_id:
+        return None, None
+
+    profile = get_profile_store().get_profile(profile_id)
+    if not profile:
+        return None, None
+
+    return profile.profile_id, _build_profile_query_context(profile)
+
+
 @app.get("/models", response_model=ModelsResponse)
 def get_models() -> ModelsResponse:
     models, error = safe_request(list_models)
@@ -97,7 +154,8 @@ def get_models() -> ModelsResponse:
 @app.post("/search", response_model=SearchResponse)
 def start_search(payload: SearchRequest) -> SearchResponse:
     search_term = payload.search_term or "software engineer"
-    sites = payload.site_name or ["indeed", "linkedin", "google"]
+    # LinkedIn-only mode keeps source behavior deterministic and enables one-pass detail enrichment.
+    sites = ["linkedin"]
 
     jobs = fetch_jobs(
         site_name=sites,
@@ -124,23 +182,154 @@ def start_search(payload: SearchRequest) -> SearchResponse:
     else:
         rerank_top_n = 0
 
-    jobs, rerank_applied, rerank_used = score_jobs(
+    query_profile_id, query_profile_context = _load_query_profile_context(payload.selected_rerank_profile_id)
+
+    jobs, rerank_applied, rerank_used, rerank_skip_reason, bm25_query, bm25_language, bm25_tokenizer = score_jobs(
         jobs=jobs,
         resume_text=payload.resume_text,
         wishes=payload.wishes,
+        query_context_text=query_profile_context,
         model=payload.model,
-        enable_rerank=payload.enable_rerank,
-        rerank_top_n=rerank_top_n,
+        lm_timeout=payload.lm_timeout,
+        enable_rerank=False,
+        rerank_top_n=0,
         weight_embedding=payload.precision_weight_embedding,
         weight_keyword=payload.precision_weight_keyword,
+        translation_model=None,
     )
     return SearchResponse(
         message="Search completed",
         resume_length=len(payload.resume_text),
         has_wishes=bool(payload.wishes),
         jobs=jobs,
+        query_profile_id=query_profile_id,
+        bm25_query=bm25_query,
+        bm25_language=bm25_language,
+        bm25_tokenizer=bm25_tokenizer,
+        rerank_requested=payload.enable_rerank,
         rerank_applied=rerank_applied,
         rerank_top_n=rerank_used,
+        rerank_skip_reason=rerank_skip_reason,
+    )
+
+
+@app.post("/search/query-debug", response_model=QueryDebugResponse)
+def build_search_query_debug(payload: QueryDebugRequest) -> QueryDebugResponse:
+    query_profile_id, query_profile_context = _load_query_profile_context(payload.selected_rerank_profile_id)
+    if not payload.model:
+        raise HTTPException(status_code=400, detail="A model is required for query debug.")
+    bm25_query, bm25_query_terms, bm25_language, bm25_tokenizer = build_query_debug(
+        resume_text=payload.resume_text,
+        wishes=payload.wishes,
+        query_context_text=query_profile_context,
+        model=payload.model,
+        lm_timeout=payload.lm_timeout,
+    )
+    return QueryDebugResponse(
+        query_profile_id=query_profile_id,
+        bm25_query=bm25_query,
+        bm25_language=bm25_language,
+        bm25_tokenizer=bm25_tokenizer,
+        bm25_query_terms=dict(bm25_query_terms),
+    )
+
+
+@app.post("/search/score-jobs", response_model=SearchResponse)
+def score_existing_jobs(payload: ScoreJobsRequest) -> SearchResponse:
+    query_profile_id, query_profile_context = _load_query_profile_context(payload.selected_rerank_profile_id)
+    jobs, rerank_applied, rerank_used, rerank_skip_reason, bm25_query, bm25_language, bm25_tokenizer = score_jobs(
+        jobs=payload.jobs,
+        resume_text=payload.resume_text,
+        wishes=payload.wishes,
+        query_context_text=query_profile_context,
+        model=payload.model,
+        lm_timeout=payload.lm_timeout,
+        enable_rerank=False,
+        rerank_top_n=0,
+        weight_embedding=payload.precision_weight_embedding,
+        weight_keyword=payload.precision_weight_keyword,
+        translation_model=None,
+        bm25_query_terms_override=payload.bm25_query_terms,
+        bm25_query_override=payload.bm25_query,
+        bm25_language_override=payload.bm25_language,
+        bm25_tokenizer_override=payload.bm25_tokenizer,
+    )
+    return SearchResponse(
+        message="Job scores updated",
+        resume_length=len(payload.resume_text),
+        has_wishes=bool(payload.wishes),
+        jobs=jobs,
+        query_profile_id=query_profile_id,
+        bm25_query=bm25_query,
+        bm25_language=bm25_language,
+        bm25_tokenizer=bm25_tokenizer,
+        rerank_requested=False,
+        rerank_applied=rerank_applied,
+        rerank_top_n=rerank_used,
+        rerank_skip_reason=rerank_skip_reason,
+    )
+
+
+@app.post("/search/rerank", response_model=SearchResponse)
+def rerank_existing_jobs(payload: RerankJobsRequest) -> SearchResponse:
+    if not payload.model:
+        raise HTTPException(status_code=400, detail="A model is required for reranking.")
+    query_profile_id, query_profile_context = _load_query_profile_context(payload.selected_rerank_profile_id)
+    rerank_top_n = payload.rerank_top_n
+    if rerank_top_n is None:
+        rerank_top_n = _default_rerank_top_n(len(payload.jobs), len(payload.jobs))
+
+    jobs, rerank_applied, rerank_used, rerank_skip_reason, bm25_query, bm25_language, bm25_tokenizer = score_jobs(
+        jobs=payload.jobs,
+        resume_text=payload.resume_text,
+        wishes=payload.wishes,
+        query_context_text=query_profile_context,
+        model=payload.model,
+        lm_timeout=payload.lm_timeout,
+        enable_rerank=True,
+        rerank_top_n=rerank_top_n,
+        weight_embedding=payload.precision_weight_embedding,
+        weight_keyword=payload.precision_weight_keyword,
+        translation_model=None,
+        bm25_query_terms_override=payload.bm25_query_terms,
+        bm25_query_override=payload.bm25_query,
+        bm25_language_override=payload.bm25_language,
+        bm25_tokenizer_override=payload.bm25_tokenizer,
+    )
+    return SearchResponse(
+        message="Rerank completed",
+        resume_length=len(payload.resume_text),
+        has_wishes=bool(payload.wishes),
+        jobs=jobs,
+        query_profile_id=query_profile_id,
+        bm25_query=bm25_query,
+        bm25_language=bm25_language,
+        bm25_tokenizer=bm25_tokenizer,
+        rerank_requested=True,
+        rerank_applied=rerank_applied,
+        rerank_top_n=rerank_used,
+        rerank_skip_reason=rerank_skip_reason,
+    )
+
+
+@app.post("/search/linkedin/enrich", response_model=LinkedInEnrichResponse)
+def enrich_linkedin_details(payload: LinkedInEnrichRequest) -> LinkedInEnrichResponse:
+    jobs = [job.model_dump() for job in payload.jobs]
+    results = fetch_linkedin_job_details(
+        jobs,
+        timeout_seconds=payload.timeout_seconds or 8.0,
+    )
+    return LinkedInEnrichResponse(
+        items=[
+            LinkedInEnrichItem(
+                job_url=result.job_url,
+                job_id=result.job_id,
+                description=result.description,
+                status=result.status,
+                error=result.error,
+            )
+            for result in results
+        ]
     )
 
 
@@ -255,10 +444,37 @@ def validate_cv(payload: CvValidateRequest) -> dict:
     return {"ok": True}
 
 
+@app.post("/cv/profile-image")
+async def upload_cv_profile_image(file: UploadFile = File(...)) -> dict:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Missing filename")
+    if file.content_type and not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Unsupported file type. Please upload an image.")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large. Maximum size is 5 MB.")
+
+    try:
+        image_path = save_profile_image(file_bytes=content, original_filename=file.filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {"image_path": image_path}
+
+
 @app.get("/cv/profiles", response_model=CvProfileListResponse)
 def list_cv_profiles() -> CvProfileListResponse:
     store = get_profile_store()
-    profiles = store.list_profiles()
+    try:
+        profiles = store.list_profiles()
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Cannot access CV profile store at {store.path}. Check file ownership and permissions.",
+        ) from exc
     return CvProfileListResponse(profiles=profiles)
 
 

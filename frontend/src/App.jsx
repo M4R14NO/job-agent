@@ -1,6 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { searchJobs } from "./api/search";
-import { fetchModels, getCvProfile, listCvProfiles, parseCvCanonical, renderCvFromTemplate, saveCvProfile } from "./api/llm";
+import {
+  enrichLinkedInJobs,
+  fetchQueryDebug,
+  rerankJobs,
+  searchJobs
+} from "./api/search";
+import {
+  fetchModels,
+  getCvProfile,
+  listCvProfiles,
+  parseCvCanonical,
+  renderCvFromTemplate,
+  saveCvProfile,
+  uploadCvProfileImage
+} from "./api/llm";
 import { useJobDescription } from "./hooks/useJobDescription";
 import SearchFilters from "./components/SearchFilters";
 import ResultsList from "./components/ResultsList";
@@ -11,12 +24,175 @@ import OverwriteConfirmationModal from "./components/OverwriteConfirmationModal"
 import { Box, Grid, GridItem } from "@chakra-ui/react";
 
 const CACHE_KEY = "job-agent:search-response";
-const LLM_PROFILE_KEY = "job-agent:llm-profiles";
 const SIDEBAR_WIDTH_KEY = "job-agent:sidebar-width";
 const SIDEBAR_MIN_WIDTH = 360;
 const SIDEBAR_MAX_WIDTH = 720;
+const SEARCH_BATCH_SIZE = 4;
 const PDF_PREVIEW_DEBOUNCE_MS = 5000;
 const CANONICAL_SCHEMA_VERSION = "v1";
+const DEFAULT_TEMPLATE_THEME_COLORS = {
+  awesomecv: "#C0392B",
+  hipstercv: "#496E8C"
+};
+
+const getJobStableId = (job, fallbackIndex = 0) => {
+  if (!job || typeof job !== "object") return `job-${fallbackIndex}`;
+  const jobUrl = String(job.job_url || "").trim();
+  if (jobUrl) return `url:${jobUrl}`;
+  const title = String(job.title || "").trim().toLowerCase();
+  const company = String(job.company || job.company_name || "").trim().toLowerCase();
+  const location = String(job.location || "").trim().toLowerCase();
+  const site = String(job.site || "").trim().toLowerCase();
+  return `sig:${title}|${company}|${location}|${site}|${fallbackIndex}`;
+};
+
+const mergeResponseStable = (previous, incoming, options = {}) => {
+  const preserveRichDetails = Boolean(options.preserveRichDetails);
+  if (!incoming || !Array.isArray(incoming.jobs)) {
+    return incoming;
+  }
+
+  const prevJobs = Array.isArray(previous?.jobs) ? previous.jobs : [];
+  const prevKeys = new Set(prevJobs.map((job, index) => getJobStableId(job, index)));
+  const incomingByKey = new Map(
+    incoming.jobs.map((job, index) => [getJobStableId(job, index), job])
+  );
+
+  const mergedJobs = [];
+  prevJobs.forEach((job, index) => {
+    const key = getJobStableId(job, index);
+    const next = incomingByKey.get(key);
+    if (!next) {
+      mergedJobs.push(job);
+      return;
+    }
+
+    const merged = { ...job, ...next };
+
+    // mark rows that just received their description for the first time (detailed pass)
+    if (!preserveRichDetails) {
+      const hadDescription = (job.description || "").trim().length > 0;
+      const nowHasDescription = (next.description || "").trim().length > 0;
+      if (!hadDescription && nowHasDescription) {
+        merged._enrichedAt = Date.now();
+      } else {
+        merged._enrichedAt = job._enrichedAt ?? null;
+      }
+    }
+
+    if (preserveRichDetails) {
+      const prevDescription = String(job.description || "");
+      const nextDescription = String(next.description || "");
+      if (prevDescription.length > nextDescription.length) {
+        merged.description = job.description;
+      }
+
+      const prevJobDescription = String(job.job_description || "");
+      const nextJobDescription = String(next.job_description || "");
+      if (prevJobDescription.length > nextJobDescription.length) {
+        merged.job_description = job.job_description;
+      }
+
+      const prevSnippet = String(job.snippet || "");
+      const nextSnippet = String(next.snippet || "");
+      if (prevSnippet.length > nextSnippet.length) {
+        merged.snippet = job.snippet;
+      }
+
+      if (job.rerank_score != null && next.rerank_score == null) {
+        merged.rerank_score = job.rerank_score;
+      }
+
+      const nextReasons = Array.isArray(next.match_reasons) ? next.match_reasons : [];
+      const prevReasons = Array.isArray(job.match_reasons) ? job.match_reasons : [];
+      if (prevReasons.length > nextReasons.length) {
+        merged.match_reasons = prevReasons;
+      }
+    }
+
+    mergedJobs.push(merged);
+  });
+
+  incoming.jobs.forEach((job, index) => {
+    const key = getJobStableId(job, index);
+    if (!prevKeys.has(key)) {
+      mergedJobs.push(job);
+    }
+  });
+
+  return {
+    ...incoming,
+    jobs: mergedJobs,
+  };
+};
+
+const mergeLinkedInEnrichedJobs = (previous, enrichItems) => {
+  if (!previous || !Array.isArray(previous.jobs) || !Array.isArray(enrichItems)) {
+    return previous;
+  }
+
+  const enrichByUrl = new Map(
+    enrichItems
+      .filter((item) => item)
+      .map((item) => [String(item.job_url || "").trim(), item])
+      .filter(([jobUrl]) => jobUrl)
+  );
+
+  if (!enrichByUrl.size) {
+    return previous;
+  }
+
+  const jobs = previous.jobs.map((job) => {
+    const jobUrl = String(job?.job_url || "").trim();
+    const item = enrichByUrl.get(jobUrl);
+    if (!item) {
+      return job;
+    }
+
+    const hadDescription = String(job.description || job.job_description || "").trim().length > 0;
+    const nextDescription = String(item.description || "").trim();
+
+    if (item.status === "ok" && nextDescription) {
+      return {
+        ...job,
+        description: nextDescription,
+        job_description: nextDescription,
+        _detailsFetched: true,
+        _detailsStatus: "ok",
+        _detailsError: null,
+        _enrichedAt: hadDescription ? (job._enrichedAt ?? null) : Date.now(),
+      };
+    }
+
+    return {
+      ...job,
+      _detailsFetched: false,
+      _detailsStatus: item.status || "error",
+      _detailsError: item.error || null,
+    };
+  });
+
+  return {
+    ...previous,
+    jobs,
+  };
+};
+
+const isTransientDetailsFailure = (item) => {
+  if (!item) return false;
+  if (item.status === "timeout") return true;
+  if (item.status !== "http_error") return false;
+  const msg = String(item.error || "");
+  return /HTTP\s(429|502|503|504)/i.test(msg);
+};
+
+const normalizeHexColor = (value, fallback = null) => {
+  const raw = String(value || "").trim();
+  const normalized = raw.startsWith("#") ? raw : `#${raw}`;
+  const match = normalized.match(/^#([0-9a-fA-F]{6})$/);
+  if (!match) return fallback;
+  return `#${match[1].toUpperCase()}`;
+};
 
 const EMPTY_APPLICATION_CONTEXT = {
   company: "",
@@ -24,7 +200,13 @@ const EMPTY_APPLICATION_CONTEXT = {
   application_date: "",
   job_title: "",
   job_description: "",
-  job_url: ""
+  job_url: "",
+  profile_image: "",
+  theme_color: "",
+  show_profile_image: true,
+  header_text_align: "right",
+  header_title_size: "Huge",
+  header_subtitle_size: "Large"
 };
 
 export default function App() {
@@ -36,8 +218,6 @@ export default function App() {
   const [resultsWanted, setResultsWanted] = useState(10);
   const [hoursOld, setHoursOld] = useState(72);
   const [isRemote, setIsRemote] = useState(false);
-  const [sites, setSites] = useState(["indeed", "linkedin", "google"]);
-  const [fetchFullDescriptions, setFetchFullDescriptions] = useState(false);
   const [response, setResponse] = useState(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -75,6 +255,7 @@ export default function App() {
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [isUpdatingProfileCvText, setIsUpdatingProfileCvText] = useState(false);
   const [isRemappingProfileCvText, setIsRemappingProfileCvText] = useState(false);
+  const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false);
   const [cvRemapElapsedMs, setCvRemapElapsedMs] = useState(0);
   const [cvDraftState, setCvDraftState] = useState({
     isDirty: false,
@@ -95,16 +276,17 @@ export default function App() {
   const [activeView, setActiveView] = useState("find");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeJobAction, setActiveJobAction] = useState("none");
-  const [llmProfiles, setLlmProfiles] = useState([]);
-  const [selectedLlmProfileId, setSelectedLlmProfileId] = useState("");
-  const [llmProfileName, setLlmProfileName] = useState("");
-  const [llmProfileError, setLlmProfileError] = useState("");
+  const [selectedRerankProfileId, setSelectedRerankProfileId] = useState("");
+  const [rerankProfileError, setRerankProfileError] = useState("");
   const [searchElapsedMs, setSearchElapsedMs] = useState(0);
+  const [searchPhaseMessage, setSearchPhaseMessage] = useState("");
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MIN_WIDTH);
   const [cvPreviewPayload, setCvPreviewPayload] = useState(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
   const [isPdfDownloading, setIsPdfDownloading] = useState(false);
+  const [cvThemeColors, setCvThemeColors] = useState(DEFAULT_TEMPLATE_THEME_COLORS);
+  const [isReranking, setIsReranking] = useState(false);
 
   const searchTimerRef = useRef(null);
   const cvRemapTimerRef = useRef(null);
@@ -114,6 +296,9 @@ export default function App() {
   const pdfPreviewStructureRef = useRef("");
   const pdfPreviewRequestVersionRef = useRef(0);
   const cvDraftHashRef = useRef("");
+  const searchRequestIdRef = useRef(0);
+  const searchAbortControllerRef = useRef(null);
+  const queryDebugDataRef = useRef(null);
   const isResizingSidebarRef = useRef(false);
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(SIDEBAR_MIN_WIDTH);
@@ -122,6 +307,41 @@ export default function App() {
   const jobs = response?.jobs ?? [];
   const descriptionHtml = useJobDescription(selectedJob);
   const isFindView = activeView === "find";
+
+  const resolveTemplateThemeColor = (templateId) => {
+    const key = templateId || "awesomecv";
+    const fallback = DEFAULT_TEMPLATE_THEME_COLORS[key] || DEFAULT_TEMPLATE_THEME_COLORS.awesomecv;
+    const fromProfile = normalizeHexColor(applicationContext?.theme_color, null);
+    return fromProfile || normalizeHexColor(cvThemeColors[key], fallback);
+  };
+
+  const applyTemplateThemeToPayload = (payload, templateId) => {
+    const key = templateId || "awesomecv";
+    const color = resolveTemplateThemeColor(key);
+    if (!payload || !color) return payload;
+    const hex = color.replace("#", "");
+    if (key === "hipstercv") {
+      return {
+        ...payload,
+        accent_color_hex: hex,
+        show_profile_image: applicationContext?.show_profile_image !== false,
+        header_text_align: applicationContext?.header_text_align || "right",
+        header_title_size: applicationContext?.header_title_size || "Huge",
+        header_subtitle_size: applicationContext?.header_subtitle_size || "Large"
+      };
+    }
+    if (key === "awesomecv") {
+      return {
+        ...payload,
+        awesome_color_hex: hex,
+        show_profile_image: applicationContext?.show_profile_image !== false
+      };
+    }
+    return {
+      ...payload,
+      show_profile_image: applicationContext?.show_profile_image !== false
+    };
+  };
 
   const defaultRerankTopN = (() => {
     const total = response?.jobs?.length ?? resultsWanted;
@@ -132,7 +352,7 @@ export default function App() {
 
   const lmTimeoutMinutes = Math.max(0.5, Math.round((lmTimeout / 60) * 10) / 10);
   const rerankTarget = rerankTopN ?? defaultRerankTopN ?? 0;
-  const refinementIsActive = isLoading && enableRerank;
+  const refinementIsActive = isReranking;
   const baseTokenEstimate = (() => {
     const text = `${resumeText} ${wishes}`.trim();
     if (!text) return 0;
@@ -151,6 +371,35 @@ export default function App() {
       timeoutSeconds: lmTimeout
     };
   })();
+
+  const persistSearchCache = (nextResponse) => {
+    if (!nextResponse) return;
+    const savedAt = new Date().toISOString();
+    sessionStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({
+        savedAt,
+        response: nextResponse,
+        resumeText,
+        wishes,
+        searchTerm,
+        location,
+        searchRadiusKm,
+        resultsWanted,
+        hoursOld,
+        isRemote,
+        sites: ["linkedin"],
+        selectedModel,
+        lmTimeout,
+        enableRerank,
+        rerankTopN,
+        weightEmbedding,
+        weightKeyword
+      })
+    );
+    setCachedResponse(nextResponse);
+    setCachedAt(savedAt);
+  };
 
   const remapTokenEstimate = (() => {
     const text = `${resumeText}`.trim();
@@ -204,35 +453,6 @@ export default function App() {
     sidebarWidthRef.current = sidebarWidth;
   }, [sidebarWidth]);
 
-  useEffect(() => {
-    const stored = localStorage.getItem(LLM_PROFILE_KEY);
-    if (!stored) return;
-    try {
-      const parsed = JSON.parse(stored);
-      const profiles = Array.isArray(parsed?.profiles) ? parsed.profiles : [];
-      setLlmProfiles(profiles);
-      if (typeof parsed?.lastSelectedId === "string") {
-        setSelectedLlmProfileId(parsed.lastSelectedId);
-      }
-      if (typeof parsed?.lastSelectedName === "string") {
-        setLlmProfileName(parsed.lastSelectedName);
-      }
-    } catch (err) {
-      localStorage.removeItem(LLM_PROFILE_KEY);
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem(
-      LLM_PROFILE_KEY,
-      JSON.stringify({
-        profiles: llmProfiles,
-        lastSelectedId: selectedLlmProfileId,
-        lastSelectedName: llmProfileName
-      })
-    );
-  }, [llmProfiles, selectedLlmProfileId, llmProfileName]);
-
   const loadProfiles = async () => {
     setProfilesLoading(true);
     setProfilesError("");
@@ -240,6 +460,12 @@ export default function App() {
       const data = await listCvProfiles();
       const profiles = Array.isArray(data?.profiles) ? data.profiles : [];
       setCvProfiles(profiles);
+      setSelectedRerankProfileId((prev) => {
+        if (prev && profiles.some((profile) => profile.profile_id === prev)) {
+          return prev;
+        }
+        return profiles[0]?.profile_id || "";
+      });
       if (!profiles.length) {
         setSelectedProfileId("");
       } else if (!selectedProfileId) {
@@ -262,7 +488,13 @@ export default function App() {
     application_date: profile?.application_date || "",
     job_title: profile?.job_title || "",
     job_description: profile?.job_description || "",
-    job_url: profile?.job_url || ""
+    job_url: profile?.job_url || "",
+    profile_image: profile?.data?.profile_image || "",
+    theme_color: profile?.theme_color || "",
+    show_profile_image: profile?.show_profile_image !== false,
+    header_text_align: profile?.header_text_align || "right",
+    header_title_size: profile?.header_title_size || "Huge",
+    header_subtitle_size: profile?.header_subtitle_size || "Large"
   });
 
   const contextSnapshotFromProfile = (profile) => ({
@@ -285,7 +517,13 @@ export default function App() {
       application_date: loadedProfileSnapshot.application_date || "",
       job_title: loadedProfileSnapshot.job_title || "",
       job_description: loadedProfileSnapshot.job_description || "",
-      job_url: loadedProfileSnapshot.job_url || ""
+      job_url: loadedProfileSnapshot.job_url || "",
+      profile_image: loadedProfileSnapshot.profile_image || "",
+      theme_color: loadedProfileSnapshot.theme_color || "",
+      show_profile_image: loadedProfileSnapshot.show_profile_image !== false,
+      header_text_align: loadedProfileSnapshot.header_text_align || "right",
+      header_title_size: loadedProfileSnapshot.header_title_size || "Huge",
+      header_subtitle_size: loadedProfileSnapshot.header_subtitle_size || "Large"
     };
 
     const config = [
@@ -295,7 +533,13 @@ export default function App() {
       ["application_date", "Application date"],
       ["job_title", "Job title"],
       ["job_description", "Job description"],
-      ["job_url", "Job URL"]
+      ["job_url", "Job URL"],
+      ["profile_image", "Profile image"],
+      ["theme_color", "Theme color"],
+      ["show_profile_image", "Show profile image"],
+      ["header_text_align", "Header text align"],
+      ["header_title_size", "Header title size"],
+      ["header_subtitle_size", "Header subtitle size"]
     ];
 
     const topLevelChanges = config
@@ -321,12 +565,25 @@ export default function App() {
   }, [activeView]);
 
   useEffect(() => {
+    if (activeView === "find" && cvProfiles.length === 0 && !profilesLoading) {
+      loadProfiles();
+    }
+  }, [activeView, cvProfiles.length, profilesLoading]);
+
+  useEffect(() => {
     if (!cvPreviewPayload || !cvReview) return undefined;
     const activeTemplateId = cvReview.templateId || "awesomecv";
+    const activeThemeColor = resolveTemplateThemeColor(activeTemplateId);
     const templateChanged = Boolean(pdfPreviewTemplateRef.current) && pdfPreviewTemplateRef.current !== activeTemplateId;
 
     const structureSignature = JSON.stringify({
       sections: cvPreviewPayload.sections || {},
+      photo: cvPreviewPayload.photo || null,
+      show_profile_image: applicationContext?.show_profile_image !== false,
+      theme_color: activeThemeColor,
+      header_text_align: applicationContext?.header_text_align || "right",
+      header_title_size: applicationContext?.header_title_size || "Huge",
+      header_subtitle_size: applicationContext?.header_subtitle_size || "Large",
       section_order: cvPreviewPayload.section_order || [],
       sidebar_section_order: cvPreviewPayload.sidebar_section_order || [],
       main_section_order: cvPreviewPayload.main_section_order || [],
@@ -367,7 +624,7 @@ export default function App() {
         pdfPreviewTimerRef.current = null;
       }
     };
-  }, [cvPreviewPayload, cvReview?.templateId]);
+  }, [cvPreviewPayload, cvReview?.templateId, cvThemeColors, applicationContext?.show_profile_image, applicationContext?.theme_color, applicationContext?.header_text_align, applicationContext?.header_title_size, applicationContext?.header_subtitle_size]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -390,6 +647,12 @@ export default function App() {
       }
     };
   }, [isLoading]);
+
+  useEffect(() => () => {
+    if (searchAbortControllerRef.current) {
+      searchAbortControllerRef.current.abort();
+    }
+  }, []);
 
   useEffect(() => {
     if (!isRemappingProfileCvText) {
@@ -458,8 +721,6 @@ export default function App() {
         if (typeof parsed.resultsWanted === "number") setResultsWanted(parsed.resultsWanted);
         if (typeof parsed.hoursOld === "number") setHoursOld(parsed.hoursOld);
         if (typeof parsed.isRemote === "boolean") setIsRemote(parsed.isRemote);
-        if (Array.isArray(parsed.sites)) setSites(parsed.sites);
-        if (typeof parsed.fetchFullDescriptions === "boolean") setFetchFullDescriptions(parsed.fetchFullDescriptions);
         if (typeof parsed.selectedModel === "string") setSelectedModel(parsed.selectedModel);
         if (typeof parsed.lmTimeout === "number") setLmTimeout(parsed.lmTimeout);
         if (typeof parsed.enableRerank === "boolean") setEnableRerank(parsed.enableRerank);
@@ -473,124 +734,212 @@ export default function App() {
   }, []);
 
   const handleSearch = async () => {
+    const requestId = searchRequestIdRef.current + 1;
+    searchRequestIdRef.current = requestId;
+    if (searchAbortControllerRef.current) {
+      searchAbortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    searchAbortControllerRef.current = abortController;
+
+    const baseInput = {
+      resumeText,
+      wishes,
+      selectedRerankProfileId,
+      searchTerm,
+      location,
+      searchRadiusKm,
+      resultsWanted,
+      hoursOld,
+      isRemote,
+      sites: ["linkedin"],
+      model: selectedModel,
+      lmTimeout,
+      rerankTopN,
+      weightEmbedding,
+      weightKeyword
+    };
+
     setIsLoading(true);
     setError("");
     setResponse(null);
+    setSearchPhaseMessage("Loading LinkedIn results...");
+    queryDebugDataRef.current = null;
+
     try {
-      const data = await searchJobs({
-        resumeText, wishes, searchTerm, location, searchRadiusKm,
-        resultsWanted, hoursOld, isRemote, sites, fetchFullDescriptions,
-        model: selectedModel,
-        enableRerank,
-        rerankTopN,
-        weightEmbedding,
-        weightKeyword
-      });
-      setResponse(data);
-      const savedAt = new Date().toISOString();
-      sessionStorage.setItem(
-        CACHE_KEY,
-        JSON.stringify({
-          savedAt,
-          response: data,
-          resumeText,
-          wishes,
-          searchTerm,
-          location,
-          searchRadiusKm,
-          resultsWanted,
-          hoursOld,
-          isRemote,
-          sites,
-          fetchFullDescriptions,
-          selectedModel,
-          lmTimeout,
-          enableRerank,
-          rerankTopN,
-          weightEmbedding,
-          weightKeyword
-        })
-      );
-      setCachedResponse(data);
-      setCachedAt(savedAt);
+      let finalData = null;
+
+      const quickData = await searchJobs({
+        ...baseInput,
+        enableRerank: false
+      }, { signal: abortController.signal });
+      if (requestId !== searchRequestIdRef.current) return;
+
+      finalData = mergeResponseStable(null, quickData);
+      setResponse(finalData);
+
+      const jobsNeedingDetails = (finalData.jobs || [])
+        .filter((job) => String(job.site || "").toLowerCase() === "linkedin")
+        .filter((job) => (job.description || job.job_description || "").trim().length === 0)
+        .filter((job) => String(job.job_url || "").trim().length > 0);
+
+      const totalNeedingDetails = jobsNeedingDetails.length;
+      const totalBatches = Math.ceil(totalNeedingDetails / SEARCH_BATCH_SIZE);
+      const retriedUrls = new Set();
+
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
+        const start = batchIndex * SEARCH_BATCH_SIZE;
+        const end = Math.min(start + SEARCH_BATCH_SIZE, totalNeedingDetails);
+        const batch = jobsNeedingDetails.slice(start, end);
+        const batchLabel = `${batchIndex + 1}/${totalBatches}`;
+
+        setSearchPhaseMessage(
+          `Batch ${batchLabel}: enriching ${end}/${totalNeedingDetails} LinkedIn jobs...`
+        );
+
+        const enrichedItems = await enrichLinkedInJobs(
+          batch.map((job) => ({ job_url: job.job_url })),
+          { signal: abortController.signal }
+        );
+        if (requestId !== searchRequestIdRef.current) return;
+
+        const retryCandidates = enrichedItems.filter((item) => {
+          const jobUrl = String(item?.job_url || "").trim();
+          if (!jobUrl || retriedUrls.has(jobUrl)) return false;
+          return isTransientDetailsFailure(item);
+        });
+
+        let finalEnrichedItems = enrichedItems;
+        if (retryCandidates.length > 0) {
+          retryCandidates.forEach((item) => {
+            retriedUrls.add(String(item.job_url || "").trim());
+          });
+
+          setSearchPhaseMessage(
+            `Batch ${batchLabel}: retrying ${retryCandidates.length} transient detail fetches...`
+          );
+
+          const retriedItems = await enrichLinkedInJobs(
+            retryCandidates.map((item) => ({ job_url: item.job_url })),
+            { signal: abortController.signal }
+          );
+          if (requestId !== searchRequestIdRef.current) return;
+
+          const retriedByUrl = new Map(
+            retriedItems
+              .map((item) => [String(item.job_url || "").trim(), item])
+              .filter(([jobUrl]) => jobUrl)
+          );
+
+          finalEnrichedItems = enrichedItems.map((item) => {
+            const jobUrl = String(item?.job_url || "").trim();
+            return retriedByUrl.get(jobUrl) || item;
+          });
+        }
+
+        finalData = mergeLinkedInEnrichedJobs(finalData, finalEnrichedItems);
+        setResponse((prev) => mergeLinkedInEnrichedJobs(prev, finalEnrichedItems));
+      }
+
+      if (!finalData) return;
+
+      persistSearchCache(finalData);
     } catch (err) {
+      if (err?.name === "AbortError") {
+        return;
+      }
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
+      if (requestId === searchRequestIdRef.current) {
+        setIsLoading(false);
+        setSearchPhaseMessage("");
+      }
+    }
+  };
+
+  const handleRunRerank = async () => {
+    if (!response?.jobs?.length) {
+      setError("Run a search first before reranking the current results.");
+      return;
+    }
+    if (!selectedModel) {
+      setError("Select an AI model in the matching settings before running LLM matching.");
+      return;
+    }
+
+    const abortController = new AbortController();
+    setIsLoading(true);
+    setIsReranking(true);
+    setError("");
+    setSearchPhaseMessage("Running LLM matching on current results...");
+    setEnableRerank(true);
+
+    try {
+      const currentQueryDebug = await fetchQueryDebug(
+        {
+          resumeText,
+          wishes,
+          selectedRerankProfileId,
+          model: selectedModel,
+          lmTimeout
+        },
+        { signal: abortController.signal }
+      );
+      queryDebugDataRef.current = currentQueryDebug;
+
+      const rerankData = await rerankJobs(
+        {
+          jobs: response.jobs,
+          resumeText,
+          wishes,
+          selectedRerankProfileId: selectedRerankProfileId || currentQueryDebug.query_profile_id || response.query_profile_id || "",
+          bm25Query: currentQueryDebug.bm25_query || response.bm25_query || null,
+          bm25Language: currentQueryDebug.bm25_language || response.bm25_language || null,
+          bm25Tokenizer: currentQueryDebug.bm25_tokenizer || response.bm25_tokenizer || null,
+          bm25QueryTerms: currentQueryDebug.bm25_query_terms || response.bm25_query_terms || null,
+          model: selectedModel,
+          lmTimeout,
+          rerankTopN,
+          precisionWeightEmbedding: weightEmbedding,
+          precisionWeightKeyword: weightKeyword
+        },
+        { signal: abortController.signal }
+      );
+
+      const mergedResponse = mergeResponseStable(response, rerankData, { preserveRichDetails: true });
+      setResponse(mergedResponse);
+      persistSearchCache(mergedResponse);
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Failed to rerank current results.");
+    } finally {
       setIsLoading(false);
+      setIsReranking(false);
+      setSearchPhaseMessage("");
     }
   };
 
-  const handleSaveLlmProfile = () => {
-    const name = llmProfileName.trim();
-    if (!name) {
-      setLlmProfileError("Profile name is required.");
+  const handleSelectRerankProfile = async (profileId) => {
+    setSelectedRerankProfileId(profileId || "");
+    if (!profileId) {
+      setRerankProfileError("");
       return;
     }
-    const safeId = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-    const profileId = safeId || `profile-${Date.now()}`;
-    const nextProfile = {
-      id: profileId,
-      name,
-      updatedAt: new Date().toISOString(),
-      data: {
-        resumeText,
-        wishes,
-        selectedModel,
-        lmTimeout,
-        enableRerank,
-        rerankTopN
+
+    setRerankProfileError("");
+    try {
+      const listedProfile = cvProfiles.find((profile) => profile.profile_id === profileId);
+      const profile = listedProfile || await getCvProfile(profileId);
+      const rawResume = profile?.audit?.raw_resume_text || "";
+      setResumeText(rawResume);
+      if (!rawResume.trim()) {
+        setRerankProfileError("Selected CV profile has no saved CV text.");
       }
-    };
-    setLlmProfiles((prev) => {
-      const existingIndex = prev.findIndex((profile) => profile.id === profileId);
-      if (existingIndex === -1) {
-        return [...prev, nextProfile];
-      }
-      const updated = [...prev];
-      updated[existingIndex] = nextProfile;
-      return updated;
-    });
-    setSelectedLlmProfileId(profileId);
-    setLlmProfileError("");
-  };
-
-  const handleLoadLlmProfile = (profileId) => {
-    const targetId = profileId || selectedLlmProfileId;
-    if (!targetId) {
-      setLlmProfileError("Select a profile to load.");
-      return;
+    } catch (err) {
+      setRerankProfileError(err instanceof Error ? err.message : "Failed to load selected CV profile.");
     }
-    const profile = llmProfiles.find((item) => item.id === targetId);
-    if (!profile) {
-      setLlmProfileError("Selected profile was not found.");
-      return;
-    }
-    const data = profile.data || {};
-    if (typeof data.resumeText === "string") setResumeText(data.resumeText);
-    if (typeof data.wishes === "string") setWishes(data.wishes);
-    if (typeof data.selectedModel === "string") setSelectedModel(data.selectedModel);
-    if (typeof data.lmTimeout === "number") setLmTimeout(data.lmTimeout);
-    if (typeof data.enableRerank === "boolean") setEnableRerank(data.enableRerank);
-    if (typeof data.rerankTopN === "number" || data.rerankTopN === null) {
-      setRerankTopN(data.rerankTopN ?? null);
-    }
-    setLlmProfileName(profile.name || "");
-    setSelectedLlmProfileId(profile.id);
-    setLlmProfileError("");
-  };
-
-  const handleDeleteLlmProfile = () => {
-    if (!selectedLlmProfileId) {
-      setLlmProfileError("Select a profile to delete.");
-      return;
-    }
-    setLlmProfiles((prev) => prev.filter((profile) => profile.id !== selectedLlmProfileId));
-    setSelectedLlmProfileId("");
-    setLlmProfileName("");
-    setLlmProfileError("");
   };
 
   const handleLoadCache = () => {
@@ -615,7 +964,13 @@ export default function App() {
       application_date: "",
       job_title: job?.title || "",
       job_description: job?.description || "",
-      job_url: job?.job_url || ""
+      job_url: job?.job_url || "",
+      profile_image: "",
+      theme_color: "",
+      show_profile_image: true,
+      header_text_align: "right",
+      header_title_size: "Huge",
+      header_subtitle_size: "Large"
     });
     setSelectedJob(job);
     setActiveJobAction("cv");
@@ -634,6 +989,7 @@ export default function App() {
       return;
     }
     const { __source_profile_id, ...templatePayload } = cvPreviewPayload;
+    const themedPayload = applyTemplateThemeToPayload(templatePayload, cvReview.templateId || "awesomecv");
     if (pdfPreviewUrl) {
       URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl(null);
@@ -641,7 +997,7 @@ export default function App() {
     setIsPdfGenerating(true);
     try {
       const { blob } = await renderCvFromTemplate({
-        payload: templatePayload,
+        payload: themedPayload,
         template_id: cvReview.templateId || "awesomecv",
         doc_type: cvReview.docType || "resume"
       });
@@ -667,10 +1023,11 @@ export default function App() {
       return;
     }
     const { __source_profile_id, ...templatePayload } = cvPreviewPayload;
+    const themedPayload = applyTemplateThemeToPayload(templatePayload, cvReview.templateId || "awesomecv");
     setIsPdfDownloading(true);
     try {
       const { blob, filename } = await renderCvFromTemplate({
-        payload: templatePayload,
+        payload: themedPayload,
         template_id: cvReview.templateId || "awesomecv",
         doc_type: cvReview.docType || "resume"
       });
@@ -726,6 +1083,14 @@ export default function App() {
     return safe || `profile-${Date.now()}`;
   };
 
+  const mergeProfileImageIntoData = (data, profileImage) => {
+    const base = data && typeof data === "object" ? data : {};
+    return {
+      ...base,
+      profile_image: (profileImage || "").trim() || null
+    };
+  };
+
   const handleCreateNewEntry = async ({ profileName } = {}) => {
     const nextProfileId = sanitizeProfileId(profileName || "");
     if (!nextProfileId) {
@@ -751,7 +1116,12 @@ export default function App() {
         job_title: applicationContext.job_title || null,
         job_description: applicationContext.job_description || null,
         job_url: applicationContext.job_url || null,
-        data: {},
+        theme_color: normalizeHexColor(applicationContext.theme_color, null),
+        show_profile_image: applicationContext.show_profile_image !== false,
+        header_text_align: applicationContext.header_text_align || "right",
+        header_title_size: applicationContext.header_title_size || "Huge",
+        header_subtitle_size: applicationContext.header_subtitle_size || "Large",
+        data: mergeProfileImageIntoData({}, applicationContext.profile_image),
         section_order: [],
         sidebar_section_order: [],
         main_section_order: [],
@@ -873,7 +1243,18 @@ export default function App() {
     const hasUnsavedChanges = cvDraftState.isDirty || contextDiff.hasChanges;
 
     if (hasUnsavedChanges) {
-      const contextKeys = new Set(["raw_resume_text", "company", "application_status", "application_date", "job_title", "job_description", "job_url"]);
+      const contextKeys = new Set([
+        "raw_resume_text",
+        "company",
+        "application_status",
+        "application_date",
+        "job_title",
+        "job_description",
+        "job_url",
+        "profile_image",
+        "theme_color",
+        "show_profile_image"
+      ]);
       const combinedTopLevelChanges = [
         ...(cvDraftState.diff?.topLevelChanges || []).filter((change) => !contextKeys.has(change.key)),
         ...contextDiff.topLevelChanges
@@ -948,7 +1329,7 @@ export default function App() {
         profile_id: currentProfileId,
         revision: existing.revision,
         template_id: existing.template_id,
-        data: existing.data,
+        data: mergeProfileImageIntoData(existing.data, applicationContext.profile_image),
         section_order: existing.section_order,
         sidebar_section_order: existing.sidebar_section_order,
         main_section_order: existing.main_section_order
@@ -964,11 +1345,17 @@ export default function App() {
         job_title: applicationContext.job_title || null,
         job_description: applicationContext.job_description || null,
         job_url: applicationContext.job_url || null,
+        theme_color: normalizeHexColor(applicationContext.theme_color, null),
+        show_profile_image: applicationContext.show_profile_image !== false,
+        header_text_align: applicationContext.header_text_align || "right",
+        header_title_size: applicationContext.header_title_size || "Huge",
+        header_subtitle_size: applicationContext.header_subtitle_size || "Large",
         audit: {
           ...(existing.audit || {}),
           ...(basePayload.audit || {}),
           raw_resume_text: resumeText
-        }
+        },
+        data: mergeProfileImageIntoData(basePayload.data || existing.data, applicationContext.profile_image)
       };
 
       const saved = await saveCvProfile(payload.profile_id, payload);
@@ -1004,10 +1391,16 @@ export default function App() {
         job_title: applicationContext.job_title || null,
         job_description: applicationContext.job_description || null,
         job_url: applicationContext.job_url || null,
+        theme_color: normalizeHexColor(applicationContext.theme_color, null),
+        show_profile_image: applicationContext.show_profile_image !== false,
+        header_text_align: applicationContext.header_text_align || "right",
+        header_title_size: applicationContext.header_title_size || "Huge",
+        header_subtitle_size: applicationContext.header_subtitle_size || "Large",
         audit: {
           ...(existing.audit || {}),
           raw_resume_text: resumeText
-        }
+        },
+        data: mergeProfileImageIntoData(existing.data, applicationContext.profile_image)
       };
       const saved = await saveCvProfile(selectedProfileId, payload);
       upsertCvProfileInList(saved);
@@ -1093,7 +1486,12 @@ export default function App() {
         job_title: effectiveJobTitle || null,
         job_description: effectiveJobDescription || null,
         job_url: effectiveJobUrl || null,
-        data: parsed.data,
+        theme_color: normalizeHexColor(applicationContext.theme_color || existing?.theme_color, null),
+        show_profile_image: applicationContext.show_profile_image !== false,
+        header_text_align: applicationContext.header_text_align || existing?.header_text_align || "right",
+        header_title_size: applicationContext.header_title_size || existing?.header_title_size || "Huge",
+        header_subtitle_size: applicationContext.header_subtitle_size || existing?.header_subtitle_size || "Large",
+        data: mergeProfileImageIntoData(parsed.data, applicationContext.profile_image || existing?.data?.profile_image),
         section_order: existing?.section_order || parsed.section_order || [],
         sidebar_section_order: existing?.sidebar_section_order || parsed.sidebar_section_order || [],
         main_section_order: existing?.main_section_order || parsed.main_section_order || [],
@@ -1131,6 +1529,106 @@ export default function App() {
   const handleTemplateIdChange = (nextTemplateId) => {
     setCvTemplateId(nextTemplateId);
     setCvReview((prev) => (prev ? { ...prev, templateId: nextTemplateId } : prev));
+  };
+
+  const handleThemeColorChange = (nextColor) => {
+    const activeTemplateId = cvReview?.templateId || cvTemplateId || "awesomecv";
+    const fallback = resolveTemplateThemeColor(activeTemplateId);
+    const normalized = normalizeHexColor(nextColor, fallback);
+    if (!normalized) return;
+    setCvThemeColors((prev) => ({
+      ...prev,
+      [activeTemplateId]: normalized
+    }));
+    setApplicationContext((prev) => ({
+      ...prev,
+      theme_color: normalized
+    }));
+  };
+
+  const handleShowProfileImageChange = (nextValue) => {
+    setApplicationContext((prev) => ({
+      ...prev,
+      show_profile_image: Boolean(nextValue)
+    }));
+  };
+
+  const handleHipsterHeaderAlignChange = (nextValue) => {
+    setApplicationContext((prev) => ({
+      ...prev,
+      header_text_align: nextValue || "right"
+    }));
+  };
+
+  const handleHipsterHeaderTitleSizeChange = (nextValue) => {
+    setApplicationContext((prev) => ({
+      ...prev,
+      header_title_size: nextValue || "Huge"
+    }));
+  };
+
+  const handleHipsterHeaderSubtitleSizeChange = (nextValue) => {
+    setApplicationContext((prev) => ({
+      ...prev,
+      header_subtitle_size: nextValue || "Large"
+    }));
+  };
+
+  const handleApplicationContextChange = (updater) => {
+    setApplicationContext((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      if (next?.profile_image !== prev?.profile_image) {
+        setCvReview((prevReview) => {
+          if (!prevReview) return prevReview;
+          return {
+            ...prevReview,
+            canonical: {
+              ...(prevReview.canonical || {}),
+              data: mergeProfileImageIntoData(prevReview.canonical?.data, next?.profile_image || "")
+            }
+          };
+        });
+        setCvPreviewPayload((prevPayload) => {
+          if (!prevPayload) return prevPayload;
+          return {
+            ...prevPayload,
+            photo: (next?.profile_image || "").trim() || null
+          };
+        });
+      }
+      return next;
+    });
+  };
+
+  const handleUploadProfileImage = async (file) => {
+    if (!file) return;
+    setIsUploadingProfileImage(true);
+    setCvEntryError("");
+    try {
+      const result = await uploadCvProfileImage(file);
+      const imagePath = String(result?.image_path || "").trim();
+      if (!imagePath) {
+        throw new Error("Image upload succeeded but no image path was returned.");
+      }
+
+      setApplicationContext((prev) => ({ ...prev, profile_image: imagePath }));
+      setCvReview((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          canonical: {
+            ...(prev.canonical || {}),
+            data: mergeProfileImageIntoData(prev.canonical?.data, imagePath)
+          }
+        };
+      });
+      setCvPreviewPayload((prev) => (prev ? { ...prev, photo: imagePath } : prev));
+      setCvEntryError("Profile image uploaded. Save the profile to persist this image selection.");
+    } catch (err) {
+      setCvEntryError(err instanceof Error ? err.message : "Failed to upload profile image");
+    } finally {
+      setIsUploadingProfileImage(false);
+    }
   };
 
   const handleCvDraftStateChange = (nextDraftState) => {
@@ -1261,6 +1759,16 @@ export default function App() {
                 isDownloading={isPdfDownloading}
                 templateId={cvReview.templateId}
                 onTemplateIdChange={handleTemplateIdChange}
+                themeColor={resolveTemplateThemeColor(cvReview.templateId || "awesomecv")}
+                onThemeColorChange={handleThemeColorChange}
+                showProfileImage={applicationContext.show_profile_image !== false}
+                onShowProfileImageChange={handleShowProfileImageChange}
+                hipsterHeaderAlign={applicationContext.header_text_align || "right"}
+                onHipsterHeaderAlignChange={handleHipsterHeaderAlignChange}
+                hipsterHeaderTitleSize={applicationContext.header_title_size || "Huge"}
+                onHipsterHeaderTitleSizeChange={handleHipsterHeaderTitleSizeChange}
+                hipsterHeaderSubtitleSize={applicationContext.header_subtitle_size || "Large"}
+                onHipsterHeaderSubtitleSizeChange={handleHipsterHeaderSubtitleSizeChange}
                 onUpdate={handleUpdatePdfPreview}
                 onDownload={handleDownloadPdf}
               />
@@ -1345,8 +1853,6 @@ export default function App() {
                 resultsWanted={resultsWanted} onResultsWantedChange={setResultsWanted}
                 hoursOld={hoursOld} onHoursOldChange={setHoursOld}
                 isRemote={isRemote} onIsRemoteChange={setIsRemote}
-                sites={sites} onSitesChange={setSites}
-                fetchFullDescriptions={fetchFullDescriptions} onFetchFullDescriptionsChange={setFetchFullDescriptions}
                 resumeText={resumeText} onResumeTextChange={setResumeText}
                 wishes={wishes} onWishesChange={setWishes}
                 models={models}
@@ -1361,15 +1867,10 @@ export default function App() {
                 rerankTopN={rerankTopN}
                 onRerankTopNChange={setRerankTopN}
                 defaultRerankTopN={defaultRerankTopN}
-                llmProfiles={llmProfiles}
-                selectedLlmProfileId={selectedLlmProfileId}
-                onSelectedLlmProfileIdChange={setSelectedLlmProfileId}
-                llmProfileName={llmProfileName}
-                onLlmProfileNameChange={setLlmProfileName}
-                onSaveLlmProfile={handleSaveLlmProfile}
-                onLoadLlmProfile={handleLoadLlmProfile}
-                onDeleteLlmProfile={handleDeleteLlmProfile}
-                llmProfileError={llmProfileError}
+                cvProfiles={cvProfiles}
+                selectedRerankProfileId={selectedRerankProfileId}
+                onSelectedRerankProfileIdChange={handleSelectRerankProfile}
+                rerankProfileError={rerankProfileError}
                 cachedAvailable={Boolean(cachedResponse)}
                 cachedAt={cachedAt}
                 onLoadCache={handleLoadCache}
@@ -1377,6 +1878,7 @@ export default function App() {
                 isLoading={isLoading}
                 error={error}
                 onSearch={handleSearch}
+                onRunRerank={handleRunRerank}
               />
             </div>
             <div
@@ -1401,8 +1903,15 @@ export default function App() {
               <section className="card">
                 <ResultsList
                   jobs={jobs}
+                  rerankRequested={response?.rerank_requested}
                   rerankApplied={response?.rerank_applied}
                   rerankTopN={response?.rerank_top_n}
+                  rerankSkipReason={response?.rerank_skip_reason}
+                  queryProfileId={response?.query_profile_id}
+                  bm25Query={response?.bm25_query}
+                  bm25Language={response?.bm25_language}
+                  bm25Tokenizer={response?.bm25_tokenizer}
+                  searchPhaseMessage={searchPhaseMessage}
                   onSelectJob={handleSelectJob}
                   isLoading={isLoading}
                   hasResponse={Boolean(response)}
@@ -1437,6 +1946,7 @@ export default function App() {
                     isLoadingProfile={isLoadingProfile}
                     isUpdatingProfileCvText={isUpdatingProfileCvText}
                     isRemappingProfileCvText={isRemappingProfileCvText}
+                    isUploadingProfileImage={isUploadingProfileImage}
                     remapProgress={cvRemapProgress}
                     cvEntryError={cvEntryError}
                     cvTemplateId={cvTemplateId}
@@ -1444,7 +1954,8 @@ export default function App() {
                     cvOutputLanguage={cvOutputLanguage}
                     onCvOutputLanguageChange={setCvOutputLanguage}
                     applicationContext={applicationContext}
-                    onApplicationContextChange={setApplicationContext}
+                    onApplicationContextChange={handleApplicationContextChange}
+                    onUploadProfileImage={handleUploadProfileImage}
                     resumeText={resumeText}
                     onResumeTextChange={setResumeText}
                     newProfileId={newProfileId}
@@ -1460,6 +1971,16 @@ export default function App() {
                       isDownloading={isPdfDownloading}
                       templateId={cvReview?.templateId || cvTemplateId}
                       onTemplateIdChange={handleTemplateIdChange}
+                      themeColor={resolveTemplateThemeColor(cvReview?.templateId || cvTemplateId || "awesomecv")}
+                      onThemeColorChange={handleThemeColorChange}
+                      showProfileImage={applicationContext.show_profile_image !== false}
+                      onShowProfileImageChange={handleShowProfileImageChange}
+                      hipsterHeaderAlign={applicationContext.header_text_align || "right"}
+                      onHipsterHeaderAlignChange={handleHipsterHeaderAlignChange}
+                      hipsterHeaderTitleSize={applicationContext.header_title_size || "Huge"}
+                      onHipsterHeaderTitleSizeChange={handleHipsterHeaderTitleSizeChange}
+                      hipsterHeaderSubtitleSize={applicationContext.header_subtitle_size || "Large"}
+                      onHipsterHeaderSubtitleSizeChange={handleHipsterHeaderSubtitleSizeChange}
                       onUpdate={handleUpdatePdfPreview}
                       onDownload={handleDownloadPdf}
                       disabled={!cvReview}

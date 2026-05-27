@@ -133,7 +133,14 @@ export async function validateCvCanonical(payload) {
 export async function listCvProfiles() {
   const response = await fetch(`${BASE_URL}/cv/profiles`);
   if (!response.ok) {
-    throw new Error(`CV profile list failed with status ${response.status}`);
+    let detail = "";
+    try {
+      const data = await response.json();
+      detail = data?.detail ? `: ${data.detail}` : "";
+    } catch (err) {
+      detail = "";
+    }
+    throw new Error(`CV profile list failed with status ${response.status}${detail}`);
   }
   return response.json();
 }
@@ -241,4 +248,27 @@ export async function renderCvFromTemplate(payload) {
   const blob = await response.blob();
   const filename = getFilenameFromDisposition(response.headers.get("Content-Disposition"));
   return { blob, filename };
+}
+
+export async function uploadCvProfileImage(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${BASE_URL}/cv/profile-image`, {
+    method: "POST",
+    body: formData
+  });
+
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const data = await response.json();
+      detail = data?.detail ? `: ${data.detail}` : "";
+    } catch (err) {
+      detail = "";
+    }
+    throw new Error(`Profile image upload failed with status ${response.status}${detail}`);
+  }
+
+  return response.json();
 }
