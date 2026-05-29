@@ -547,7 +547,7 @@ button:active:not(:disabled) {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  min-width: 740px;
+  min-width: 980px;
 }
 
 .cv-profile-table th,
@@ -560,47 +560,7 @@ button:active:not(:disabled) {
 .cv-profile-table td:nth-child(1) {
   padding-top: 0;
   padding-bottom: 0;
-}
-
-.cv-profile-table th:nth-child(1),
-.cv-profile-table td:nth-child(1) {
-  width: 20%;
   padding-right: 14px;
-}
-
-.cv-profile-table th:nth-child(2),
-.cv-profile-table td:nth-child(2) {
-  width: 14%;
-}
-
-.cv-profile-table th:nth-child(3),
-.cv-profile-table td:nth-child(3) {
-  width: 10%;
-}
-
-.cv-profile-table th:nth-child(4),
-.cv-profile-table td:nth-child(4) {
-  width: 16%;
-}
-
-.cv-profile-table th:nth-child(5),
-.cv-profile-table td:nth-child(5) {
-  width: 10%;
-}
-
-.cv-profile-table th:nth-child(6),
-.cv-profile-table td:nth-child(6) {
-  width: 8%;
-}
-
-.cv-profile-table th:nth-child(7),
-.cv-profile-table td:nth-child(7) {
-  width: 10%;
-}
-
-.cv-profile-table th:nth-child(8),
-.cv-profile-table td:nth-child(8) {
-  width: 12%;
 }
 
 .cv-profile-table-text {
@@ -668,54 +628,66 @@ button:active:not(:disabled) {
 
 .cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(1),
 .cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(1) {
-  width: 16%;
   padding-right: 14px;
-}
-
-.cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(2),
-.cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(2) {
-  width: 14%;
-}
-
-.cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(3),
-.cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(3) {
-  width: 9%;
-}
-
-.cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(4),
-.cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(4) {
-  width: 16%;
-}
-
-.cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(5),
-.cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(5) {
-  width: 9%;
-}
-
-.cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(6),
-.cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(6) {
-  width: 7%;
-}
-
-.cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(7),
-.cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(7) {
-  width: 9%;
-}
-
-.cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(8),
-.cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(8) {
-  width: 20%;
 }
 
 .cv-profile-table th {
   position: sticky;
   top: 0;
+  background-color: #eef2f7;
   background: linear-gradient(to bottom, #fbfdff 0%, #eef2f7 100%);
-  z-index: 1;
+  background-clip: padding-box;
+  z-index: 12;
   font-size: 12px;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: #374151;
+}
+
+.cv-profile-table-header-cell {
+  position: sticky;
+  top: 0;
+}
+
+.cv-profile-table-header-content {
+  display: flex;
+  align-items: center;
+  min-height: 100%;
+  padding-right: 8px;
+}
+
+.table-header-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+.cv-profile-column-resizer {
+  position: absolute;
+  top: 0;
+  right: -1px;
+  width: 10px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  z-index: 20;
+}
+
+.cv-profile-column-resizer::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: 1px;
+  background: #cbd5e1;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.cv-profile-table th:hover .cv-profile-column-resizer::after,
+.cv-profile-column-resizer:hover::after {
+  opacity: 1;
 }
 
 .table-sort-button {
@@ -744,6 +716,7 @@ button:active:not(:disabled) {
 .cv-profile-table tbody tr {
   cursor: pointer;
   position: relative;
+  z-index: 0;
 }
 
 .cv-profile-table tbody tr:hover {

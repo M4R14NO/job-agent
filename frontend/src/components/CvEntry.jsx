@@ -135,6 +135,17 @@ const nextProfileVersionName = (profileId) => {
   return `${normalized}-v2`;
 };
 
+const PROFILE_TABLE_COLUMNS = [
+  { key: "profile_id", label: "CV profile", sortable: true, defaultWidth: 290, minWidth: 180 },
+  { key: "company", label: "Company", sortable: true, defaultWidth: 210, minWidth: 140 },
+  { key: "application_status", label: "Status", sortable: true, defaultWidth: 130, minWidth: 96 },
+  { key: "job_title", label: "Job title", sortable: true, defaultWidth: 260, minWidth: 160 },
+  { key: "template_id", label: "Template", sortable: true, defaultWidth: 130, minWidth: 96 },
+  { key: "revision", label: "Revision", sortable: true, defaultWidth: 96, minWidth: 76 },
+  { key: "cv_text", label: "CV text", sortable: false, defaultWidth: 110, minWidth: 88 },
+  { key: "updated", label: "Updated", sortable: true, defaultWidth: 170, minWidth: 120 }
+];
+
 export default function CvEntry({
   cvProfiles,
   profilesError,
@@ -188,6 +199,7 @@ export default function CvEntry({
   const [profileImageError, setProfileImageError] = useState("");
   const [applicationContextOpen, setApplicationContextOpen] = useState(true);
   const [profileTableHeight, setProfileTableHeight] = useState(420);
+  const [columnWidths, setColumnWidths] = useState(() => PROFILE_TABLE_COLUMNS.map((column) => column.defaultWidth));
   const searchInputRef = useRef(null);
   const searchButtonRef = useRef(null);
   const resetButtonRef = useRef(null);
@@ -200,6 +212,9 @@ export default function CvEntry({
   const isResizingTableRef = useRef(false);
   const tableResizeStartYRef = useRef(0);
   const tableResizeStartHeightRef = useRef(420);
+  const columnResizeIndexRef = useRef(-1);
+  const columnResizeStartXRef = useRef(0);
+  const columnResizeStartWidthRef = useRef(0);
 
   const profilesWithDraft = useMemo(() => {
     if (!isDraftProfileActive || !draftProfileId) return cvProfiles;
@@ -427,8 +442,32 @@ export default function CvEntry({
     document.body.style.userSelect = "none";
   };
 
+  const handleColumnResizeStart = (event, columnIndex) => {
+    event.preventDefault();
+    event.stopPropagation();
+    columnResizeIndexRef.current = columnIndex;
+    columnResizeStartXRef.current = event.clientX;
+    columnResizeStartWidthRef.current = columnWidths[columnIndex];
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
   useEffect(() => {
     const onMouseMove = (event) => {
+      if (columnResizeIndexRef.current >= 0) {
+        const index = columnResizeIndexRef.current;
+        const delta = event.clientX - columnResizeStartXRef.current;
+        const minWidth = PROFILE_TABLE_COLUMNS[index]?.minWidth || 80;
+        const nextWidth = Math.max(minWidth, columnResizeStartWidthRef.current + delta);
+        setColumnWidths((prev) => {
+          if (prev[index] === nextWidth) return prev;
+          const updated = [...prev];
+          updated[index] = nextWidth;
+          return updated;
+        });
+        return;
+      }
+
       if (!isResizingTableRef.current) return;
       const delta = event.clientY - tableResizeStartYRef.current;
       const next = Math.min(Math.max(tableResizeStartHeightRef.current + delta, 240), 920);
@@ -436,10 +475,20 @@ export default function CvEntry({
     };
 
     const onMouseUp = () => {
-      if (!isResizingTableRef.current) return;
-      isResizingTableRef.current = false;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
+      const wasColumnResizing = columnResizeIndexRef.current >= 0;
+      if (wasColumnResizing) {
+        columnResizeIndexRef.current = -1;
+      }
+
+      const wasTableResizing = isResizingTableRef.current;
+      if (wasTableResizing) {
+        isResizingTableRef.current = false;
+      }
+
+      if (wasColumnResizing || wasTableResizing) {
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
     };
 
     window.addEventListener("mousemove", onMouseMove);
@@ -449,6 +498,42 @@ export default function CvEntry({
       window.removeEventListener("mouseup", onMouseUp);
     };
   }, [profileTableHeight]);
+
+  const renderProfileHeaderCell = (column, index) => (
+    <th key={column.key} className="cv-profile-table-header-cell">
+      <div className="cv-profile-table-header-content">
+        {column.sortable
+          ? renderSortHeader(column.label, column.key)
+          : <span className="table-header-label">{column.label}</span>}
+      </div>
+      {index < PROFILE_TABLE_COLUMNS.length - 1 ? (
+        <span
+          className="cv-profile-column-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={`Resize ${column.label} column`}
+          onMouseDown={(event) => handleColumnResizeStart(event, index)}
+          title={`Drag to resize ${column.label} column`}
+        />
+      ) : null}
+    </th>
+  );
+
+  const renderProfileTable = () => (
+    <table className="cv-profile-table">
+      <colgroup>
+        {columnWidths.map((width, index) => (
+          <col key={PROFILE_TABLE_COLUMNS[index].key} style={{ width: `${width}px` }} />
+        ))}
+      </colgroup>
+      <thead>
+        <tr>
+          {PROFILE_TABLE_COLUMNS.map((column, index) => renderProfileHeaderCell(column, index))}
+        </tr>
+      </thead>
+      <tbody>{renderProfileTableRows()}</tbody>
+    </table>
+  );
 
   const renderProfileTableRows = () => {
     if (profilesError) {
@@ -662,21 +747,7 @@ export default function CvEntry({
 
                 <div className="cv-profile-table-wrap">
                   <div className="cv-profile-table-wrap-inner" style={{ maxHeight: `${profileTableHeight}px` }}>
-                  <table className="cv-profile-table">
-                    <thead>
-                      <tr>
-                        <th>{renderSortHeader("CV profile", "profile_id")}</th>
-                        <th>{renderSortHeader("Company", "company")}</th>
-                        <th>{renderSortHeader("Status", "application_status")}</th>
-                        <th>{renderSortHeader("Job title", "job_title")}</th>
-                        <th>{renderSortHeader("Template", "template_id")}</th>
-                        <th>{renderSortHeader("Revision", "revision")}</th>
-                        <th>CV text</th>
-                        <th>{renderSortHeader("Updated", "updated")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>{renderProfileTableRows()}</tbody>
-                  </table>
+                  {renderProfileTable()}
                   </div>
                   <div
                     className="cv-profile-table-resizer"
@@ -786,21 +857,7 @@ export default function CvEntry({
 
           <div className="cv-profile-table-wrap">
             <div className="cv-profile-table-wrap-inner" style={{ maxHeight: `${profileTableHeight}px` }}>
-            <table className="cv-profile-table">
-              <thead>
-                <tr>
-                  <th>{renderSortHeader("CV profile", "profile_id")}</th>
-                  <th>{renderSortHeader("Company", "company")}</th>
-                  <th>{renderSortHeader("Status", "application_status")}</th>
-                  <th>{renderSortHeader("Job title", "job_title")}</th>
-                  <th>{renderSortHeader("Template", "template_id")}</th>
-                  <th>{renderSortHeader("Revision", "revision")}</th>
-                  <th>CV text</th>
-                  <th>{renderSortHeader("Updated", "updated")}</th>
-                </tr>
-              </thead>
-              <tbody>{renderProfileTableRows()}</tbody>
-            </table>
+            {renderProfileTable()}
             </div>
             <div
               className="cv-profile-table-resizer"
