@@ -1161,6 +1161,28 @@ export default function App() {
     };
   };
 
+  const buildLineageFields = ({ sourceProfile, nextProfileId, branchReason = null }) => {
+    const targetId = sanitizeProfileId(nextProfileId || "profile");
+    if (!sourceProfile?.profile_id) {
+      return {
+        parent_profile_id: null,
+        lineage_root_profile_id: targetId,
+        lineage_depth: 0,
+        branch_reason: branchReason
+      };
+    }
+    const sourceRoot = sourceProfile.lineage_root_profile_id || sourceProfile.profile_id;
+    const sourceDepth = Number.isFinite(sourceProfile.lineage_depth)
+      ? Number(sourceProfile.lineage_depth)
+      : 0;
+    return {
+      parent_profile_id: sourceProfile.profile_id,
+      lineage_root_profile_id: sourceRoot,
+      lineage_depth: sourceDepth + 1,
+      branch_reason: branchReason || "manual-branch"
+    };
+  };
+
   const handleCreateNewEntry = async ({ profileName } = {}) => {
     const nextProfileId = sanitizeProfileId(profileName || "");
     if (!nextProfileId) {
@@ -1191,6 +1213,10 @@ export default function App() {
         header_text_align: applicationContext.header_text_align || "right",
         header_title_size: applicationContext.header_title_size || "Huge",
         header_subtitle_size: applicationContext.header_subtitle_size || "Large",
+        parent_profile_id: null,
+        lineage_root_profile_id: nextProfileId,
+        lineage_depth: 0,
+        branch_reason: null,
         data: mergeProfileImageIntoData({}, applicationContext.profile_image),
         section_order: [],
         sidebar_section_order: [],
@@ -1420,6 +1446,10 @@ export default function App() {
         header_text_align: applicationContext.header_text_align || "right",
         header_title_size: applicationContext.header_title_size || "Huge",
         header_subtitle_size: applicationContext.header_subtitle_size || "Large",
+        parent_profile_id: basePayload.parent_profile_id ?? existing.parent_profile_id ?? null,
+        lineage_root_profile_id: basePayload.lineage_root_profile_id ?? existing.lineage_root_profile_id ?? existing.profile_id,
+        lineage_depth: basePayload.lineage_depth ?? existing.lineage_depth ?? 0,
+        branch_reason: basePayload.branch_reason ?? existing.branch_reason ?? null,
         audit: {
           ...(existing.audit || {}),
           ...(basePayload.audit || {}),
@@ -1536,6 +1566,26 @@ export default function App() {
         throw new Error("Target profile already exists. Choose a different name or confirm overwrite.");
       }
 
+      const isBranchFromSource = Boolean(
+        existing?.profile_id &&
+        nextProfileId !== existing.profile_id &&
+        !existingTarget
+      );
+      const lineageFields = existingTarget
+        ? {
+          parent_profile_id: existingTarget.parent_profile_id ?? null,
+          lineage_root_profile_id: existingTarget.lineage_root_profile_id ?? existingTarget.profile_id,
+          lineage_depth: existingTarget.lineage_depth ?? 0,
+          branch_reason: existingTarget.branch_reason ?? null
+        }
+        : isBranchFromSource
+          ? buildLineageFields({
+            sourceProfile: existing,
+            nextProfileId,
+            branchReason: isJobWorkflow ? "job-tailor" : "manual-tailor"
+          })
+          : buildLineageFields({ sourceProfile: null, nextProfileId, branchReason: null });
+
       const effectiveJobTitle = applicationContext.job_title || existing?.job_title || existing?.audit?.final_template_payload?.job_title || "";
       const effectiveCompany = applicationContext.company || existing?.company || "";
       const effectiveJobDescription = applicationContext.job_description || existing?.job_description || "";
@@ -1567,6 +1617,7 @@ export default function App() {
         header_text_align: applicationContext.header_text_align || existing?.header_text_align || "right",
         header_title_size: applicationContext.header_title_size || existing?.header_title_size || "Huge",
         header_subtitle_size: applicationContext.header_subtitle_size || existing?.header_subtitle_size || "Large",
+        ...lineageFields,
         data: mergeProfileImageIntoData(parsed.data, applicationContext.profile_image || existing?.data?.profile_image),
         section_order: existing?.section_order || parsed.section_order || [],
         sidebar_section_order: existing?.sidebar_section_order || parsed.sidebar_section_order || [],
@@ -1922,6 +1973,11 @@ export default function App() {
         header_text_align: applicationContext.header_text_align || sourceProfile.header_text_align || "right",
         header_title_size: applicationContext.header_title_size || sourceProfile.header_title_size || "Huge",
         header_subtitle_size: applicationContext.header_subtitle_size || sourceProfile.header_subtitle_size || "Large",
+        ...buildLineageFields({
+          sourceProfile,
+          nextProfileId: nextDraftId,
+          branchReason: "job-edit-draft"
+        }),
         audit: {
           ...(sourceProfile.audit || {}),
           raw_resume_text: resumeText || sourceProfile.audit?.raw_resume_text || ""
@@ -2020,6 +2076,69 @@ export default function App() {
     ? "CV review"
     : (activeJobAction === "cover" ? "Cover letter" : "CV generation");
   const switchActionLabel = activeJobAction === "cover" ? "Switch to CV generation" : "Switch to Cover letter";
+
+  const jobEditDecisionModal = jobEditDecisionDialog.isOpen ? (
+    <div className="modal" role="dialog" aria-modal="true" aria-labelledby="job-edit-decision-title">
+      <div className="modal-backdrop" onClick={closeJobEditDecisionDialog} />
+      <div className="modal-card">
+        <div className="modal-header">
+          <h2 id="job-edit-decision-title">Choose how to edit this profile</h2>
+        </div>
+        <p className="helper">
+          Recommended: create a draft for this job. This protects your loaded profile from accidental overwrite.
+        </p>
+        {(() => {
+          const jobMatchesLoadedProfile = doesLoadedProfileMatchCurrentJob();
+          return !jobMatchesLoadedProfile ? (
+            <div className="sub-card" style={{ margin: 0 }}>
+              <p className="helper" style={{ margin: 0 }}>
+                Job context mismatch detected.
+              </p>
+              <p className="helper" style={{ margin: 0 }}>
+                You cannot edit the loaded profile directly here. Create a new draft branch for this job.
+              </p>
+            </div>
+          ) : (
+            <div className="sub-card" style={{ margin: 0 }}>
+              <p className="helper" style={{ margin: 0 }}>
+                Context matches this job.
+              </p>
+              <p className="helper" style={{ margin: 0 }}>
+                You may edit the loaded profile directly. Saving can overwrite that profile.
+              </p>
+            </div>
+          );
+        })()}
+        {jobEditDecisionDialog.error ? <p className="error">{jobEditDecisionDialog.error}</p> : null}
+        <div className="inline-actions">
+          <button
+            type="button"
+            className="secondary cv-action-remap"
+            onClick={handleEditCreateDraftForJob}
+            disabled={jobEditDecisionDialog.isBusy}
+          >
+            {jobEditDecisionDialog.isBusy ? "Creating draft..." : "Create new draft for this job (recommended)"}
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={handleEditContinueWithLoadedProfile}
+            disabled={jobEditDecisionDialog.isBusy || !doesLoadedProfileMatchCurrentJob()}
+          >
+            Edit loaded profile (overwrite path)
+          </button>
+          <button
+            type="button"
+            className="ghost"
+            onClick={closeJobEditDecisionDialog}
+            disabled={jobEditDecisionDialog.isBusy}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   if (showPanel) {
     return (
@@ -2138,7 +2257,8 @@ export default function App() {
                     contextMode="job"
                     hideCreateProfileButton
                     hideUpdateAction
-                    hideTailorAction={!showW1TailorAction}
+                    hideTailorAction={!showW1TailorAction || Boolean(cvReview)}
+                    hideTailorProgress={Boolean(cvReview)}
                     profileTableCollapsedByDefault
                     tailorActionDisabled={isRemappingProfileCvText || isLoadingProfile || !resumeText.trim()}
                     remapSuggestionBuilder={({ defaultSuggested, selectedProfile: profile }) => {
@@ -2200,6 +2320,7 @@ export default function App() {
             </div>
           ) : null}
         </div>
+        {jobEditDecisionModal}
       </div>
     );
   }
@@ -2438,58 +2559,7 @@ export default function App() {
         error={profileSwitchDialog.error}
       />
 
-      {jobEditDecisionDialog.isOpen ? (
-        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="job-edit-decision-title">
-          <div className="modal-backdrop" onClick={closeJobEditDecisionDialog} />
-          <div className="modal-card">
-            <div className="modal-header">
-              <h2 id="job-edit-decision-title">Edit profile in this job workflow</h2>
-            </div>
-            <p className="helper">
-              Choose how to continue editing. Creating a draft is the recommended safe path for job-specific changes.
-            </p>
-            {(() => {
-              const jobMatchesLoadedProfile = doesLoadedProfileMatchCurrentJob();
-              return !jobMatchesLoadedProfile ? (
-              <p className="helper">
-                The loaded profile job context differs from the currently opened job. Editing the loaded profile directly is disabled to prevent accidental overwrite.
-              </p>
-              ) : (
-                <p className="helper">
-                  Loaded profile context matches this job. You can continue with the current profile, and any conflicting save remains guarded.
-                </p>
-              );
-            })()}
-            {jobEditDecisionDialog.error ? <p className="error">{jobEditDecisionDialog.error}</p> : null}
-            <div className="inline-actions">
-              <button
-                type="button"
-                className="secondary cv-action-remap"
-                onClick={handleEditCreateDraftForJob}
-                disabled={jobEditDecisionDialog.isBusy}
-              >
-                {jobEditDecisionDialog.isBusy ? "Creating draft..." : "Create new draft for this job (recommended)"}
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={handleEditContinueWithLoadedProfile}
-                disabled={jobEditDecisionDialog.isBusy || !doesLoadedProfileMatchCurrentJob()}
-              >
-                Continue with loaded profile
-              </button>
-              <button
-                type="button"
-                className="ghost"
-                onClick={closeJobEditDecisionDialog}
-                disabled={jobEditDecisionDialog.isBusy}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {jobEditDecisionModal}
     </Box>
   );
 }

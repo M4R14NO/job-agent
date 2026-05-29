@@ -1,19 +1,6 @@
-import { useMemo, useRef, useState } from "react";
-import { CheckCircle2, Download, PencilLine, Plus, RefreshCw, Search, RotateCcw, Sparkles, Tag } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle2, ChevronDown, ChevronRight, Download, PencilLine, Plus, Search, RotateCcw, Sparkles, Tag } from "lucide-react";
 import { Progress, Spinner } from "@chakra-ui/react";
-
-const SECTION_DESCRIPTORS = [
-  { key: "summary", label: "Summary", hasContent: (profile) => Boolean((profile?.data?.summary || "").trim()) },
-  { key: "skills", label: "Skills", hasContent: (profile) => (profile?.data?.skills || []).length > 0 },
-  { key: "languages", label: "Languages", hasContent: (profile) => (profile?.data?.languages || []).length > 0 },
-  { key: "interests", label: "Interests", hasContent: (profile) => (profile?.data?.interests || []).length > 0 },
-  { key: "experience", label: "Experience", hasContent: (profile) => (profile?.data?.experience || []).length > 0 },
-  { key: "volunteer", label: "Volunteer", hasContent: (profile) => (profile?.data?.volunteer || []).length > 0 },
-  { key: "honors", label: "Honors", hasContent: (profile) => (profile?.data?.awards || []).length > 0 },
-  { key: "certificates", label: "Certificates", hasContent: (profile) => (profile?.data?.certificates || []).length > 0 },
-  { key: "writing", label: "Writing", hasContent: (profile) => (profile?.data?.publications || []).length > 0 },
-  { key: "education", label: "Education", hasContent: (profile) => (profile?.data?.education || []).length > 0 }
-];
 
 const EXAMPLE_CV_TEXT = `PROFILE
 Name: Alex Rivers
@@ -80,12 +67,10 @@ const formatDateTime = (value) => {
   if (!value) return "-";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "-";
-  return parsed.toLocaleString("en-GB", {
+  return parsed.toLocaleDateString("en-GB", {
     year: "numeric",
     month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
+    day: "2-digit"
   });
 };
 
@@ -150,45 +135,12 @@ const nextProfileVersionName = (profileId) => {
   return `${normalized}-v2`;
 };
 
-const getSectionStats = (profile) => {
-  const knownKeys = SECTION_DESCRIPTORS.map((descriptor) => descriptor.key);
-  const templateId = profile?.template_id || "awesomecv";
-  const orderedSections = templateId === "hipstercv"
-    ? [
-      ...(Array.isArray(profile?.sidebar_section_order) ? profile.sidebar_section_order : []),
-      ...(Array.isArray(profile?.main_section_order) ? profile.main_section_order : [])
-    ]
-    : (Array.isArray(profile?.section_order) ? profile.section_order : []);
-
-  const hasExplicitLayout = orderedSections.length > 0;
-  const visibleKeySet = hasExplicitLayout
-    ? new Set(orderedSections.filter((key) => knownKeys.includes(key)))
-    : new Set(
-      SECTION_DESCRIPTORS
-        .filter((descriptor) => descriptor.hasContent(profile))
-        .map((descriptor) => descriptor.key)
-    );
-
-  const visible = SECTION_DESCRIPTORS
-    .filter((descriptor) => visibleKeySet.has(descriptor.key))
-    .map((descriptor) => descriptor.label);
-  const hidden = SECTION_DESCRIPTORS
-    .filter((descriptor) => !visibleKeySet.has(descriptor.key))
-    .map((descriptor) => descriptor.label);
-  return {
-    visible,
-    hidden
-  };
-};
-
 export default function CvEntry({
   cvProfiles,
-  profilesLoading,
   profilesError,
   selectedProfileId,
   onSelectedProfileIdChange,
   onProfileRowSelect,
-  onRefreshProfiles,
   onUpdateProfileCvText,
   onRemapProfileCvText,
   onCreateNewEntry,
@@ -216,6 +168,7 @@ export default function CvEntry({
   hideCreateProfileButton = false,
   hideUpdateAction = false,
   hideTailorAction = false,
+  hideTailorProgress = false,
   tailorActionDisabled,
   profileTableCollapsedByDefault = false,
   remapSuggestionBuilder,
@@ -233,16 +186,20 @@ export default function CvEntry({
   const [newEntryProfileName, setNewEntryProfileName] = useState("");
   const [newEntryError, setNewEntryError] = useState("");
   const [profileImageError, setProfileImageError] = useState("");
+  const [applicationContextOpen, setApplicationContextOpen] = useState(true);
+  const [profileTableHeight, setProfileTableHeight] = useState(420);
   const searchInputRef = useRef(null);
   const searchButtonRef = useRef(null);
   const resetButtonRef = useRef(null);
   const createButtonRef = useRef(null);
-  const refreshButtonRef = useRef(null);
   const firstRowRef = useRef(null);
   const exampleButtonRef = useRef(null);
   const updateProfileButtonRef = useRef(null);
   const tailorButtonRef = useRef(null);
   const cvTextRef = useRef(null);
+  const isResizingTableRef = useRef(false);
+  const tableResizeStartYRef = useRef(0);
+  const tableResizeStartHeightRef = useRef(420);
 
   const profilesWithDraft = useMemo(() => {
     if (!isDraftProfileActive || !draftProfileId) return cvProfiles;
@@ -285,24 +242,71 @@ export default function CvEntry({
     [cvProfiles, selectedProfileId]
   );
 
-  const filteredProfiles = useMemo(() => {
+  const compareProfiles = (a, b) => {
+    const leftDate = Date.parse(a.updated_at || a.created_at || "") || 0;
+    const rightDate = Date.parse(b.updated_at || b.created_at || "") || 0;
+    const getValue = (profile, key) => {
+      if (key === "updated") return Date.parse(profile.updated_at || profile.created_at || "") || 0;
+      if (key === "revision") return Number(profile.revision || 0);
+      return normalizeText(profile?.[key]);
+    };
+    const left = sortBy === "updated" ? leftDate : getValue(a, sortBy);
+    const right = sortBy === "updated" ? rightDate : getValue(b, sortBy);
+    if (left < right) return sortDirection === "asc" ? -1 : 1;
+    if (left > right) return sortDirection === "asc" ? 1 : -1;
+    return normalizeText(a.profile_id).localeCompare(normalizeText(b.profile_id));
+  };
+
+  const sortedProfiles = useMemo(() => {
     const filtered = profilesWithDraft.filter((profile) => profileMatchesQuery(profile, profileSearchQuery));
-    const sorted = [...filtered].sort((a, b) => {
-      const leftDate = Date.parse(a.updated_at || a.created_at || "") || 0;
-      const rightDate = Date.parse(b.updated_at || b.created_at || "") || 0;
-      const getValue = (profile, key) => {
-        if (key === "updated") return Date.parse(profile.updated_at || profile.created_at || "") || 0;
-        if (key === "revision") return Number(profile.revision || 0);
-        return normalizeText(profile?.[key]);
-      };
-      const left = sortBy === "updated" ? leftDate : getValue(a, sortBy);
-      const right = sortBy === "updated" ? rightDate : getValue(b, sortBy);
-      if (left < right) return sortDirection === "asc" ? -1 : 1;
-      if (left > right) return sortDirection === "asc" ? 1 : -1;
-      return normalizeText(a.profile_id).localeCompare(normalizeText(b.profile_id));
-    });
+    const sorted = [...filtered].sort(compareProfiles);
     return sorted;
   }, [profilesWithDraft, profileSearchQuery, sortBy, sortDirection]);
+
+  const treeRows = useMemo(() => {
+    const profileMap = new Map(sortedProfiles.map((profile) => [profile.profile_id, profile]));
+    const childMap = new Map();
+    const roots = [];
+
+    sortedProfiles.forEach((profile) => {
+      const parentId = String(profile.parent_profile_id || "").trim();
+      if (parentId && profileMap.has(parentId)) {
+        if (!childMap.has(parentId)) childMap.set(parentId, []);
+        childMap.get(parentId).push(profile);
+      } else {
+        roots.push(profile);
+      }
+    });
+
+    childMap.forEach((children) => children.sort(compareProfiles));
+    roots.sort(compareProfiles);
+
+    const flattened = [];
+    const visit = (profile, depth, guideLevels, isLastSibling) => {
+      const parentId = String(profile.parent_profile_id || "").trim();
+      const isRoot = !parentId || !profileMap.has(parentId);
+      flattened.push({
+        profile,
+        depth,
+        parentId,
+        isRoot,
+        hasCvText: Boolean(String(profile?.audit?.raw_resume_text || "").trim()),
+        guideLevels,
+        isLastSibling
+      });
+      const children = childMap.get(profile.profile_id) || [];
+      children.forEach((child, childIndex) => {
+        const childIsLast = childIndex === children.length - 1;
+        visit(child, depth + 1, [...guideLevels, !isLastSibling], childIsLast);
+      });
+    };
+
+    roots.forEach((root, rootIndex) => {
+      const isLastRoot = rootIndex === roots.length - 1;
+      visit(root, 0, [], isLastRoot);
+    });
+    return flattened;
+  }, [sortedProfiles, sortBy, sortDirection]);
 
   const remapTargetExists = useMemo(
     () => cvProfiles.some((profile) => profile.profile_id === remapProfileName.trim()),
@@ -415,8 +419,136 @@ export default function CvEntry({
     </button>
   );
 
+  const handleTableResizeStart = (event) => {
+    isResizingTableRef.current = true;
+    tableResizeStartYRef.current = event.clientY;
+    tableResizeStartHeightRef.current = profileTableHeight;
+    document.body.style.cursor = "ns-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  useEffect(() => {
+    const onMouseMove = (event) => {
+      if (!isResizingTableRef.current) return;
+      const delta = event.clientY - tableResizeStartYRef.current;
+      const next = Math.min(Math.max(tableResizeStartHeightRef.current + delta, 240), 920);
+      setProfileTableHeight(next);
+    };
+
+    const onMouseUp = () => {
+      if (!isResizingTableRef.current) return;
+      isResizingTableRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [profileTableHeight]);
+
+  const renderProfileTableRows = () => {
+    if (profilesError) {
+      return (
+        <tr>
+          <td colSpan={8}>
+            <p className="error">Failed to load profiles: {profilesError}</p>
+          </td>
+        </tr>
+      );
+    }
+
+    if (treeRows.length === 0) {
+      return (
+        <tr>
+          <td colSpan={8}>
+            <p className="helper">No matching profiles found.</p>
+          </td>
+        </tr>
+      );
+    }
+
+    return treeRows.map((row, index) => {
+      const { profile, depth, parentId, isRoot, hasCvText, guideLevels, isLastSibling } = row;
+      const isSelected = selectedProfileId === profile.profile_id;
+      const ancestorGuideLevels = guideLevels.slice(0, -1);
+      const firstContinuingGuideIndex = ancestorGuideLevels.findIndex((hasNext) => hasNext);
+      return (
+        <tr
+          key={profile.profile_id}
+          ref={index === 0 ? firstRowRef : null}
+          className={isSelected ? "is-selected" : ""}
+          onClick={() => handleProfileSelect(profile)}
+          onKeyDown={(event) => handleProfileRowKeyDown(event, profile)}
+          tabIndex={0}
+          role="button"
+          aria-selected={isSelected}
+          aria-label={`Load profile ${profile.profile_id}`}
+        >
+          <td className="cv-profile-tree-td">
+            {!isRoot ? (
+              <span className="cv-profile-tree-rail" aria-hidden="true">
+                {firstContinuingGuideIndex >= 0 ? (
+                  <span
+                    key={`${profile.profile_id}-guide-${firstContinuingGuideIndex}`}
+                    className="cv-profile-tree-guide-col"
+                    style={{ left: `${(firstContinuingGuideIndex + 1) * 20 - 10}px` }}
+                  />
+                ) : null}
+                <span
+                  className={`cv-profile-tree-branch ${isLastSibling ? "is-last" : "has-next"}`}
+                  style={{ left: `${depth * 20 - 10}px` }}
+                />
+              </span>
+            ) : null}
+            <div className="cv-profile-tree-cell">
+              <div className="cv-profile-tree-main" style={{ paddingLeft: `${depth * 20}px` }}>
+                <span
+                  className={`cv-profile-tree-label${isRoot ? " is-root" : ""}`}
+                  title={profile.profile_id}
+                >
+                  {profile.profile_id}
+                </span>
+              </div>
+            </div>
+          </td>
+          <td>
+            <span className="cv-profile-table-text" title={profile.company || "-"}>
+              {profile.company || "-"}
+            </span>
+          </td>
+          <td>
+            {profile.application_status ? (
+              <span className={statusBadgeClass(profile.application_status)}>{profile.application_status}</span>
+            ) : "-"}
+          </td>
+          <td>
+            <span className="cv-profile-table-text" title={profile.job_title || "-"}>
+              {profile.job_title || "-"}
+            </span>
+          </td>
+          <td>
+            <span className="cv-profile-table-text" title={profile.template_id || "awesomecv"}>
+              {profile.template_id || "awesomecv"}
+            </span>
+          </td>
+          <td>r{profile.revision ?? 0}</td>
+          <td>
+            <span className={`cv-text-availability ${hasCvText ? "is-available" : "is-missing"}`}>
+              {hasCvText ? "Available" : "Missing"}
+            </span>
+          </td>
+          <td>{formatDateTime(profile.updated_at || profile.created_at)}</td>
+        </tr>
+      );
+    });
+  };
+
   return (
-    <div className="cv-entry">
+    <div className={`cv-entry${isJobMode ? " is-job-mode" : ""}`}>
       <div className="cv-entry-header">
         <div>
           <p className="eyebrow">{isJobMode ? "CV generation" : "CV editor"}</p>
@@ -445,11 +577,6 @@ export default function CvEntry({
                       value={profileSearchDraft}
                       onChange={(e) => setProfileSearchDraft(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Tab" && e.shiftKey) {
-                          e.preventDefault();
-                          refreshButtonRef.current?.focus();
-                          return;
-                        }
                         if (e.key === "Enter") {
                           e.preventDefault();
                           searchButtonRef.current?.click();
@@ -469,11 +596,6 @@ export default function CvEntry({
                         className="primary cv-search-button"
                         onClick={() => setProfileSearchQuery(profileSearchDraft)}
                         onKeyDown={(e) => {
-                          if (e.key === "Tab" && e.shiftKey) {
-                            e.preventDefault();
-                            searchInputRef.current?.focus();
-                            return;
-                          }
                           if (e.key === "Tab" && !e.shiftKey) {
                             e.preventDefault();
                             resetButtonRef.current?.focus();
@@ -499,7 +621,11 @@ export default function CvEntry({
                           }
                           if (e.key === "Tab" && !e.shiftKey) {
                             e.preventDefault();
-                            refreshButtonRef.current?.focus();
+                            if (!hideCreateProfileButton) {
+                              createButtonRef.current?.focus();
+                            } else {
+                              focusFirstRow();
+                            }
                           }
                         }}
                       >
@@ -513,27 +639,29 @@ export default function CvEntry({
                             type="button"
                             className="primary cv-create-button"
                             onClick={openNewEntryDialog}
+                            onKeyDown={(e) => {
+                              if (e.key === "Tab" && e.shiftKey) {
+                                e.preventDefault();
+                                resetButtonRef.current?.focus();
+                                return;
+                              }
+                              if (e.key === "Tab" && !e.shiftKey) {
+                                e.preventDefault();
+                                focusFirstRow();
+                              }
+                            }}
                           >
                             <Plus size={14} />
                             Create new CV Profile
                           </button>
                         ) : null}
-                        <button
-                          ref={refreshButtonRef}
-                          type="button"
-                          className="ghost cv-refresh-button"
-                          onClick={onRefreshProfiles}
-                          disabled={profilesLoading}
-                        >
-                          <RefreshCw size={14} />
-                          {profilesLoading ? "Refreshing..." : "Refresh profiles"}
-                        </button>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <div className="cv-profile-table-wrap">
+                  <div className="cv-profile-table-wrap-inner" style={{ maxHeight: `${profileTableHeight}px` }}>
                   <table className="cv-profile-table">
                     <thead>
                       <tr>
@@ -543,67 +671,20 @@ export default function CvEntry({
                         <th>{renderSortHeader("Job title", "job_title")}</th>
                         <th>{renderSortHeader("Template", "template_id")}</th>
                         <th>{renderSortHeader("Revision", "revision")}</th>
+                        <th>CV text</th>
                         <th>{renderSortHeader("Updated", "updated")}</th>
-                        <th>Sections</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      {profilesError ? (
-                        <tr>
-                          <td colSpan={8}>
-                            <p className="error">Failed to load profiles: {profilesError}</p>
-                          </td>
-                        </tr>
-                      ) : filteredProfiles.length === 0 ? (
-                        <tr>
-                          <td colSpan={8}>
-                            <p className="helper">No matching profiles found.</p>
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredProfiles.map((profile) => {
-                          const sectionStats = getSectionStats(profile);
-                          const isSelected = selectedProfileId === profile.profile_id;
-                          return (
-                            <tr
-                              key={profile.profile_id}
-                              ref={filteredProfiles[0]?.profile_id === profile.profile_id ? firstRowRef : null}
-                              className={isSelected ? "is-selected" : ""}
-                              onClick={() => handleProfileSelect(profile)}
-                              onKeyDown={(event) => handleProfileRowKeyDown(event, profile)}
-                              tabIndex={0}
-                              role="button"
-                              aria-selected={isSelected}
-                              aria-label={`Load profile ${profile.profile_id}`}
-                            >
-                              <td>{profile.profile_id}</td>
-                              <td>{profile.company || "-"}</td>
-                              <td>
-                                {profile.application_status ? (
-                                  <span className={statusBadgeClass(profile.application_status)}>{profile.application_status}</span>
-                                ) : "-"}
-                              </td>
-                              <td>{profile.job_title || "-"}</td>
-                              <td>{profile.template_id || "awesomecv"}</td>
-                              <td>r{profile.revision ?? 0}</td>
-                              <td>{formatDateTime(profile.updated_at || profile.created_at)}</td>
-                              <td>
-                                <span className="cv-profile-section-meta">
-                                  {sectionStats.visible.length} shown / {sectionStats.hidden.length} hidden
-                                </span>
-                                <span className="cv-profile-section-list">
-                                  + {sectionStats.visible.join(", ") || "None"}
-                                </span>
-                                <span className="cv-profile-section-list muted">
-                                  - {sectionStats.hidden.join(", ") || "None"}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
+                    <tbody>{renderProfileTableRows()}</tbody>
                   </table>
+                  </div>
+                  <div
+                    className="cv-profile-table-resizer"
+                    role="separator"
+                    aria-orientation="horizontal"
+                    onMouseDown={handleTableResizeStart}
+                    title="Drag to resize profile list height"
+                  />
                 </div>
               </div>
             </details>
@@ -644,11 +725,6 @@ export default function CvEntry({
                   className="primary cv-search-button"
                   onClick={() => setProfileSearchQuery(profileSearchDraft)}
                   onKeyDown={(e) => {
-                    if (e.key === "Tab" && e.shiftKey) {
-                      e.preventDefault();
-                      searchInputRef.current?.focus();
-                      return;
-                    }
                     if (e.key === "Tab" && !e.shiftKey) {
                       e.preventDefault();
                       resetButtonRef.current?.focus();
@@ -674,7 +750,11 @@ export default function CvEntry({
                     }
                     if (e.key === "Tab" && !e.shiftKey) {
                       e.preventDefault();
-                      createButtonRef.current?.focus();
+                      if (!hideCreateProfileButton) {
+                        createButtonRef.current?.focus();
+                      } else {
+                        focusFirstRow();
+                      }
                     }
                   }}
                 >
@@ -689,14 +769,9 @@ export default function CvEntry({
                       className="primary cv-create-button"
                       onClick={openNewEntryDialog}
                       onKeyDown={(e) => {
-                        if (e.key === "Tab" && e.shiftKey) {
-                          e.preventDefault();
-                          resetButtonRef.current?.focus();
-                          return;
-                        }
                         if (e.key === "Tab" && !e.shiftKey) {
                           e.preventDefault();
-                          refreshButtonRef.current?.focus();
+                          focusFirstRow();
                         }
                       }}
                     >
@@ -704,33 +779,13 @@ export default function CvEntry({
                       Create new CV Profile
                     </button>
                   ) : null}
-                  <button
-                    ref={refreshButtonRef}
-                    type="button"
-                    className="ghost cv-refresh-button"
-                    onClick={onRefreshProfiles}
-                    disabled={profilesLoading}
-                    onKeyDown={(e) => {
-                      if (e.key === "Tab" && e.shiftKey) {
-                        e.preventDefault();
-                        createButtonRef.current?.focus();
-                        return;
-                      }
-                      if (e.key === "Tab" && !e.shiftKey) {
-                        e.preventDefault();
-                        focusFirstRow();
-                      }
-                    }}
-                  >
-                    <RefreshCw size={14} />
-                    {profilesLoading ? "Refreshing..." : "Refresh profiles"}
-                  </button>
                 </div>
               </div>
             </div>
           </div>
 
           <div className="cv-profile-table-wrap">
+            <div className="cv-profile-table-wrap-inner" style={{ maxHeight: `${profileTableHeight}px` }}>
             <table className="cv-profile-table">
               <thead>
                 <tr>
@@ -740,75 +795,41 @@ export default function CvEntry({
                   <th>{renderSortHeader("Job title", "job_title")}</th>
                   <th>{renderSortHeader("Template", "template_id")}</th>
                   <th>{renderSortHeader("Revision", "revision")}</th>
+                  <th>CV text</th>
                   <th>{renderSortHeader("Updated", "updated")}</th>
-                  <th>Sections</th>
                 </tr>
               </thead>
-              <tbody>
-                {profilesError ? (
-                  <tr>
-                    <td colSpan={8}>
-                      <p className="error">Failed to load profiles: {profilesError}</p>
-                    </td>
-                  </tr>
-                ) : filteredProfiles.length === 0 ? (
-                  <tr>
-                    <td colSpan={8}>
-                      <p className="helper">No matching profiles found.</p>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredProfiles.map((profile) => {
-                    const sectionStats = getSectionStats(profile);
-                    const isSelected = selectedProfileId === profile.profile_id;
-                    return (
-                      <tr
-                        key={profile.profile_id}
-                        ref={filteredProfiles[0]?.profile_id === profile.profile_id ? firstRowRef : null}
-                        className={isSelected ? "is-selected" : ""}
-                        onClick={() => handleProfileSelect(profile)}
-                        onKeyDown={(event) => handleProfileRowKeyDown(event, profile)}
-                        tabIndex={0}
-                        role="button"
-                        aria-selected={isSelected}
-                        aria-label={`Load profile ${profile.profile_id}`}
-                      >
-                        <td>{profile.profile_id}</td>
-                        <td>{profile.company || "-"}</td>
-                        <td>
-                          {profile.application_status ? (
-                            <span className={statusBadgeClass(profile.application_status)}>{profile.application_status}</span>
-                          ) : "-"}
-                        </td>
-                        <td>{profile.job_title || "-"}</td>
-                        <td>{profile.template_id || "awesomecv"}</td>
-                        <td>r{profile.revision ?? 0}</td>
-                        <td>{formatDateTime(profile.updated_at || profile.created_at)}</td>
-                        <td>
-                          <span className="cv-profile-section-meta">
-                            {sectionStats.visible.length} shown / {sectionStats.hidden.length} hidden
-                          </span>
-                          <span className="cv-profile-section-list">
-                            + {sectionStats.visible.join(", ") || "None"}
-                          </span>
-                          <span className="cv-profile-section-list muted">
-                            - {sectionStats.hidden.join(", ") || "None"}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
+              <tbody>{renderProfileTableRows()}</tbody>
             </table>
+            </div>
+            <div
+              className="cv-profile-table-resizer"
+              role="separator"
+              aria-orientation="horizontal"
+              onMouseDown={handleTableResizeStart}
+              title="Drag to resize profile list height"
+            />
           </div>
             </>
           )}
 
           <div className="sub-card" style={{ marginTop: 4 }}>
             <div className="sub-card-header">
-              <strong>Application context</strong>
+              <button
+                type="button"
+                className="sub-card-toggle"
+                onClick={() => setApplicationContextOpen((prev) => !prev)}
+                aria-expanded={applicationContextOpen}
+              >
+                <strong>Application context</strong>
+                <span className="sub-card-toggle-indicator">
+                  {applicationContextOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                  <span>{applicationContextOpen ? "Collapse" : "Expand"}</span>
+                </span>
+              </button>
             </div>
+            {applicationContextOpen ? (
+              <>
             <p className="helper">Track job details and keep CV source text here. Use it for both existing and new entries.</p>
             <div className="field-grid">
               <div>
@@ -982,10 +1003,12 @@ export default function CvEntry({
                 {showExampleCvText ? <pre className="example-box">{EXAMPLE_CV_TEXT}</pre> : null}
               </div>
             </div>
+              </>
+            ) : null}
           </div>
 
           <div className="cv-entry-cta-wrap">
-            {isJobMode && tailorContext ? (
+            {isJobMode && tailorContext && !hideTailorAction ? (
               <div className="w1-tailor-context">
                 <p className="w1-tailor-context-title">
                   Create an editable, job-tailored copy for {tailorContext.jobTitle || "this role"}
@@ -1056,7 +1079,7 @@ export default function CvEntry({
             </div>
           </div>
 
-          {isRemappingProfileCvText && remapProgress ? (
+          {!hideTailorProgress && isRemappingProfileCvText && remapProgress ? (
             <div className="refinement-progress">
               <div className="results-loading">
                 <Spinner size="sm" color="blue.500" />

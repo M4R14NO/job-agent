@@ -1413,11 +1413,24 @@ export default function CvReview({
       return;
     }
 
+    const sourceProfileId = canonical?.profile_id || loadedProfileId || "";
+    const sourceRootProfileId = canonical?.lineage_root_profile_id || sourceProfileId || targetProfileId;
+    const sourceDepth = Number.isFinite(canonical?.lineage_depth)
+      ? Number(canonical.lineage_depth)
+      : 0;
+    const isNewBranchedId = Boolean(sourceProfileId) && sourceProfileId !== targetProfileId;
+
     const payload = {
       schema_version: schemaVersion,
       profile_id: targetProfileId,
       revision,
       template_id: templateId,
+      parent_profile_id: isNewBranchedId ? sourceProfileId : (canonical?.parent_profile_id ?? null),
+      lineage_root_profile_id: isNewBranchedId
+        ? sourceRootProfileId
+        : (canonical?.lineage_root_profile_id || targetProfileId),
+      lineage_depth: isNewBranchedId ? sourceDepth + 1 : (canonical?.lineage_depth ?? 0),
+      branch_reason: isNewBranchedId ? "manual-save-as" : (canonical?.branch_reason ?? null),
       data: formData,
       section_order: currentSectionOrder,
       sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
@@ -1537,7 +1550,13 @@ export default function CvReview({
       const payload = {
         ...overwriteDialog.pendingPayload,
         profile_id: nextId,
-        revision: 0
+        revision: 0,
+        parent_profile_id: overwriteDialog.pendingTargetProfileId || overwriteDialog.pendingPayload.profile_id || null,
+        lineage_root_profile_id: overwriteDialog.pendingPayload.lineage_root_profile_id || overwriteDialog.pendingTargetProfileId || nextId,
+        lineage_depth: (Number.isFinite(overwriteDialog.pendingPayload.lineage_depth)
+          ? Number(overwriteDialog.pendingPayload.lineage_depth)
+          : 0) + 1,
+        branch_reason: "manual-save-as"
       };
       const saved = await saveCvProfile(nextId, payload);
       setProfileId(saved.profile_id);
@@ -3371,15 +3390,17 @@ export default function CvReview({
           {!readOnly ? (
           <div className="sub-card save-profile-card">
             <div className="sub-card-header">
-              <strong className="sub-card-title"><Save size={15} /> Save profile (optional)</strong>
               <button
                 type="button"
-                className="ghost icon-button section-collapse-button"
+                className="sub-card-toggle"
                 onClick={() => setSaveProfileOpen((prev) => !prev)}
                 aria-expanded={saveProfileOpen}
               >
-                {saveProfileOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-                <span>{saveProfileOpen ? "Collapse" : "Expand"}</span>
+                <strong className="sub-card-title"><Save size={15} /> Save profile (optional)</strong>
+                <span className="sub-card-toggle-indicator">
+                  {saveProfileOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                  <span>{saveProfileOpen ? "Collapse" : "Expand"}</span>
+                </span>
               </button>
             </div>
             {saveProfileOpen && (
