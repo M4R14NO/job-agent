@@ -2203,8 +2203,8 @@ export default function App() {
             <JobDetailsCard
               job={selectedJob}
               descriptionHtml={descriptionHtml}
-              collapsible={Boolean(cvReview)}
-              defaultCollapsed={Boolean(cvReview)}
+              collapsible={showActionsPanel || Boolean(cvReview)}
+              defaultCollapsed={showActionsPanel || Boolean(cvReview)}
             />
             {cvReview && showW1ReviewCards && (
               <PdfPreviewCard
@@ -2271,6 +2271,7 @@ export default function App() {
                     hideTailorAction={!showW1TailorAction || Boolean(cvReview)}
                     hideTailorProgress={Boolean(cvReview)}
                     profileTableCollapsedByDefault
+                    applicationContextDefaultCollapsed={Boolean(cvReview)}
                     tailorActionDisabled={isRemappingProfileCvText || isLoadingProfile || !resumeText.trim()}
                     remapSuggestionBuilder={({ defaultSuggested, selectedProfile: profile }) => {
                       const baseId = profile?.profile_id || selectedProfileId || newProfileId || defaultSuggested || "profile";

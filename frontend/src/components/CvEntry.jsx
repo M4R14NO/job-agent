@@ -182,6 +182,7 @@ export default function CvEntry({
   hideTailorProgress = false,
   tailorActionDisabled,
   profileTableCollapsedByDefault = false,
+  applicationContextDefaultCollapsed = false,
   remapSuggestionBuilder,
   tailorContext = null
 }) {
@@ -197,7 +198,7 @@ export default function CvEntry({
   const [newEntryProfileName, setNewEntryProfileName] = useState("");
   const [newEntryError, setNewEntryError] = useState("");
   const [profileImageError, setProfileImageError] = useState("");
-  const [applicationContextOpen, setApplicationContextOpen] = useState(true);
+  const [applicationContextOpen, setApplicationContextOpen] = useState(!applicationContextDefaultCollapsed);
   const [profileTableHeight, setProfileTableHeight] = useState(420);
   const [columnWidths, setColumnWidths] = useState(() => PROFILE_TABLE_COLUMNS.map((column) => column.defaultWidth));
   const searchInputRef = useRef(null);
@@ -451,6 +452,12 @@ export default function CvEntry({
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
   };
+
+  useEffect(() => {
+    if (applicationContextDefaultCollapsed) {
+      setApplicationContextOpen(false);
+    }
+  }, [applicationContextDefaultCollapsed]);
 
   useEffect(() => {
     const onMouseMove = (event) => {

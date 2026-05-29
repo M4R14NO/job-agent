@@ -29,6 +29,12 @@ const formatRerankReason = (reason) => {
 
 export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defaultCollapsed = false }) {
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+
+  useEffect(() => {
+    if (defaultCollapsed) {
+      setIsCollapsed(true);
+    }
+  }, [defaultCollapsed]);
   const rawRerankReason = job?.rerank_score != null && Array.isArray(job?.match_reasons)
     ? String(job.match_reasons[0] || "").trim()
     : "";
