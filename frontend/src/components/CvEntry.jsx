@@ -198,6 +198,7 @@ export default function CvEntry({
   const [newEntryProfileName, setNewEntryProfileName] = useState("");
   const [newEntryError, setNewEntryError] = useState("");
   const [profileImageError, setProfileImageError] = useState("");
+  const [profileBrowserOpen, setProfileBrowserOpen] = useState(!profileTableCollapsedByDefault);
   const [applicationContextOpen, setApplicationContextOpen] = useState(!applicationContextDefaultCollapsed);
   const [profileTableHeight, setProfileTableHeight] = useState(420);
   const [columnWidths, setColumnWidths] = useState(() => PROFILE_TABLE_COLUMNS.map((column) => column.defaultWidth));
@@ -330,6 +331,9 @@ export default function CvEntry({
   );
 
   const handleProfileSelect = (profile) => {
+    if (isJobMode && profileTableCollapsedByDefault) {
+      setProfileBrowserOpen(false);
+    }
     if (onProfileRowSelect) {
       onProfileRowSelect(profile);
       return;
@@ -655,7 +659,11 @@ export default function CvEntry({
 
       <div className="cv-entry-panel">
           {profileTableCollapsedByDefault ? (
-            <details className="cv-profile-collapsible">
+            <details
+              className="cv-profile-collapsible"
+              open={profileBrowserOpen}
+              onToggle={(event) => setProfileBrowserOpen(event.currentTarget.open)}
+            >
               <summary className="cv-profile-collapsible-summary">Browse and switch CV profiles</summary>
               <div style={{ marginTop: 12 }}>
                 <div>

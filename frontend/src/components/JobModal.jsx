@@ -176,6 +176,12 @@ export function PdfPreviewCard({
     ? ["#496E8C", "#2F5D50", "#0F766E", "#374151", "#7C3AED", "#B45309"]
     : ["#C0392B", "#E11D48", "#0F766E", "#2563EB", "#9333EA", "#EA580C"];
 
+  const previewSrc = (() => {
+    if (!pdfUrl) return "";
+    const joiner = pdfUrl.includes("#") ? "&" : "#";
+    return `${pdfUrl}${joiner}zoom=page-fit`;
+  })();
+
   const handleTemplateKeyDown = (event) => {
     if (event.key === "Tab" && !event.shiftKey && !disabled && !isGenerating) {
       event.preventDefault();
@@ -339,7 +345,7 @@ export function PdfPreviewCard({
           </div>
         ) : pdfUrl ? (
           <iframe
-            src={pdfUrl}
+            src={previewSrc}
             title="CV PDF preview"
             className="pdf-preview-iframe"
           />

@@ -2082,6 +2082,7 @@ export default function App() {
   const showActionsPanel = activeJobAction !== "none";
   const showJobCvEntryPanel = activeJobAction === "cv";
   const showJobCoverPanel = activeJobAction === "cover";
+  const isW1ReviewLayout = Boolean(cvReview) && showW1ReviewCards;
   const showActionSwitcher = activeJobAction !== "none";
   const actionLabel = cvReview
     ? "CV review"
@@ -2198,8 +2199,8 @@ export default function App() {
             )}
           </div>
         </header>
-        <div className={`panel-body ${showActionsPanel || cvReview ? "" : "is-single"}`}>
-          <div className="panel-column">
+        <div className={`panel-body ${showActionsPanel || cvReview ? "" : "is-single"} ${isW1ReviewLayout ? "is-review-layout" : ""}`}>
+          <div className={`panel-column ${isW1ReviewLayout ? "is-review-layout" : ""}`}>
             <JobDetailsCard
               job={selectedJob}
               descriptionHtml={descriptionHtml}
@@ -2207,31 +2208,33 @@ export default function App() {
               defaultCollapsed={showActionsPanel || Boolean(cvReview)}
             />
             {cvReview && showW1ReviewCards && (
-              <PdfPreviewCard
-                pdfUrl={pdfPreviewUrl}
-                isGenerating={isPdfGenerating}
-                isDownloading={isPdfDownloading}
-                templateId={cvReview.templateId}
-                onTemplateIdChange={handleTemplateIdChange}
-                themeColor={resolveTemplateThemeColor(cvReview.templateId || "awesomecv")}
-                onThemeColorChange={handleThemeColorChange}
-                showProfileImage={applicationContext.show_profile_image !== false}
-                onShowProfileImageChange={handleShowProfileImageChange}
-                hipsterHeaderAlign={applicationContext.header_text_align || "right"}
-                onHipsterHeaderAlignChange={handleHipsterHeaderAlignChange}
-                hipsterHeaderTitleSize={applicationContext.header_title_size || "Huge"}
-                onHipsterHeaderTitleSizeChange={handleHipsterHeaderTitleSizeChange}
-                hipsterHeaderSubtitleSize={applicationContext.header_subtitle_size || "Large"}
-                onHipsterHeaderSubtitleSizeChange={handleHipsterHeaderSubtitleSizeChange}
-                onUpdate={handleUpdatePdfPreview}
-                onDownload={handleDownloadPdf}
-                disabled={false}
-                disabledReason=""
-              />
+              <div className="panel-review-main panel-review-main-preview">
+                <PdfPreviewCard
+                  pdfUrl={pdfPreviewUrl}
+                  isGenerating={isPdfGenerating}
+                  isDownloading={isPdfDownloading}
+                  templateId={cvReview.templateId}
+                  onTemplateIdChange={handleTemplateIdChange}
+                  themeColor={resolveTemplateThemeColor(cvReview.templateId || "awesomecv")}
+                  onThemeColorChange={handleThemeColorChange}
+                  showProfileImage={applicationContext.show_profile_image !== false}
+                  onShowProfileImageChange={handleShowProfileImageChange}
+                  hipsterHeaderAlign={applicationContext.header_text_align || "right"}
+                  onHipsterHeaderAlignChange={handleHipsterHeaderAlignChange}
+                  hipsterHeaderTitleSize={applicationContext.header_title_size || "Huge"}
+                  onHipsterHeaderTitleSizeChange={handleHipsterHeaderTitleSizeChange}
+                  hipsterHeaderSubtitleSize={applicationContext.header_subtitle_size || "Large"}
+                  onHipsterHeaderSubtitleSizeChange={handleHipsterHeaderSubtitleSizeChange}
+                  onUpdate={handleUpdatePdfPreview}
+                  onDownload={handleDownloadPdf}
+                  disabled={false}
+                  disabledReason=""
+                />
+              </div>
             )}
           </div>
           {showActionsPanel || cvReview ? (
-            <div className="panel-column">
+            <div className={`panel-column ${isW1ReviewLayout ? "is-review-layout" : ""}`}>
               {showActionsPanel && (
                 showJobCvEntryPanel ? (
                   <CvEntry
@@ -2302,25 +2305,27 @@ export default function App() {
                 ) : null
               )}
               {cvReview && showW1ReviewCards ? (
-                <CvReview
-                  canonical={cvReview.canonical}
-                  job={cvReview.job}
-                  templateId={cvReview.templateId}
-                  docType={cvReview.docType}
-                  outputLanguage={cvReview.outputLanguage}
-                  model={selectedModel}
-                  lmTimeout={lmTimeout}
-                  applicationContext={applicationContext}
-                  onDraftStateChange={handleCvDraftStateChange}
-                  onPreviewPayloadChange={setCvPreviewPayload}
-                  onProfileSaved={handleCvReviewProfileSaved}
-                  onTailor={() => handleRemapProfileCvText({ targetProfileId: newProfileId || undefined, allowOverwrite: false })}
-                  isTailoring={isRemappingProfileCvText}
-                  tailorProgress={cvRemapProgress}
-                  readOnly={isJobReviewReadOnly}
-                  showTailorAction={showW1TailorAction}
-                  onEditProfile={isJobReviewReadOnly ? openJobEditDecisionDialog : undefined}
-                />
+                <div className="panel-review-main panel-review-main-editor">
+                  <CvReview
+                    canonical={cvReview.canonical}
+                    job={cvReview.job}
+                    templateId={cvReview.templateId}
+                    docType={cvReview.docType}
+                    outputLanguage={cvReview.outputLanguage}
+                    model={selectedModel}
+                    lmTimeout={lmTimeout}
+                    applicationContext={applicationContext}
+                    onDraftStateChange={handleCvDraftStateChange}
+                    onPreviewPayloadChange={setCvPreviewPayload}
+                    onProfileSaved={handleCvReviewProfileSaved}
+                    onTailor={() => handleRemapProfileCvText({ targetProfileId: newProfileId || undefined, allowOverwrite: false })}
+                    isTailoring={isRemappingProfileCvText}
+                    tailorProgress={cvRemapProgress}
+                    readOnly={isJobReviewReadOnly}
+                    showTailorAction={showW1TailorAction}
+                    onEditProfile={isJobReviewReadOnly ? openJobEditDecisionDialog : undefined}
+                  />
+                </div>
               ) : (isW1CvWorkflow && (w1UiState === "S1" || w1UiState === "S2")) ? (
                 <div className="panel-card panel-empty panel-disabled">
                   <p className="helper">
