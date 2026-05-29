@@ -471,7 +471,7 @@ export default function App() {
     sidebarWidthRef.current = sidebarWidth;
   }, [sidebarWidth]);
 
-  const loadProfiles = async () => {
+  const loadProfiles = async (preferredProfileId = "") => {
     setProfilesLoading(true);
     setProfilesError("");
     try {
@@ -486,6 +486,8 @@ export default function App() {
       });
       if (!profiles.length) {
         setSelectedProfileId("");
+      } else if (preferredProfileId && profiles.some((profile) => profile.profile_id === preferredProfileId)) {
+        setSelectedProfileId(preferredProfileId);
       } else if (!selectedProfileId) {
         setSelectedProfileId(profiles[0].profile_id || "");
       }
@@ -494,6 +496,15 @@ export default function App() {
     } finally {
       setProfilesLoading(false);
     }
+  };
+
+  const handleCvReviewProfileSaved = async (savedProfile) => {
+    const savedProfileId = savedProfile?.profile_id || "";
+    if (!savedProfileId) return;
+    setSelectedProfileId(savedProfileId);
+    setNewProfileId(savedProfileId);
+    upsertCvProfileInList(savedProfile);
+    await loadProfiles(savedProfileId);
   };
 
   useEffect(() => {
@@ -2301,6 +2312,7 @@ export default function App() {
                   applicationContext={applicationContext}
                   onDraftStateChange={handleCvDraftStateChange}
                   onPreviewPayloadChange={setCvPreviewPayload}
+                  onProfileSaved={handleCvReviewProfileSaved}
                   onTailor={() => handleRemapProfileCvText({ targetProfileId: newProfileId || undefined, allowOverwrite: false })}
                   isTailoring={isRemappingProfileCvText}
                   tailorProgress={cvRemapProgress}
@@ -2519,6 +2531,7 @@ export default function App() {
                         initialProfileId={cvReview.initialProfileId}
                         onDraftStateChange={handleCvDraftStateChange}
                         onPreviewPayloadChange={setCvPreviewPayload}
+                        onProfileSaved={handleCvReviewProfileSaved}
                       />
                     ) : (
                       <div className="panel-card panel-empty panel-disabled">

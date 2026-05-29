@@ -753,6 +753,7 @@ export default function CvReview({
   applicationContext,
   onDraftStateChange,
   onPreviewPayloadChange,
+  onProfileSaved,
   onTailor,
   isTailoring = false,
   tailorProgress = null,
@@ -1478,6 +1479,7 @@ export default function CvReview({
       setRevision(saved.revision);
       setLoadedProfileId(saved.profile_id);
       setLoadedRevision(saved.revision);
+      onProfileSaved?.(saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -1513,6 +1515,7 @@ export default function CvReview({
       setRevision(saved.revision);
       setLoadedProfileId(saved.profile_id);
       setLoadedRevision(saved.revision);
+      onProfileSaved?.(saved);
       closeOverwriteDialog();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Overwrite failed";
@@ -1563,6 +1566,7 @@ export default function CvReview({
       setRevision(saved.revision);
       setLoadedProfileId(saved.profile_id);
       setLoadedRevision(saved.revision);
+      onProfileSaved?.(saved);
       closeOverwriteDialog();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Save as new profile failed";

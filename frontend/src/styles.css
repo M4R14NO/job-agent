@@ -523,20 +523,11 @@ button:active:not(:disabled) {
 
 .cv-profile-table-wrap-inner {
   overflow: auto;
-.cv-entry.is-job-mode {
-  background: rgba(255, 255, 255, 0.72);
-  border-color: #dbeafe;
-  box-shadow: none;
-}
   max-height: 420px;
 }
 
 .cv-profile-table-resizer {
   height: 12px;
-.cv-entry.is-job-mode .cv-profile-table-wrap {
-  border-color: #dbeafe;
-  background: #fbfdff;
-}
   background: linear-gradient(to bottom, #f8fafc, #eef2f7);
   border-top: 1px solid #e2e8f0;
   cursor: ns-resize;
@@ -545,27 +536,24 @@ button:active:not(:disabled) {
 .cv-profile-table-resizer::before {
   content: "";
   display: block;
-.cv-entry.is-job-mode .cv-profile-table th,
-.cv-entry.is-job-mode .cv-profile-table td {
-  padding: 7px 8px;
-  font-size: 10px;
-  line-height: 1.2;
-}
-
-.cv-entry.is-job-mode .cv-profile-table th {
-  font-size: 9px;
-}
   width: 46px;
   height: 4px;
   margin: 4px auto;
-.cv-entry.is-job-mode .cv-profile-table tbody tr:hover {
-  background: #f4f8ff;
+  border-radius: 999px;
+  background: #94a3b8;
 }
 
-.cv-profile-table td:nth-child(1),
-.cv-profile-table td:nth-child(2),
-.cv-profile-table td:nth-child(4),
-.cv-profile-table td:nth-child(5) {
+.cv-profile-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  min-width: 740px;
+}
+
+.cv-profile-table th,
+.cv-profile-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -576,13 +564,13 @@ button:active:not(:disabled) {
 
 .cv-profile-table th:nth-child(1),
 .cv-profile-table td:nth-child(1) {
-  width: 26%;
-  padding-right: 18px;
+  width: 20%;
+  padding-right: 14px;
 }
 
 .cv-profile-table th:nth-child(2),
 .cv-profile-table td:nth-child(2) {
-  width: 16%;
+  width: 14%;
 }
 
 .cv-profile-table th:nth-child(3),
@@ -592,7 +580,7 @@ button:active:not(:disabled) {
 
 .cv-profile-table th:nth-child(4),
 .cv-profile-table td:nth-child(4) {
-  width: 18%;
+  width: 16%;
 }
 
 .cv-profile-table th:nth-child(5),
@@ -622,18 +610,31 @@ button:active:not(:disabled) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-  border-radius: 999px;
-  background: #94a3b8;
+
+.cv-entry.is-job-mode {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: #dbeafe;
+  box-shadow: none;
 }
 
-.cv-profile-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 740px;
+.cv-entry.is-job-mode .cv-profile-table-wrap {
+  border-color: #dbeafe;
+  background: #fbfdff;
 }
 
-.cv-profile-table th,
-.cv-profile-table td {
+.cv-entry.is-job-mode .cv-profile-table th,
+.cv-entry.is-job-mode .cv-profile-table td {
+  padding: 7px 8px;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.cv-entry.is-job-mode .cv-profile-table th {
+  font-size: 9px;
+}
+
+.cv-entry.is-job-mode .cv-profile-table tbody tr:hover {
+  background: #f4f8ff;
 }
 
 .cv-entry:not(.is-job-mode) .cv-profile-table th,
@@ -667,13 +668,13 @@ button:active:not(:disabled) {
 
 .cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(1),
 .cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(1) {
-  width: 18%;
-  padding-right: 16px;
+  width: 16%;
+  padding-right: 14px;
 }
 
 .cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(2),
 .cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(2) {
-  width: 15%;
+  width: 14%;
 }
 
 .cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(3),
@@ -683,7 +684,7 @@ button:active:not(:disabled) {
 
 .cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(4),
 .cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(4) {
-  width: 15%;
+  width: 16%;
 }
 
 .cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(5),
@@ -703,26 +704,18 @@ button:active:not(:disabled) {
 
 .cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(8),
 .cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(8) {
-  width: 18%;
+  width: 20%;
 }
 
 .cv-profile-table th {
   position: sticky;
   top: 0;
-  background: #f8fafc;
+  background: linear-gradient(to bottom, #fbfdff 0%, #eef2f7 100%);
   z-index: 1;
   font-size: 12px;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: #374151;
-}
-
-.cv-entry:not(.is-job-mode) .cv-profile-table th {
-  background: linear-gradient(to bottom, #fbfdff 0%, #eef2f7 100%);
-}
-
-.cv-entry:not(.is-job-mode) .cv-profile-table th:first-child {
-  background: linear-gradient(to bottom, #fbfdff 0%, #eef2f7 100%);
 }
 
 .table-sort-button {

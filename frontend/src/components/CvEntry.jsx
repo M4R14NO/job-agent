@@ -505,7 +505,7 @@ export default function CvEntry({
               </span>
             ) : null}
             <div className="cv-profile-tree-cell">
-              <div className="cv-profile-tree-main" style={{ paddingLeft: `${depth * 20}px` }}>
+              <div className="cv-profile-tree-main" style={{ paddingLeft: `${8 + depth * 20}px` }}>
                 <span
                   className={`cv-profile-tree-label${isRoot ? " is-root" : ""}`}
                   title={profile.profile_id}
