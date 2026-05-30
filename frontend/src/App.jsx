@@ -2496,6 +2496,10 @@ export default function App() {
                     newProfileId={newProfileId}
                     draftProfileId={draftProfileId}
                     isDraftProfileActive={isDraftProfileActive}
+                    profileTableCollapsedByDefault
+                    applicationContextDefaultCollapsed
+                    collapsible={Boolean(cvReview)}
+                    defaultCollapsed={Boolean(cvReview)}
                   />
                 </section>
                 <div className="create-review-layout">

@@ -183,10 +183,14 @@ export default function CvEntry({
   tailorActionDisabled,
   profileTableCollapsedByDefault = false,
   applicationContextDefaultCollapsed = false,
+  collapsible = false,
+  defaultCollapsed = false,
   remapSuggestionBuilder,
   tailorContext = null
 }) {
   const isJobMode = contextMode === "job";
+  const setupEyebrow = isJobMode ? "CV generation" : "Profile setup";
+  const setupTitle = isJobMode ? "Application context" : "Profile & context setup";
   const [showExampleCvText, setShowExampleCvText] = useState(false);
   const [profileSearchDraft, setProfileSearchDraft] = useState("");
   const [profileSearchQuery, setProfileSearchQuery] = useState("");
@@ -200,6 +204,7 @@ export default function CvEntry({
   const [profileImageError, setProfileImageError] = useState("");
   const [profileBrowserOpen, setProfileBrowserOpen] = useState(!profileTableCollapsedByDefault);
   const [applicationContextOpen, setApplicationContextOpen] = useState(!applicationContextDefaultCollapsed);
+  const [entryCollapsed, setEntryCollapsed] = useState(defaultCollapsed);
   const [profileTableHeight, setProfileTableHeight] = useState(420);
   const [columnWidths, setColumnWidths] = useState(() => PROFILE_TABLE_COLUMNS.map((column) => column.defaultWidth));
   const searchInputRef = useRef(null);
@@ -330,8 +335,20 @@ export default function CvEntry({
     [cvProfiles, remapProfileName]
   );
 
+  useEffect(() => {
+    if (profileTableCollapsedByDefault) {
+      setProfileBrowserOpen(false);
+    }
+  }, [profileTableCollapsedByDefault]);
+
+  useEffect(() => {
+    if (defaultCollapsed) {
+      setEntryCollapsed(true);
+    }
+  }, [defaultCollapsed]);
+
   const handleProfileSelect = (profile) => {
-    if (isJobMode && profileTableCollapsedByDefault) {
+    if (profileTableCollapsedByDefault) {
       setProfileBrowserOpen(false);
     }
     if (onProfileRowSelect) {
@@ -643,19 +660,69 @@ export default function CvEntry({
     });
   };
 
+  if (collapsible && entryCollapsed) {
+    return (
+      <div className={`cv-entry${isJobMode ? " is-job-mode" : ""}`}>
+        <button
+          type="button"
+          className="cv-entry-header cv-entry-header-toggle"
+          onClick={() => setEntryCollapsed(false)}
+          aria-label="Open profile setup"
+        >
+          <div>
+            <p className="eyebrow">{setupEyebrow}</p>
+            <h3>{setupTitle}</h3>
+            <p className="helper">
+              {selectedProfileId
+                ? `Active profile: ${selectedProfileId}`
+                : "Profile setup is hidden to keep focus on preview and editing."}
+            </p>
+          </div>
+          <span className="sub-card-toggle-indicator">
+            <ChevronRight size={15} />
+            <span>Open setup</span>
+          </span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className={`cv-entry${isJobMode ? " is-job-mode" : ""}`}>
-      <div className="cv-entry-header">
-        <div>
-          <p className="eyebrow">{isJobMode ? "CV generation" : "CV editor"}</p>
-          <h3>{isJobMode ? "Application context" : "CV profiles"}</h3>
-          <p className="helper">
-            {isJobMode
-              ? "Review context and tailor against this job. Profile browsing is optional and collapsed by default."
-              : "Select a profile or start a new entry directly from this table."}
-          </p>
+      {collapsible ? (
+        <button
+          type="button"
+          className="cv-entry-header cv-entry-header-toggle"
+          onClick={() => setEntryCollapsed(true)}
+          aria-label="Hide profile setup"
+        >
+          <div>
+            <p className="eyebrow">{setupEyebrow}</p>
+            <h3>{setupTitle}</h3>
+            <p className="helper">
+              {isJobMode
+                ? "Review context and tailor against this job. Profile browsing is optional and collapsed by default."
+                : "Select a profile or start a new entry. Collapse this setup section to focus on preview and editing."}
+            </p>
+          </div>
+          <span className="sub-card-toggle-indicator">
+            <ChevronDown size={15} />
+            <span>Hide setup</span>
+          </span>
+        </button>
+      ) : (
+        <div className="cv-entry-header">
+          <div>
+            <p className="eyebrow">{setupEyebrow}</p>
+            <h3>{setupTitle}</h3>
+            <p className="helper">
+              {isJobMode
+                ? "Review context and tailor against this job. Profile browsing is optional and collapsed by default."
+                : "Select a profile or start a new entry directly from this table."}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="cv-entry-panel">
           {profileTableCollapsedByDefault ? (
@@ -664,7 +731,13 @@ export default function CvEntry({
               open={profileBrowserOpen}
               onToggle={(event) => setProfileBrowserOpen(event.currentTarget.open)}
             >
-              <summary className="cv-profile-collapsible-summary">Browse and switch CV profiles</summary>
+              <summary className="cv-profile-collapsible-summary">
+                <span>Browse and switch CV profiles</span>
+                <span className="sub-card-toggle-indicator">
+                  {profileBrowserOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                  <span>{profileBrowserOpen ? "Collapse" : "Expand"}</span>
+                </span>
+              </summary>
               <div style={{ marginTop: 12 }}>
                 <div>
                   <label htmlFor="profileSearch" className="label">Search profiles</label>

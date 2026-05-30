@@ -370,6 +370,10 @@ button:active:not(:disabled) {
   font-size: 22px;
 }
 
+.is-collapsible-header {
+  cursor: pointer;
+}
+
 .panel-heading .subtitle {
   margin: 0;
   font-size: 14px;
@@ -460,6 +464,17 @@ button:active:not(:disabled) {
   align-items: flex-start;
 }
 
+.cv-entry-header-toggle {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
 .cv-entry-tabs {
   display: inline-flex;
   gap: 8px;
@@ -510,22 +525,14 @@ button:active:not(:disabled) {
   font-weight: 700;
   padding: 8px 12px;
   list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .cv-profile-collapsible-summary::-webkit-details-marker {
   display: none;
-}
-.cv-profile-collapsible-summary::before {
-  content: ">";
-  display: inline-block;
-  margin-right: 8px;
-  color: #475569;
-  transform: rotate(0deg);
-  transition: transform 120ms ease;
-}
-
-.cv-profile-collapsible[open] .cv-profile-collapsible-summary::before {
-  transform: rotate(90deg);
 }
 
 .cv-search-row {
@@ -1537,8 +1544,22 @@ button:active:not(:disabled) {
   text-transform: uppercase;
   letter-spacing: 0.2em;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: #4d4d4d;
+}
+
+.panel-card .panel-header h2,
+.cv-entry-header h3 {
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 800;
+  margin: 0;
+}
+
+.panel-card .panel-header .eyebrow,
+.cv-entry-header .eyebrow {
+  font-size: 13px;
+  font-weight: 800;
 }
 
 h1 {

@@ -1,5 +1,5 @@
 import { Spinner } from "@chakra-ui/react";
-import { Download, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { generateCoverLetter, parseCvCanonical } from "../api/llm";
 
@@ -43,7 +43,19 @@ export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defa
   if (collapsible && isCollapsed) {
     return (
       <div className="panel-card job-panel job-panel-collapsed">
-        <div className="panel-header">
+        <div
+          className={`panel-header ${collapsible ? "is-collapsible-header" : ""}`}
+          onClick={() => setIsCollapsed(false)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              setIsCollapsed(false);
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          aria-label="Expand job detail"
+        >
           <div>
             <p className="eyebrow">Job detail</p>
             <h2>{job.title}</h2>
@@ -52,10 +64,13 @@ export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defa
           <button
             type="button"
             className="ghost icon-button"
-            onClick={() => setIsCollapsed(false)}
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsCollapsed(false);
+            }}
             aria-label="Expand job detail"
           >
-            <span className="icon" aria-hidden="true">▸</span>
+            <ChevronRight size={15} />
             <span>Expand</span>
           </button>
         </div>
@@ -65,7 +80,19 @@ export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defa
 
   return (
     <div className="panel-card job-panel">
-      <div className="panel-header">
+      <div
+        className={`panel-header ${collapsible ? "is-collapsible-header" : ""}`}
+        onClick={collapsible ? () => setIsCollapsed(true) : undefined}
+        onKeyDown={collapsible ? ((event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setIsCollapsed(true);
+          }
+        }) : undefined}
+        role={collapsible ? "button" : undefined}
+        tabIndex={collapsible ? 0 : undefined}
+        aria-label={collapsible ? "Collapse job detail" : undefined}
+      >
         <div>
           <p className="eyebrow">Job detail</p>
           <h2>{job.title}</h2>
@@ -75,10 +102,13 @@ export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defa
           <button
             type="button"
             className="ghost icon-button"
-            onClick={() => setIsCollapsed(true)}
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsCollapsed(true);
+            }}
             aria-label="Collapse job detail"
           >
-            <span className="icon" aria-hidden="true">▾</span>
+            <ChevronDown size={15} />
             <span>Collapse</span>
           </button>
         )}

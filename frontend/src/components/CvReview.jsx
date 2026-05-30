@@ -1350,7 +1350,24 @@ export default function CvReview({
         onDragLeave={dragKey ? (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverKey(null); } : undefined}
         onDrop={dragKey ? () => { handleDrop(dragKey); setDragOverKey(null); } : undefined}
       >
-        <div className="section-header">
+        <div
+          className="section-header is-collapsible-header"
+          onClick={(event) => {
+            const target = event.target instanceof Element ? event.target : null;
+            const interactiveTarget = target?.closest("button, input, textarea, select, a, [role='button']");
+            if (interactiveTarget) return;
+            toggleExpandedSection(key);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              toggleExpandedSection(key);
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          aria-expanded={isOpen}
+        >
           <div className="section-heading">
             {actions}
             <div>
@@ -1362,7 +1379,10 @@ export default function CvReview({
             <button
               type="button"
               className="ghost icon-button section-collapse-button"
-              onClick={() => toggleExpandedSection(key)}
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleExpandedSection(key);
+              }}
             >
               {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
               <span>{isOpen ? "Collapse" : "Expand"}</span>
@@ -3298,21 +3318,23 @@ export default function CvReview({
         <fieldset className="cv-readonly-scope" disabled={readOnly}>
         <div className="cv-step-content">
           {!hasJobContext && (
-            <p className="helper">No job context provided. Preview will be generic.</p>
+            <p className="helper">No job details are loaded. Preview still renders from your CV form data.</p>
           )}
 
           <div className="sub-card">
             <div className="sub-card-header">
-              <strong className="sub-card-title"><Sparkles size={15} /> Rewrite with AI (optional)</strong>
               <button
                 type="button"
-                className="ghost icon-button section-collapse-button"
+                className="sub-card-toggle"
                 onClick={() => setRewriteOpen((prev) => !prev)}
                 aria-expanded={rewriteOpen}
                 title="Open the AI rewrite panel to update wording across your full CV."
               >
-                {rewriteOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-                <span>{rewriteOpen ? "Collapse" : "Expand"}</span>
+                <strong className="sub-card-title"><Sparkles size={15} /> Rewrite with AI (optional)</strong>
+                <span className="sub-card-toggle-indicator">
+                  {rewriteOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                  <span>{rewriteOpen ? "Collapse" : "Expand"}</span>
+                </span>
               </button>
             </div>
             {rewriteOpen && (
