@@ -277,11 +277,13 @@ export default function App() {
   const [jobEditDecisionDialog, setJobEditDecisionDialog] = useState({
     isOpen: false,
     isBusy: false,
-    error: ""
+    error: "",
+    draftProfileName: ""
   });
   const [activeView, setActiveView] = useState("find");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeJobAction, setActiveJobAction] = useState("none");
+  const [jobCvEntryStep, setJobCvEntryStep] = useState("choice");
   const [selectedRerankProfileId, setSelectedRerankProfileId] = useState("");
   const [rerankProfileError, setRerankProfileError] = useState("");
   const [searchElapsedMs, setSearchElapsedMs] = useState(0);
@@ -315,11 +317,15 @@ export default function App() {
   const jobDetailsSectionRef = useRef(null);
   const profileBrowserSectionRef = useRef(null);
   const reviewSectionRef = useRef(null);
+  const shouldFocusReviewAfterProfileLoadRef = useRef(false);
 
   const jobs = response?.jobs ?? [];
   const descriptionHtml = useJobDescription(selectedJob);
   const isFindView = activeView === "find";
   const isW1CvWorkflow = Boolean(selectedJob) && activeJobAction === "cv";
+  const isJobCvChoiceStep = isW1CvWorkflow && !cvReview && jobCvEntryStep === "choice";
+  const isJobCvCreateStep = isW1CvWorkflow && !cvReview && jobCvEntryStep === "create";
+  const isJobCvBranchStep = isW1CvWorkflow && !cvReview && jobCvEntryStep === "branch";
   const w1HasFormData = isW1CvWorkflow && Boolean(cvReview?.canonical);
   const w1HasCvText = isW1CvWorkflow && Boolean(resumeText.trim());
   const w1UiState = !w1HasFormData && !w1HasCvText
@@ -993,6 +999,7 @@ export default function App() {
   const handleStartCvReview = ({ canonical, job, templateId, docType, outputLanguage }) => {
     pdfPreviewRequestVersionRef.current += 1;
     setCvReview({ canonical, job, templateId, docType, outputLanguage });
+    setJobCvEntryStep("review");
     setIsJobReviewReadOnly(false);
     setApplicationContext({
       company: job?.company || "",
@@ -1491,17 +1498,46 @@ export default function App() {
   };
 
   const handleUpdateApplicationProfileData = async () => {
-    if (!selectedProfileId) {
-      setCvEntryError("Select a profile before updating application data.");
+    const hasPersistedSelectedProfile = cvProfiles.some((profile) => profile.profile_id === selectedProfileId);
+    const targetProfileId = hasPersistedSelectedProfile
+      ? selectedProfileId
+      : sanitizeProfileId(newProfileId || "");
+    if (!targetProfileId) {
+      setCvEntryError("Choose a profile ID before saving profile data.");
       return;
     }
     setCvEntryError("");
     setIsUpdatingProfileCvText(true);
     try {
-      const existing = await getCvProfile(selectedProfileId);
+      let existing = null;
+      try {
+        existing = await getCvProfile(targetProfileId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        if (!message.includes("status 404")) throw err;
+      }
+
+      const isCreate = !existing;
+      const basePayload = existing || {
+        schema_version: CANONICAL_SCHEMA_VERSION,
+        profile_id: targetProfileId,
+        revision: 0,
+        template_id: cvTemplateId || "awesomecv",
+        parent_profile_id: null,
+        lineage_root_profile_id: targetProfileId,
+        lineage_depth: 0,
+        branch_reason: null,
+        data: {},
+        section_order: [],
+        sidebar_section_order: [],
+        main_section_order: [],
+        audit: {}
+      };
       const payload = {
-        ...existing,
-        revision: existing.revision,
+        ...basePayload,
+        profile_id: targetProfileId,
+        revision: basePayload.revision ?? 0,
+        template_id: cvTemplateId || basePayload.template_id || "awesomecv",
         company: applicationContext.company || null,
         application_status: applicationContext.application_status || null,
         application_date: applicationContext.application_date || null,
@@ -1513,18 +1549,29 @@ export default function App() {
         header_text_align: applicationContext.header_text_align || "right",
         header_title_size: applicationContext.header_title_size || "Huge",
         header_subtitle_size: applicationContext.header_subtitle_size || "Large",
+        parent_profile_id: basePayload.parent_profile_id ?? null,
+        lineage_root_profile_id: basePayload.lineage_root_profile_id ?? targetProfileId,
+        lineage_depth: basePayload.lineage_depth ?? 0,
+        branch_reason: basePayload.branch_reason ?? null,
+        section_order: basePayload.section_order || [],
+        sidebar_section_order: basePayload.sidebar_section_order || [],
+        main_section_order: basePayload.main_section_order || [],
         audit: {
-          ...(existing.audit || {}),
+          ...(basePayload.audit || {}),
           raw_resume_text: resumeText
         },
-        data: mergeProfileImageIntoData(existing.data, applicationContext.profile_image)
+        data: mergeProfileImageIntoData(basePayload.data, applicationContext.profile_image)
       };
-      const saved = await saveCvProfile(selectedProfileId, payload);
+      const saved = await saveCvProfile(targetProfileId, payload);
       upsertCvProfileInList(saved);
       setResumeText(saved.audit?.raw_resume_text || "");
       setApplicationContext(contextFromProfile(saved));
       setLoadedProfileSnapshot(contextSnapshotFromProfile(saved));
-      setCvEntryError(`Application profile '${selectedProfileId}' updated (revision ${saved.revision}).`);
+      setSelectedProfileId(saved.profile_id);
+      setNewProfileId(saved.profile_id);
+      setCvEntryError(isCreate
+        ? `Profile '${saved.profile_id}' saved.`
+        : `Profile '${saved.profile_id}' saved (revision ${saved.revision}).`);
     } catch (err) {
       setCvEntryError(err instanceof Error ? err.message : "Failed to update application profile data");
     } finally {
@@ -1664,6 +1711,7 @@ export default function App() {
           docType: "resume",
           outputLanguage: cvOutputLanguage
         });
+        setJobCvEntryStep("review");
         setIsJobReviewReadOnly(false);
         setActiveJobAction("cv");
         setCvPreviewPayload(null);
@@ -1815,6 +1863,7 @@ export default function App() {
     setIsJobReviewReadOnly(false);
     setActiveView("find");
     setActiveJobAction("none");
+    setJobCvEntryStep("choice");
     setCvPreviewPayload(null);
     setPdfPreviewUrl(null);
     hasRenderedPdfPreviewRef.current = false;
@@ -1826,33 +1875,15 @@ export default function App() {
     if (!job) return;
     setCvEntryError("");
     setActiveJobAction("cv");
+    setJobCvEntryStep("choice");
     clearCreatePreviewState();
 
-    let sourceProfile = null;
-    const preferredProfileId = selectedRerankProfileId || selectedProfileId || "";
-    if (preferredProfileId) {
-      sourceProfile = cvProfiles.find((profile) => profile.profile_id === preferredProfileId) || null;
-      if (!sourceProfile) {
-        try {
-          sourceProfile = await getCvProfile(preferredProfileId);
-        } catch (_err) {
-          sourceProfile = null;
-        }
-      }
-    }
-
-    const sourceResumeText = sourceProfile?.audit?.raw_resume_text || resumeText || "";
-    const sourceTemplateId = sourceProfile?.template_id || cvTemplateId || "awesomecv";
     const nextCompany = job?.company || "";
-    const baseId = sourceProfile?.profile_id || newProfileId || "profile";
-    const suggestedId = buildCompanySuffixProfileId({ baseId, company: nextCompany || "company" });
 
-    setResumeText(sourceResumeText);
-    setCvTemplateId(sourceTemplateId);
-    setNewProfileId(suggestedId);
+    setNewProfileId("");
 
     const mergedContext = {
-      ...(sourceProfile ? contextFromProfile(sourceProfile) : EMPTY_APPLICATION_CONTEXT),
+      ...EMPTY_APPLICATION_CONTEXT,
       company: nextCompany,
       application_status: "",
       application_date: "",
@@ -1861,34 +1892,40 @@ export default function App() {
       job_url: job?.job_url || ""
     };
     setApplicationContext(mergedContext);
+    setSelectedProfileId("");
+    setLoadedProfileSnapshot({
+      profile_id: "",
+      revision: 0,
+      updated_at: null,
+      raw_resume_text: "",
+      ...EMPTY_APPLICATION_CONTEXT
+    });
+    setCvReview(null);
+    setIsJobReviewReadOnly(false);
+  };
 
-    if (sourceProfile) {
-      setSelectedProfileId(sourceProfile.profile_id || "");
-      setLoadedProfileSnapshot(contextSnapshotFromProfile(sourceProfile));
-      setCvReview({
-        canonical: sourceProfile,
-        job,
-        templateId: sourceTemplateId,
-        docType: "resume",
-        outputLanguage: cvOutputLanguage
-      });
-      setIsJobReviewReadOnly(true);
-    } else {
-      setSelectedProfileId("");
-      setLoadedProfileSnapshot({
-        profile_id: "",
-        revision: 0,
-        updated_at: null,
-        raw_resume_text: "",
-        ...EMPTY_APPLICATION_CONTEXT
-      });
-      setCvReview(null);
-      setIsJobReviewReadOnly(false);
-    }
+  const handleChooseCreateJobCv = () => {
+    setJobCvEntryStep("create");
+    setSelectedProfileId("");
+    setNewProfileId("");
+    setResumeText("");
+    setIsDraftProfileActive(false);
+    setDraftProfileId("");
+    setCvReview(null);
+    setIsJobReviewReadOnly(false);
+  };
+
+  const handleChooseBranchJobCv = () => {
+    setJobCvEntryStep("branch");
+    setIsDraftProfileActive(false);
+    setDraftProfileId("");
+    setCvReview(null);
+    setIsJobReviewReadOnly(false);
   };
 
   const loadProfileIntoJobCvContext = async (profileId) => {
     if (!profileId || !selectedJob) return;
+    const shouldFocusReviewSection = jobCvEntryStep !== "review";
     setCvEntryError("");
     setIsLoadingProfile(true);
     try {
@@ -1920,7 +1957,12 @@ export default function App() {
         docType: "resume",
         outputLanguage: cvOutputLanguage
       });
+      setJobCvEntryStep("review");
       setIsJobReviewReadOnly(true);
+      if (shouldFocusReviewSection) {
+        setActiveReviewNav("review");
+        shouldFocusReviewAfterProfileLoadRef.current = true;
+      }
     } catch (err) {
       setCvEntryError(err instanceof Error ? err.message : "Failed to load profile");
     } finally {
@@ -1929,10 +1971,17 @@ export default function App() {
   };
 
   const openJobEditDecisionDialog = () => {
+    const suggestedDraftId = buildNextAvailableDraftProfileId(
+      buildJobDraftProfileId({
+        baseId: selectedProfileId || newProfileId || "profile",
+        company: selectedJob?.company || applicationContext.company || "company"
+      })
+    );
     setJobEditDecisionDialog({
       isOpen: true,
       isBusy: false,
-      error: ""
+      error: "",
+      draftProfileName: suggestedDraftId
     });
   };
 
@@ -1940,7 +1989,8 @@ export default function App() {
     setJobEditDecisionDialog({
       isOpen: false,
       isBusy: false,
-      error: ""
+      error: "",
+      draftProfileName: ""
     });
   };
 
@@ -1965,15 +2015,29 @@ export default function App() {
       return;
     }
 
+    const requestedDraftName = String(jobEditDecisionDialog.draftProfileName || "").trim();
+    if (!requestedDraftName) {
+      setJobEditDecisionDialog((prev) => ({
+        ...prev,
+        error: "Draft profile name is required."
+      }));
+      return;
+    }
+
+    const nextDraftId = sanitizeProfileId(requestedDraftName);
+    const draftExists = cvProfiles.some((profile) => profile.profile_id === nextDraftId);
+    if (draftExists) {
+      setJobEditDecisionDialog((prev) => ({
+        ...prev,
+        error: "Draft profile name already exists. Choose another name."
+      }));
+      return;
+    }
+
     setJobEditDecisionDialog((prev) => ({ ...prev, isBusy: true, error: "" }));
     setCvEntryError("");
     try {
       const sourceProfile = await getCvProfile(selectedProfileId);
-      const baseDraftId = buildJobDraftProfileId({
-        baseId: sourceProfile.profile_id || selectedProfileId,
-        company: selectedJob.company || applicationContext.company || "company"
-      });
-      const nextDraftId = buildNextAvailableDraftProfileId(baseDraftId);
 
       const payload = {
         ...sourceProfile,
@@ -2039,6 +2103,7 @@ export default function App() {
     setIsJobReviewReadOnly(false);
     setActiveView("find");
     setActiveJobAction("none");
+    setJobCvEntryStep("choice");
     setCvPreviewPayload(null);
     setPdfPreviewUrl(null);
     hasRenderedPdfPreviewRef.current = false;
@@ -2049,6 +2114,7 @@ export default function App() {
   const handleSetView = (view) => {
     setActiveView(view);
     setSelectedJob(null);
+    setJobCvEntryStep("choice");
     setIsSidebarOpen(false);
   };
 
@@ -2061,6 +2127,7 @@ export default function App() {
     pdfPreviewRequestVersionRef.current += 1;
     setCvReview(null);
     setIsJobReviewReadOnly(false);
+    setJobCvEntryStep("choice");
     setCvPreviewPayload(null);
     setPdfPreviewUrl(null);
     hasRenderedPdfPreviewRef.current = false;
@@ -2088,6 +2155,7 @@ export default function App() {
   const showActionsPanel = activeJobAction !== "none";
   const showJobCvEntryPanel = activeJobAction === "cv";
   const showJobCoverPanel = activeJobAction === "cover";
+  const showJobCvSetupPanel = showJobCvEntryPanel && !cvReview;
   const isW1ReviewLayout = Boolean(cvReview) && showW1ReviewCards;
   const showActionSwitcher = activeJobAction !== "none";
   const actionLabel = cvReview
@@ -2112,45 +2180,41 @@ export default function App() {
       const reviewTop = reviewRect?.top ?? Number.POSITIVE_INFINITY;
       const profileTop = profileBrowserSectionRef.current?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
       const detailTop = jobDetailsSectionRef.current?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
-      const reviewIsVisible = Boolean(reviewRect && reviewRect.top < window.innerHeight * 0.72 && reviewRect.bottom > stickyOffset);
-
-      // Once review cards are reached, keep CV review as active section.
-      if (reviewTop <= stickyOffset + 80 || reviewIsVisible) {
+      if (reviewTop <= stickyOffset + 80) {
         setActiveReviewNav("review");
         return;
       }
 
-      if (isProfileBrowserPanelVisible && profileTop <= stickyOffset + 80) {
+      if (profileTop <= stickyOffset + 80) {
         setActiveReviewNav("profiles");
         return;
       }
 
-      if (isJobDetailsPanelVisible && detailTop <= stickyOffset + 80) {
+      if (detailTop <= stickyOffset + 80) {
         setActiveReviewNav("details");
         return;
       }
 
-      if (isProfileBrowserPanelVisible) {
-        setActiveReviewNav("profiles");
-        return;
-      }
-
-      if (isJobDetailsPanelVisible) {
-        setActiveReviewNav("details");
-        return;
-      }
-
-      setActiveReviewNav("review");
+      setActiveReviewNav("details");
     };
 
     updateActiveNavFromScroll();
     window.addEventListener("scroll", updateActiveNavFromScroll, { passive: true });
     return () => window.removeEventListener("scroll", updateActiveNavFromScroll);
-  }, [cvReview, isJobDetailsPanelVisible, isProfileBrowserPanelVisible]);
+  }, [cvReview]);
+
+  useEffect(() => {
+    if (!cvReview || jobCvEntryStep !== "review") return;
+    if (!shouldFocusReviewAfterProfileLoadRef.current) return;
+    shouldFocusReviewAfterProfileLoadRef.current = false;
+
+    requestAnimationFrame(() => {
+      reviewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setActiveReviewNav("review");
+    });
+  }, [cvReview, jobCvEntryStep]);
 
   const handleOpenJobDetailsPanel = () => {
-    setIsProfileBrowserPanelVisible(false);
-    setIsJobDetailsPanelVisible(true);
     setActiveReviewNav("details");
     requestAnimationFrame(() => {
       jobDetailsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2158,8 +2222,6 @@ export default function App() {
   };
 
   const handleOpenProfileBrowserPanel = () => {
-    setIsJobDetailsPanelVisible(false);
-    setIsProfileBrowserPanelVisible(true);
     setActiveReviewNav("profiles");
     requestAnimationFrame(() => {
       profileBrowserSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2205,6 +2267,35 @@ export default function App() {
             </div>
           );
         })()}
+        <div>
+          <label htmlFor="jobDraftProfileName" className="label">Draft profile name</label>
+          <input
+            id="jobDraftProfileName"
+            type="text"
+            value={jobEditDecisionDialog.draftProfileName}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              setJobEditDecisionDialog((prev) => ({
+                ...prev,
+                draftProfileName: nextValue,
+                error: ""
+              }));
+            }}
+            disabled={jobEditDecisionDialog.isBusy}
+          />
+          {(() => {
+            const requestedName = String(jobEditDecisionDialog.draftProfileName || "").trim();
+            if (!requestedName) return null;
+            const normalizedName = sanitizeProfileId(requestedName);
+            const conflict = cvProfiles.some((profile) => profile.profile_id === normalizedName);
+            if (!conflict) return null;
+            return (
+              <p className="error" style={{ marginTop: 8 }}>
+                Profile name '{normalizedName}' already exists.
+              </p>
+            );
+          })()}
+        </div>
         {jobEditDecisionDialog.error ? <p className="error">{jobEditDecisionDialog.error}</p> : null}
         <div className="inline-actions">
           <button
@@ -2311,209 +2402,124 @@ export default function App() {
             )}
           </div>
         </header>
-        {cvReview && isJobDetailsPanelVisible ? (
-          <div ref={jobDetailsSectionRef} className="panel-inline-section">
-            <JobDetailsCard
-              job={selectedJob}
-              descriptionHtml={descriptionHtml}
-              collapsible={false}
-              defaultCollapsed={false}
-            />
-          </div>
-        ) : null}
-        {cvReview && isProfileBrowserPanelVisible ? (
-          <div ref={profileBrowserSectionRef} className="panel-inline-section">
-            <CvEntry
-              cvProfiles={cvProfiles}
-              profilesLoading={profilesLoading}
-              profilesError={profilesError}
-              selectedProfileId={selectedProfileId}
-              onSelectedProfileIdChange={setSelectedProfileId}
-              onProfileRowSelect={(profile) => loadProfileIntoJobCvContext(profile?.profile_id || "")}
-              onRefreshProfiles={loadProfiles}
-              onUpdateProfileCvText={handleUpdateApplicationProfileData}
-              onRemapProfileCvText={handleRemapProfileCvText}
-              onCreateNewEntry={handleCreateNewEntry}
-              onBeginNewEntry={handleBeginNewEntry}
-              isCreatingProfileEntry={isCreatingProfileEntry}
-              isLoadingProfile={isLoadingProfile}
-              isUpdatingProfileCvText={isUpdatingProfileCvText}
-              isRemappingProfileCvText={isRemappingProfileCvText}
-              isUploadingProfileImage={isUploadingProfileImage}
-              remapProgress={cvRemapProgress}
-              cvEntryError={cvEntryError}
-              cvTemplateId={cvTemplateId}
-              onCvTemplateIdChange={handleTemplateIdChange}
-              cvOutputLanguage={cvOutputLanguage}
-              onCvOutputLanguageChange={setCvOutputLanguage}
-              applicationContext={applicationContext}
-              onApplicationContextChange={handleApplicationContextChange}
-              onUploadProfileImage={handleUploadProfileImage}
-              resumeText={resumeText}
-              onResumeTextChange={setResumeText}
-              newProfileId={newProfileId}
-              draftProfileId={draftProfileId}
-              isDraftProfileActive={isDraftProfileActive}
-              contextMode="job"
-              hideCreateProfileButton
-              hideUpdateAction
-              hideTailorAction={!showW1TailorAction || Boolean(cvReview)}
-              hideTailorProgress={Boolean(cvReview)}
-              profileTableCollapsedByDefault={false}
-              applicationContextDefaultCollapsed={false}
-              collapsible={false}
-              defaultCollapsed={false}
-              autoCollapseOnScroll={false}
-              tailorActionDisabled={isRemappingProfileCvText || isLoadingProfile || !resumeText.trim()}
-              remapSuggestionBuilder={({ defaultSuggested, selectedProfile: profile }) => {
-                const baseId = profile?.profile_id || selectedProfileId || newProfileId || defaultSuggested || "profile";
-                return buildCompanySuffixProfileId({
-                  baseId,
-                  company: selectedJob?.company || applicationContext.company || "company"
-                });
-              }}
-              tailorContext={{
-                jobTitle: selectedJob?.title || applicationContext.job_title || "",
-                company: selectedJob?.company || applicationContext.company || "",
-                sourceProfileId: selectedProfileId || "",
-                targetProfileId: newProfileId || "",
-                templateId: cvTemplateId,
-                outputLanguage: cvOutputLanguage
-              }}
-            />
-          </div>
-        ) : null}
-        <div className={`panel-body ${showActionsPanel || cvReview ? "" : "is-single"} ${isW1ReviewLayout ? "is-review-layout" : ""}`}>
-          <div className={`panel-column ${isW1ReviewLayout ? "is-review-layout" : ""}`}>
-            {!cvReview ? (
-              <JobDetailsCard
-                job={selectedJob}
-                descriptionHtml={descriptionHtml}
-                collapsible={showActionsPanel || Boolean(cvReview)}
-                defaultCollapsed={showActionsPanel || Boolean(cvReview)}
-              />
-            ) : null}
-            {cvReview && showW1ReviewCards && (
-              <div ref={reviewSectionRef} className="panel-review-main panel-review-main-preview">
-                <PdfPreviewCard
-                  pdfUrl={pdfPreviewUrl}
-                  isGenerating={isPdfGenerating}
-                  isDownloading={isPdfDownloading}
-                  templateId={cvReview.templateId}
-                  onTemplateIdChange={handleTemplateIdChange}
-                  themeColor={resolveTemplateThemeColor(cvReview.templateId || "awesomecv")}
-                  onThemeColorChange={handleThemeColorChange}
-                  showProfileImage={applicationContext.show_profile_image !== false}
-                  onShowProfileImageChange={handleShowProfileImageChange}
-                  hipsterHeaderAlign={applicationContext.header_text_align || "right"}
-                  onHipsterHeaderAlignChange={handleHipsterHeaderAlignChange}
-                  hipsterHeaderTitleSize={applicationContext.header_title_size || "Huge"}
-                  onHipsterHeaderTitleSizeChange={handleHipsterHeaderTitleSizeChange}
-                  hipsterHeaderSubtitleSize={applicationContext.header_subtitle_size || "Large"}
-                  onHipsterHeaderSubtitleSizeChange={handleHipsterHeaderSubtitleSizeChange}
-                  onUpdate={handleUpdatePdfPreview}
-                  onDownload={handleDownloadPdf}
-                  disabled={false}
-                  disabledReason=""
+        <div className={`panel-body ${showActionsPanel || cvReview ? "" : "is-single"} ${cvReview ? "is-review-layout" : ""} ${showJobCvSetupPanel ? "is-single" : ""}`}>
+          {cvReview ? (
+            <div className="panel-review-stack">
+              <div ref={jobDetailsSectionRef} className="panel-inline-section">
+                <JobDetailsCard
+                  job={selectedJob}
+                  descriptionHtml={descriptionHtml}
+                  collapsible={false}
+                  defaultCollapsed={false}
                 />
               </div>
-            )}
-          </div>
-          {showActionsPanel || cvReview ? (
-            <div className={`panel-column ${isW1ReviewLayout ? "is-review-layout" : ""}`}>
-              {showActionsPanel && !cvReview && (
-                showJobCvEntryPanel ? (
-                  <CvEntry
-                    cvProfiles={cvProfiles}
-                    profilesLoading={profilesLoading}
-                    profilesError={profilesError}
-                    selectedProfileId={selectedProfileId}
-                    onSelectedProfileIdChange={setSelectedProfileId}
-                    onProfileRowSelect={(profile) => loadProfileIntoJobCvContext(profile?.profile_id || "")}
-                    onRefreshProfiles={loadProfiles}
-                    onUpdateProfileCvText={handleUpdateApplicationProfileData}
-                    onRemapProfileCvText={handleRemapProfileCvText}
-                    onCreateNewEntry={handleCreateNewEntry}
-                    onBeginNewEntry={handleBeginNewEntry}
-                    isCreatingProfileEntry={isCreatingProfileEntry}
-                    isLoadingProfile={isLoadingProfile}
-                    isUpdatingProfileCvText={isUpdatingProfileCvText}
-                    isRemappingProfileCvText={isRemappingProfileCvText}
-                    isUploadingProfileImage={isUploadingProfileImage}
-                    remapProgress={cvRemapProgress}
-                    cvEntryError={cvEntryError}
-                    cvTemplateId={cvTemplateId}
-                    onCvTemplateIdChange={handleTemplateIdChange}
-                    cvOutputLanguage={cvOutputLanguage}
-                    onCvOutputLanguageChange={setCvOutputLanguage}
-                    applicationContext={applicationContext}
-                    onApplicationContextChange={handleApplicationContextChange}
-                    onUploadProfileImage={handleUploadProfileImage}
-                    resumeText={resumeText}
-                    onResumeTextChange={setResumeText}
-                    newProfileId={newProfileId}
-                    draftProfileId={draftProfileId}
-                    isDraftProfileActive={isDraftProfileActive}
-                    contextMode="job"
-                    hideCreateProfileButton
-                    hideUpdateAction
-                    hideTailorAction={!showW1TailorAction || Boolean(cvReview)}
-                    hideTailorProgress={Boolean(cvReview)}
-                    profileTableCollapsedByDefault
-                    applicationContextDefaultCollapsed={Boolean(cvReview)}
-                    collapsible={Boolean(cvReview)}
-                    defaultCollapsed={Boolean(cvReview)}
-                    autoCollapseOnScroll={Boolean(cvReview)}
-                    tailorActionDisabled={isRemappingProfileCvText || isLoadingProfile || !resumeText.trim()}
-                    remapSuggestionBuilder={({ defaultSuggested, selectedProfile: profile }) => {
-                      const baseId = profile?.profile_id || selectedProfileId || newProfileId || defaultSuggested || "profile";
-                      return buildCompanySuffixProfileId({
-                        baseId,
-                        company: selectedJob?.company || applicationContext.company || "company"
-                      });
-                    }}
-                    tailorContext={{
-                      jobTitle: selectedJob?.title || applicationContext.job_title || "",
-                      company: selectedJob?.company || applicationContext.company || "",
-                      sourceProfileId: selectedProfileId || "",
-                      targetProfileId: newProfileId || "",
-                      templateId: cvTemplateId,
-                      outputLanguage: cvOutputLanguage
-                    }}
-                  />
-                ) : showJobCoverPanel ? (
-                  <JobActionsCard
-                    mode={activeJobAction}
-                    job={selectedJob}
-                    resumeText={resumeText}
-                    onResumeTextChange={setResumeText}
-                    selectedModel={selectedModel}
-                    lmTimeout={lmTimeout}
-                    onStartCvReview={handleStartCvReview}
-                  />
-                ) : null
-              )}
-              {cvReview && showW1ReviewCards ? (
-                <div className="panel-review-main panel-review-main-editor">
-                  <CvReview
-                    canonical={cvReview.canonical}
-                    job={cvReview.job}
-                    templateId={cvReview.templateId}
-                    docType={cvReview.docType}
-                    outputLanguage={cvReview.outputLanguage}
-                    model={selectedModel}
-                    lmTimeout={lmTimeout}
-                    applicationContext={applicationContext}
-                    onDraftStateChange={handleCvDraftStateChange}
-                    onPreviewPayloadChange={setCvPreviewPayload}
-                    onProfileSaved={handleCvReviewProfileSaved}
-                    onTailor={() => handleRemapProfileCvText({ targetProfileId: newProfileId || undefined, allowOverwrite: false })}
-                    isTailoring={isRemappingProfileCvText}
-                    tailorProgress={cvRemapProgress}
-                    readOnly={isJobReviewReadOnly}
-                    showTailorAction={showW1TailorAction}
-                    onEditProfile={isJobReviewReadOnly ? openJobEditDecisionDialog : undefined}
-                  />
+              <div ref={profileBrowserSectionRef} className="panel-inline-section">
+                <CvEntry
+                  cvProfiles={cvProfiles}
+                  profilesLoading={profilesLoading}
+                  profilesError={profilesError}
+                  selectedProfileId={selectedProfileId}
+                  onSelectedProfileIdChange={setSelectedProfileId}
+                  onProfileRowSelect={(profile) => loadProfileIntoJobCvContext(profile?.profile_id || "")}
+                  onRefreshProfiles={loadProfiles}
+                  onUpdateProfileCvText={handleUpdateApplicationProfileData}
+                  onRemapProfileCvText={handleRemapProfileCvText}
+                  onCreateNewEntry={handleCreateNewEntry}
+                  onBeginNewEntry={handleBeginNewEntry}
+                  isCreatingProfileEntry={isCreatingProfileEntry}
+                  isLoadingProfile={isLoadingProfile}
+                  isUpdatingProfileCvText={isUpdatingProfileCvText}
+                  isRemappingProfileCvText={isRemappingProfileCvText}
+                  isUploadingProfileImage={isUploadingProfileImage}
+                  remapProgress={cvRemapProgress}
+                  cvEntryError={cvEntryError}
+                  cvTemplateId={cvTemplateId}
+                  onCvTemplateIdChange={handleTemplateIdChange}
+                  cvOutputLanguage={cvOutputLanguage}
+                  onCvOutputLanguageChange={setCvOutputLanguage}
+                  applicationContext={applicationContext}
+                  onApplicationContextChange={handleApplicationContextChange}
+                  onUploadProfileImage={handleUploadProfileImage}
+                  resumeText={resumeText}
+                  onResumeTextChange={setResumeText}
+                  newProfileId={newProfileId}
+                  onNewProfileIdChange={setNewProfileId}
+                  draftProfileId={draftProfileId}
+                  isDraftProfileActive={isDraftProfileActive}
+                  contextMode="job"
+                  hideCreateProfileButton
+                  hideUpdateAction
+                  hideTailorAction={!showW1TailorAction || Boolean(cvReview)}
+                  hideTailorProgress={Boolean(cvReview)}
+                  profileTableCollapsedByDefault={false}
+                  applicationContextDefaultCollapsed={false}
+                  collapsible={false}
+                  defaultCollapsed={false}
+                  autoCollapseOnScroll={false}
+                  tailorActionDisabled={isRemappingProfileCvText || isLoadingProfile || !resumeText.trim()}
+                  remapSuggestionBuilder={({ defaultSuggested, selectedProfile: profile }) => {
+                    const baseId = profile?.profile_id || selectedProfileId || newProfileId || defaultSuggested || "profile";
+                    return buildCompanySuffixProfileId({
+                      baseId,
+                      company: selectedJob?.company || applicationContext.company || "company"
+                    });
+                  }}
+                  tailorContext={{
+                    jobTitle: selectedJob?.title || applicationContext.job_title || "",
+                    company: selectedJob?.company || applicationContext.company || "",
+                    sourceProfileId: selectedProfileId || "",
+                    targetProfileId: newProfileId || "",
+                    templateId: cvTemplateId,
+                    outputLanguage: cvOutputLanguage
+                  }}
+                />
+              </div>
+              {showW1ReviewCards ? (
+                <div className="panel-review-layout">
+                  <div ref={reviewSectionRef} className="panel-review-pane panel-review-pane-preview">
+                    <PdfPreviewCard
+                      pdfUrl={pdfPreviewUrl}
+                      isGenerating={isPdfGenerating}
+                      isDownloading={isPdfDownloading}
+                      templateId={cvReview.templateId}
+                      onTemplateIdChange={handleTemplateIdChange}
+                      themeColor={resolveTemplateThemeColor(cvReview.templateId || "awesomecv")}
+                      onThemeColorChange={handleThemeColorChange}
+                      showProfileImage={applicationContext.show_profile_image !== false}
+                      onShowProfileImageChange={handleShowProfileImageChange}
+                      hipsterHeaderAlign={applicationContext.header_text_align || "right"}
+                      onHipsterHeaderAlignChange={handleHipsterHeaderAlignChange}
+                      hipsterHeaderTitleSize={applicationContext.header_title_size || "Huge"}
+                      onHipsterHeaderTitleSizeChange={handleHipsterHeaderTitleSizeChange}
+                      hipsterHeaderSubtitleSize={applicationContext.header_subtitle_size || "Large"}
+                      onHipsterHeaderSubtitleSizeChange={handleHipsterHeaderSubtitleSizeChange}
+                      onUpdate={handleUpdatePdfPreview}
+                      onDownload={handleDownloadPdf}
+                      disabled={false}
+                      disabledReason=""
+                    />
+                  </div>
+                  <div className="panel-review-pane panel-review-pane-editor">
+                    <CvReview
+                      canonical={cvReview.canonical}
+                      job={cvReview.job}
+                      templateId={cvReview.templateId}
+                      docType={cvReview.docType}
+                      outputLanguage={cvReview.outputLanguage}
+                      model={selectedModel}
+                      lmTimeout={lmTimeout}
+                      applicationContext={applicationContext}
+                      onDraftStateChange={handleCvDraftStateChange}
+                      onPreviewPayloadChange={setCvPreviewPayload}
+                      onProfileSaved={handleCvReviewProfileSaved}
+                      onTailor={() => handleRemapProfileCvText({ targetProfileId: newProfileId || undefined, allowOverwrite: false })}
+                      isTailoring={isRemappingProfileCvText}
+                      tailorProgress={cvRemapProgress}
+                      readOnly={isJobReviewReadOnly}
+                      showTailorAction={showW1TailorAction}
+                      onEditProfile={isJobReviewReadOnly ? openJobEditDecisionDialog : undefined}
+                    />
+                  </div>
                 </div>
               ) : (isW1CvWorkflow && (w1UiState === "S1" || w1UiState === "S2")) ? (
                 <div className="panel-card panel-empty panel-disabled">
@@ -2525,7 +2531,117 @@ export default function App() {
                 </div>
               ) : null}
             </div>
-          ) : null}
+          ) : (
+            <>
+              {showJobCoverPanel || !showActionsPanel ? (
+                <div className="panel-column">
+                  <JobDetailsCard
+                    job={selectedJob}
+                    descriptionHtml={descriptionHtml}
+                    collapsible={showActionsPanel || Boolean(cvReview)}
+                    defaultCollapsed={showActionsPanel || Boolean(cvReview)}
+                  />
+                </div>
+              ) : null}
+              {showJobCvEntryPanel ? (
+                <div className="panel-column">
+                  {isJobCvChoiceStep ? (
+                    <div className="panel-card cv-flow-choice-card">
+                      <div className="panel-header">
+                        <div>
+                          <p className="eyebrow">CV generation</p>
+                          <h2>How do you want to start?</h2>
+                        </div>
+                      </div>
+                      <p className="helper">Select one path to continue for this job.</p>
+                      <div className="inline-actions">
+                        <button type="button" className="cta cta-cv" onClick={handleChooseCreateJobCv}>
+                          Create new CV
+                        </button>
+                        <button type="button" className="secondary" onClick={handleChooseBranchJobCv}>
+                          Branch from existing CV
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <CvEntry
+                      cvProfiles={cvProfiles}
+                      profilesLoading={profilesLoading}
+                      profilesError={profilesError}
+                      selectedProfileId={selectedProfileId}
+                      onSelectedProfileIdChange={setSelectedProfileId}
+                      onProfileRowSelect={(profile) => loadProfileIntoJobCvContext(profile?.profile_id || "")}
+                      onRefreshProfiles={loadProfiles}
+                      onUpdateProfileCvText={handleUpdateApplicationProfileData}
+                      onRemapProfileCvText={handleRemapProfileCvText}
+                      onCreateNewEntry={handleCreateNewEntry}
+                      onBeginNewEntry={handleBeginNewEntry}
+                      isCreatingProfileEntry={isCreatingProfileEntry}
+                      isLoadingProfile={isLoadingProfile}
+                      isUpdatingProfileCvText={isUpdatingProfileCvText}
+                      isRemappingProfileCvText={isRemappingProfileCvText}
+                      isUploadingProfileImage={isUploadingProfileImage}
+                      remapProgress={cvRemapProgress}
+                      cvEntryError={cvEntryError}
+                      cvTemplateId={cvTemplateId}
+                      onCvTemplateIdChange={handleTemplateIdChange}
+                      cvOutputLanguage={cvOutputLanguage}
+                      onCvOutputLanguageChange={setCvOutputLanguage}
+                      applicationContext={applicationContext}
+                      onApplicationContextChange={handleApplicationContextChange}
+                      onUploadProfileImage={handleUploadProfileImage}
+                      resumeText={resumeText}
+                      onResumeTextChange={setResumeText}
+                      newProfileId={newProfileId}
+                      onNewProfileIdChange={setNewProfileId}
+                      draftProfileId={draftProfileId}
+                      isDraftProfileActive={isDraftProfileActive}
+                      contextMode="job"
+                      hideCreateProfileButton={isJobCvBranchStep}
+                      hideUpdateAction={isJobCvBranchStep}
+                      hideTailorAction={isJobCvBranchStep || !showW1TailorAction || Boolean(cvReview)}
+                      hideTailorProgress={Boolean(cvReview)}
+                      autoOpenProfileIdDialog={isJobCvCreateStep}
+                      profileTableCollapsedByDefault={isJobCvCreateStep}
+                      applicationContextDefaultCollapsed={isJobCvBranchStep || Boolean(cvReview)}
+                      collapsible={Boolean(cvReview)}
+                      defaultCollapsed={Boolean(cvReview)}
+                      autoCollapseOnScroll={Boolean(cvReview)}
+                      tailorActionDisabled={isRemappingProfileCvText || isLoadingProfile || !resumeText.trim()}
+                      remapSuggestionBuilder={({ defaultSuggested, selectedProfile: profile }) => {
+                        const baseId = profile?.profile_id || selectedProfileId || newProfileId || defaultSuggested || "profile";
+                        return buildCompanySuffixProfileId({
+                          baseId,
+                          company: selectedJob?.company || applicationContext.company || "company"
+                        });
+                      }}
+                      tailorContext={{
+                        jobTitle: selectedJob?.title || applicationContext.job_title || "",
+                        company: selectedJob?.company || applicationContext.company || "",
+                        sourceProfileId: selectedProfileId || "",
+                        targetProfileId: newProfileId || "",
+                        templateId: cvTemplateId,
+                        outputLanguage: cvOutputLanguage
+                      }}
+                    />
+                  )}
+                </div>
+              ) : null}
+              {showJobCoverPanel ? (
+                <div className="panel-column">
+                  <JobActionsCard
+                    mode={activeJobAction}
+                    job={selectedJob}
+                    resumeText={resumeText}
+                    onResumeTextChange={setResumeText}
+                    selectedModel={selectedModel}
+                    lmTimeout={lmTimeout}
+                    onStartCvReview={handleStartCvReview}
+                  />
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
         {jobEditDecisionModal}
       </div>
@@ -2683,6 +2799,7 @@ export default function App() {
                     resumeText={resumeText}
                     onResumeTextChange={setResumeText}
                     newProfileId={newProfileId}
+                    onNewProfileIdChange={setNewProfileId}
                     draftProfileId={draftProfileId}
                     isDraftProfileActive={isDraftProfileActive}
                     profileTableCollapsedByDefault

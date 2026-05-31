@@ -173,6 +173,7 @@ export default function CvEntry({
   resumeText,
   onResumeTextChange,
   newProfileId,
+  onNewProfileIdChange,
   draftProfileId,
   isDraftProfileActive,
   contextMode = "create",
@@ -181,6 +182,7 @@ export default function CvEntry({
   hideTailorAction = false,
   hideTailorProgress = false,
   tailorActionDisabled,
+  autoOpenProfileIdDialog = false,
   profileTableCollapsedByDefault = false,
   applicationContextDefaultCollapsed = false,
   collapsible = false,
@@ -200,6 +202,7 @@ export default function CvEntry({
   const [remapDialogOpen, setRemapDialogOpen] = useState(false);
   const [remapProfileName, setRemapProfileName] = useState("");
   const [newEntryDialogOpen, setNewEntryDialogOpen] = useState(false);
+  const [newEntryDialogMode, setNewEntryDialogMode] = useState("create-and-save");
   const [newEntryProfileName, setNewEntryProfileName] = useState("");
   const [newEntryError, setNewEntryError] = useState("");
   const [profileImageError, setProfileImageError] = useState("");
@@ -223,6 +226,7 @@ export default function CvEntry({
   const columnResizeIndexRef = useRef(-1);
   const columnResizeStartXRef = useRef(0);
   const columnResizeStartWidthRef = useRef(0);
+  const autoOpenProfileIdHandledRef = useRef(false);
 
   const profilesWithDraft = useMemo(() => {
     if (!isDraftProfileActive || !draftProfileId) return cvProfiles;
@@ -264,6 +268,19 @@ export default function CvEntry({
     () => cvProfiles.some((profile) => profile.profile_id === selectedProfileId),
     [cvProfiles, selectedProfileId]
   );
+  const canSaveProfile = hasPersistedSelectedProfile || Boolean(String(newProfileId || "").trim());
+
+  useEffect(() => {
+    if (!autoOpenProfileIdDialog) {
+      autoOpenProfileIdHandledRef.current = false;
+      return;
+    }
+    if (autoOpenProfileIdHandledRef.current) return;
+    if (newEntryDialogOpen) return;
+
+    autoOpenProfileIdHandledRef.current = true;
+    openNewEntryDialog("assign-id");
+  }, [autoOpenProfileIdDialog, newEntryDialogOpen]);
 
   const compareProfiles = (a, b) => {
     const leftDate = Date.parse(a.updated_at || a.created_at || "") || 0;
@@ -398,8 +415,11 @@ export default function CvEntry({
     cvTextRef.current?.focus();
   };
 
-  const openNewEntryDialog = () => {
-    onBeginNewEntry?.();
+  const openNewEntryDialog = (mode = "create-and-save") => {
+    setNewEntryDialogMode(mode);
+    if (mode === "create-and-save") {
+      onBeginNewEntry?.();
+    }
     const defaultName = String(newProfileId || "").trim();
     setNewEntryProfileName(defaultName);
     setNewEntryError("");
@@ -412,6 +432,20 @@ export default function CvEntry({
       setNewEntryError("Profile name is required.");
       return;
     }
+
+    if (newEntryDialogMode === "assign-id") {
+      const normalizedName = String(requestedName || "").trim();
+      if (!normalizedName) {
+        setNewEntryError("Profile name is required.");
+        return;
+      }
+      onSelectedProfileIdChange("");
+      onNewProfileIdChange?.(normalizedName);
+      setNewEntryDialogOpen(false);
+      setNewEntryError("");
+      return;
+    }
+
     try {
       await onCreateNewEntry?.({ profileName: requestedName });
       setNewEntryDialogOpen(false);
@@ -419,6 +453,14 @@ export default function CvEntry({
     } catch (err) {
       setNewEntryError(err instanceof Error ? err.message : "Failed to create profile");
     }
+  };
+
+  const handleSaveProfileClick = () => {
+    if (canSaveProfile) {
+      onUpdateProfileCvText?.();
+      return;
+    }
+    openNewEntryDialog("assign-id");
   };
 
   const openRemapDialog = () => {
@@ -832,7 +874,7 @@ export default function CvEntry({
                             ref={createButtonRef}
                             type="button"
                             className="primary cv-create-button"
-                            onClick={openNewEntryDialog}
+                            onClick={() => openNewEntryDialog(isJobMode ? "assign-id" : "create-and-save")}
                             onKeyDown={(e) => {
                               if (e.key === "Tab" && e.shiftKey) {
                                 e.preventDefault();
@@ -946,7 +988,7 @@ export default function CvEntry({
                           ref={createButtonRef}
                           type="button"
                           className="primary cv-create-button"
-                          onClick={openNewEntryDialog}
+                          onClick={() => openNewEntryDialog(isJobMode ? "assign-id" : "create-and-save")}
                           onKeyDown={(e) => {
                             if (e.key === "Tab" && !e.shiftKey) {
                               e.preventDefault();
@@ -1030,6 +1072,16 @@ export default function CvEntry({
                   <p className="helper cv-working-copy-note">
                     Working copy mode: nothing is saved until you confirm Tailor for a new profile version.
                   </p>
+                ) : null}
+                {isJobMode ? (
+                  <button
+                    type="button"
+                    className="secondary cv-profile-id-button"
+                    style={{ marginTop: 8 }}
+                    onClick={() => openNewEntryDialog("assign-id")}
+                  >
+                    Choose profile ID
+                  </button>
                 ) : null}
               </div>
               <div>
@@ -1215,9 +1267,9 @@ export default function CvEntry({
                 <button
                   ref={updateProfileButtonRef}
                   type="button"
-                  className="primary cv-action-update"
-                  onClick={onUpdateProfileCvText}
-                  disabled={isUpdatingProfileCvText || isLoadingProfile || !hasPersistedSelectedProfile}
+                  className="secondary cv-action-save"
+                  onClick={handleSaveProfileClick}
+                  disabled={isUpdatingProfileCvText || isLoadingProfile}
                   onKeyDown={(e) => {
                     if (e.key === "Tab" && e.shiftKey) {
                       e.preventDefault();
@@ -1231,7 +1283,7 @@ export default function CvEntry({
                   }}
                 >
                   <PencilLine size={14} />
-                  {isUpdatingProfileCvText ? "Updating profile..." : "Update CV profile data"}
+                  {isUpdatingProfileCvText ? "Saving profile..." : "Save profile"}
                 </button>
               ) : null}
               {!hideTailorAction ? (
@@ -1336,9 +1388,15 @@ export default function CvEntry({
           <div className="modal-backdrop" onClick={() => setNewEntryDialogOpen(false)} />
           <div className="modal-card">
             <div className="modal-header">
-              <h2 id="new-entry-title">Create new CV Profile</h2>
+              <h2 id="new-entry-title">
+                {newEntryDialogMode === "assign-id" ? "Choose profile ID" : "Create new CV Profile"}
+              </h2>
             </div>
-            <p className="helper">Choose a profile name to create and save a new entry immediately.</p>
+            <p className="helper">
+              {newEntryDialogMode === "assign-id"
+                ? "Choose the profile ID for this working copy. Nothing is saved yet."
+                : "Choose a profile name to create and save a new entry immediately."}
+            </p>
             <div>
               <label htmlFor="newEntryProfileName" className="label">Profile name</label>
               <input
@@ -1362,7 +1420,9 @@ export default function CvEntry({
                 onClick={handleConfirmCreateEntry}
                 disabled={isCreatingProfileEntry || !newEntryProfileName.trim()}
               >
-                {isCreatingProfileEntry ? "Creating..." : "Create and save profile"}
+                {newEntryDialogMode === "assign-id"
+                  ? "Use this profile ID"
+                  : (isCreatingProfileEntry ? "Creating..." : "Create and save profile")}
               </button>
             </div>
           </div>
