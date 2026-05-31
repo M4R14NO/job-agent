@@ -27,6 +27,9 @@ const CACHE_KEY = "job-agent:search-response";
 const SIDEBAR_WIDTH_KEY = "job-agent:sidebar-width";
 const SIDEBAR_MIN_WIDTH = 360;
 const SIDEBAR_MAX_WIDTH = 720;
+const REVIEW_PREVIEW_MIN_WIDTH = 360;
+const REVIEW_EDITOR_MIN_WIDTH = 420;
+const REVIEW_SPLITTER_WIDTH = 14;
 const SEARCH_BATCH_SIZE = 4;
 const PDF_PREVIEW_DEBOUNCE_MS = 5000;
 const CANONICAL_SCHEMA_VERSION = "v1";
@@ -289,6 +292,7 @@ export default function App() {
   const [searchElapsedMs, setSearchElapsedMs] = useState(0);
   const [searchPhaseMessage, setSearchPhaseMessage] = useState("");
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MIN_WIDTH);
+  const [reviewPreviewWidth, setReviewPreviewWidth] = useState(null);
   const [cvPreviewPayload, setCvPreviewPayload] = useState(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
@@ -311,9 +315,13 @@ export default function App() {
   const searchAbortControllerRef = useRef(null);
   const queryDebugDataRef = useRef(null);
   const isResizingSidebarRef = useRef(false);
+  const isResizingReviewRef = useRef(false);
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(SIDEBAR_MIN_WIDTH);
+  const reviewResizeStartXRef = useRef(0);
+  const reviewResizeStartWidthRef = useRef(0);
   const sidebarWidthRef = useRef(SIDEBAR_MIN_WIDTH);
+  const reviewLayoutRef = useRef(null);
   const jobDetailsSectionRef = useRef(null);
   const profileBrowserSectionRef = useRef(null);
   const reviewSectionRef = useRef(null);
@@ -719,21 +727,46 @@ export default function App() {
 
   useEffect(() => {
     const handleMouseMove = (event) => {
-      if (!isResizingSidebarRef.current) return;
-      const delta = event.clientX - resizeStartXRef.current;
-      const nextWidth = Math.min(
-        Math.max(resizeStartWidthRef.current + delta, SIDEBAR_MIN_WIDTH),
-        SIDEBAR_MAX_WIDTH
+      if (isResizingSidebarRef.current) {
+        const delta = event.clientX - resizeStartXRef.current;
+        const nextWidth = Math.min(
+          Math.max(resizeStartWidthRef.current + delta, SIDEBAR_MIN_WIDTH),
+          SIDEBAR_MAX_WIDTH
+        );
+        setSidebarWidth(nextWidth);
+        return;
+      }
+
+      if (!isResizingReviewRef.current) return;
+      const layoutRect = reviewLayoutRef.current?.getBoundingClientRect();
+      if (!layoutRect) return;
+      const delta = event.clientX - reviewResizeStartXRef.current;
+      const maxPreviewWidth = Math.max(
+        REVIEW_PREVIEW_MIN_WIDTH,
+        layoutRect.width - REVIEW_EDITOR_MIN_WIDTH - REVIEW_SPLITTER_WIDTH
       );
-      setSidebarWidth(nextWidth);
+      const nextPreviewWidth = Math.min(
+        Math.max(reviewResizeStartWidthRef.current + delta, REVIEW_PREVIEW_MIN_WIDTH),
+        maxPreviewWidth
+      );
+      setReviewPreviewWidth(nextPreviewWidth);
     };
 
     const handleMouseUp = () => {
-      if (!isResizingSidebarRef.current) return;
-      isResizingSidebarRef.current = false;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidthRef.current));
+      let released = false;
+      if (isResizingSidebarRef.current) {
+        isResizingSidebarRef.current = false;
+        localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidthRef.current));
+        released = true;
+      }
+      if (isResizingReviewRef.current) {
+        isResizingReviewRef.current = false;
+        released = true;
+      }
+      if (released) {
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -2145,6 +2178,23 @@ export default function App() {
     document.body.style.userSelect = "none";
   };
 
+  const handleReviewResizeStart = (event) => {
+    if (!isW1ReviewLayout || window.matchMedia("(max-width: 1160px)").matches) return;
+    const layoutRect = reviewLayoutRef.current?.getBoundingClientRect();
+    if (!layoutRect) return;
+
+    const currentPreviewWidth = reviewSectionRef.current?.getBoundingClientRect().width
+      || reviewPreviewWidth
+      || (layoutRect.width * 0.5);
+
+    isResizingReviewRef.current = true;
+    reviewResizeStartXRef.current = event.clientX;
+    reviewResizeStartWidthRef.current = currentPreviewWidth;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    event.preventDefault();
+  };
+
   useEffect(() => {
     if (!isFindView) setIsSidebarOpen(false);
   }, [isFindView]);
@@ -2158,6 +2208,9 @@ export default function App() {
   const showJobCvSetupPanel = showJobCvEntryPanel && !cvReview;
   const isW1ReviewLayout = Boolean(cvReview) && showW1ReviewCards;
   const showActionSwitcher = activeJobAction !== "none";
+  const reviewLayoutStyle = reviewPreviewWidth
+    ? { "--review-preview-width": `${Math.round(reviewPreviewWidth)}px` }
+    : undefined;
   const actionLabel = cvReview
     ? "CV review"
     : (activeJobAction === "cover" ? "Cover letter" : "CV generation");
@@ -2329,79 +2382,82 @@ export default function App() {
 
   if (showPanel) {
     return (
-      <div className="panel-page">
-        <header className="panel-topbar">
-          <button className="secondary" onClick={handleBackToResults}>
-            {selectedJob ? "Back to results" : "Back to start"}
-          </button>
-          <div className="panel-heading">
-            <p className="eyebrow">{panelEyebrow}</p>
-            <h2>{panelTitle}</h2>
-            {selectedJob?.company && <p className="subtitle">{selectedJob.company}</p>}
-          </div>
-          <div className="panel-actions">
-            {activeJobAction === "none" && !cvReview ? (
-              <>
-                <button
-                  className="cta cta-cover llm-action-button"
-                  onClick={() => setActiveJobAction("cover")}
-                  title="Use AI to draft a cover letter for the selected job based on your resume and job details."
-                >
-                  Generate cover letter
-                </button>
-                <button
-                  className="cta cta-cv llm-action-button"
-                  onClick={() => {
-                    initializeJobCvContext(selectedJob);
-                  }}
-                  title="Use AI to turn your resume text and job context into an editable CV draft."
-                >
-                  Generate CV
-                </button>
-              </>
-            ) : (
-              <>
-                {cvReview ? (
+      <div className={`panel-page${cvReview ? " is-review-mode" : ""}`}>
+        <div className={`panel-topbar-shell${cvReview ? " is-hover-reveal" : ""}`}>
+          {cvReview ? <div className="panel-topbar-hit-area" aria-hidden="true" /> : null}
+          <header className="panel-topbar">
+            <button className="secondary" onClick={handleBackToResults}>
+              {selectedJob ? "Back to results" : "Back to start"}
+            </button>
+            <div className="panel-heading">
+              <p className="eyebrow">{panelEyebrow}</p>
+              <h2>{panelTitle}</h2>
+              {selectedJob?.company && <p className="subtitle">{selectedJob.company}</p>}
+            </div>
+            <div className="panel-actions">
+              {activeJobAction === "none" && !cvReview ? (
+                <>
                   <button
-                    type="button"
-                    className={`secondary panel-nav-toggle${activeReviewNav === "review" ? " is-active" : ""}`}
-                    onClick={handleOpenCvReviewSection}
+                    className="cta cta-cover llm-action-button"
+                    onClick={() => setActiveJobAction("cover")}
+                    title="Use AI to draft a cover letter for the selected job based on your resume and job details."
                   >
-                    CV review
+                    Generate cover letter
                   </button>
-                ) : (
-                  <span className="action-pill">{actionLabel}</span>
-                )}
-                {cvReview ? (
-                  <>
+                  <button
+                    className="cta cta-cv llm-action-button"
+                    onClick={() => {
+                      initializeJobCvContext(selectedJob);
+                    }}
+                    title="Use AI to turn your resume text and job context into an editable CV draft."
+                  >
+                    Generate CV
+                  </button>
+                </>
+              ) : (
+                <>
+                  {cvReview ? (
                     <button
                       type="button"
-                      className={`secondary panel-nav-toggle${activeReviewNav === "details" ? " is-active" : ""}`}
-                      onClick={handleOpenJobDetailsPanel}
+                      className={`secondary panel-nav-toggle${activeReviewNav === "review" ? " is-active" : ""}`}
+                      onClick={handleOpenCvReviewSection}
                     >
-                      View job details
+                      CV review
                     </button>
+                  ) : (
+                    <span className="action-pill">{actionLabel}</span>
+                  )}
+                  {cvReview ? (
+                    <>
+                      <button
+                        type="button"
+                        className={`secondary panel-nav-toggle${activeReviewNav === "details" ? " is-active" : ""}`}
+                        onClick={handleOpenJobDetailsPanel}
+                      >
+                        View job details
+                      </button>
+                      <button
+                        type="button"
+                        className={`secondary panel-nav-toggle${activeReviewNav === "profiles" ? " is-active" : ""}`}
+                        onClick={handleOpenProfileBrowserPanel}
+                      >
+                        Browse CV profiles
+                      </button>
+                    </>
+                  ) : null}
+                  {showActionSwitcher && (
                     <button
-                      type="button"
-                      className={`secondary panel-nav-toggle${activeReviewNav === "profiles" ? " is-active" : ""}`}
-                      onClick={handleOpenProfileBrowserPanel}
+                      className="cta cta-switch"
+                      onClick={handleSwitchJobAction}
                     >
-                      Browse CV profiles
+                      {switchActionLabel}
                     </button>
-                  </>
-                ) : null}
-                {showActionSwitcher && (
-                  <button
-                    className="cta cta-switch"
-                    onClick={handleSwitchJobAction}
-                  >
-                    {switchActionLabel}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        </header>
+                  )}
+                </>
+              )}
+            </div>
+          </header>
+        </div>
         <div className={`panel-body ${showActionsPanel || cvReview ? "" : "is-single"} ${cvReview ? "is-review-layout" : ""} ${showJobCvSetupPanel ? "is-single" : ""}`}>
           {cvReview ? (
             <div className="panel-review-stack">
@@ -2475,7 +2531,11 @@ export default function App() {
                 />
               </div>
               {showW1ReviewCards ? (
-                <div className="panel-review-layout">
+                <div
+                  ref={reviewLayoutRef}
+                  className="panel-review-layout is-resizable"
+                  style={reviewLayoutStyle}
+                >
                   <div ref={reviewSectionRef} className="panel-review-pane panel-review-pane-preview">
                     <PdfPreviewCard
                       pdfUrl={pdfPreviewUrl}
@@ -2499,6 +2559,15 @@ export default function App() {
                       disabledReason=""
                     />
                   </div>
+                  <div
+                    className="panel-review-divider"
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label="Resize preview and editor panels"
+                    title="Drag to resize preview and editor"
+                    onMouseDown={handleReviewResizeStart}
+                    onPointerDown={handleReviewResizeStart}
+                  />
                   <div className="panel-review-pane panel-review-pane-editor">
                     <CvReview
                       canonical={cvReview.canonical}

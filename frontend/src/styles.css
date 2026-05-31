@@ -351,6 +351,30 @@ button:active:not(:disabled) {
   grid-template-rows: auto 1fr;
 }
 
+.panel-page.is-review-mode {
+  grid-template-rows: 0 1fr;
+}
+
+.panel-topbar-shell {
+  position: relative;
+}
+
+.panel-page.is-review-mode .panel-topbar-shell.is-hover-reveal {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 40;
+  height: 160px;
+  background: transparent;
+  pointer-events: auto;
+}
+
+.panel-page.is-review-mode .panel-topbar-hit-area {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 160px;
+  z-index: 1;
+}
+
 .panel-topbar {
   position: sticky;
   top: 0;
@@ -363,6 +387,56 @@ button:active:not(:disabled) {
   gap: 16px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.panel-page.is-review-mode .panel-topbar {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  opacity: 0;
+  transform: translateY(-18px);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  background: #ffffff;
+  height: 100%;
+  box-sizing: border-box;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  border-bottom: 1px solid #dbe4ef;
+  padding-top: 18px;
+  padding-bottom: 18px;
+  align-content: flex-start;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .panel-page.is-review-mode .panel-topbar-shell.is-hover-reveal:hover .panel-topbar,
+  .panel-page.is-review-mode .panel-topbar-shell.is-hover-reveal:focus-within .panel-topbar {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .panel-page.is-review-mode {
+    grid-template-rows: auto 1fr;
+  }
+
+  .panel-page.is-review-mode .panel-topbar-shell.is-hover-reveal {
+    position: static;
+    height: auto;
+  }
+
+  .panel-page.is-review-mode .panel-topbar-hit-area {
+    display: none;
+  }
+
+  .panel-page.is-review-mode .panel-topbar {
+    position: sticky;
+    inset: auto;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
 }
 
 .panel-heading h2 {
@@ -387,10 +461,18 @@ button:active:not(:disabled) {
   align-items: start;
 }
 
+.panel-page.is-review-mode .panel-body {
+  padding-top: 12px;
+}
+
 .panel-inline-section {
   padding: 0 24px;
   display: grid;
   gap: 14px;
+}
+
+.panel-page.is-review-mode .panel-inline-section {
+  padding-top: 0;
 }
 
 .panel-body.is-review-layout {
@@ -413,6 +495,10 @@ button:active:not(:disabled) {
   min-width: 0;
 }
 
+.panel-page.is-review-mode .panel-review-stack {
+  gap: 18px;
+}
+
 .panel-review-layout {
   display: grid;
   grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.1fr);
@@ -420,8 +506,52 @@ button:active:not(:disabled) {
   align-items: start;
 }
 
+.panel-review-layout.is-resizable {
+  grid-template-columns: minmax(320px, var(--review-preview-width, 1fr)) 14px minmax(420px, 1.1fr);
+  gap: 14px;
+}
+
 .panel-review-pane {
   min-width: 0;
+}
+
+.panel-review-divider {
+  width: 14px;
+  cursor: col-resize;
+  align-self: stretch;
+  position: sticky;
+  top: 24px;
+  height: calc(100vh - 48px);
+  z-index: 2;
+  border-radius: 999px;
+  background: rgba(219, 228, 239, 0.35);
+  transition: background-color 0.18s ease;
+}
+
+.panel-review-divider::before {
+  content: "";
+  display: block;
+  width: 4px;
+  height: 100%;
+  margin: 0 auto;
+  border-radius: 999px;
+  background: repeating-linear-gradient(
+    to bottom,
+    #94a3b8 0,
+    #94a3b8 7px,
+    transparent 7px,
+    transparent 13px
+  );
+  transition: opacity 0.18s ease;
+  opacity: 0.8;
+}
+
+.panel-review-divider:hover {
+  background: rgba(148, 163, 184, 0.35);
+}
+
+.panel-review-divider:hover::before {
+  opacity: 1;
 }
 
 .panel-review-pane-preview,
@@ -3351,6 +3481,27 @@ body.modal-open .pdf-preview-iframe {
     font-size: 36px;
   }
 
+  .panel-page.is-review-mode {
+    grid-template-rows: auto 1fr;
+  }
+
+  .panel-page.is-review-mode .panel-topbar-shell.is-hover-reveal {
+    position: static;
+    height: auto;
+  }
+
+  .panel-page.is-review-mode .panel-topbar-hit-area {
+    display: none;
+  }
+
+  .panel-page.is-review-mode .panel-topbar {
+    position: sticky;
+    inset: auto;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+
   .app-shell > .chakra-grid {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
@@ -3515,32 +3666,37 @@ body.modal-open .pdf-preview-iframe {
 }
 
 .pdf-preview-actions {
-  display: grid;
-  gap: 10px;
-  align-items: start;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px 12px;
+  align-items: center;
   justify-content: flex-start;
-  width: 100%;
+  width: auto;
+  max-width: 100%;
   min-width: 0;
   flex: 1 1 auto;
 }
 
 .pdf-preview-controls-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   justify-content: flex-start;
-  align-items: flex-start;
+  align-items: center;
   min-width: 0;
-  width: 100%;
+  flex: 0 0 auto;
+  width: auto;
 }
 
 .pdf-preview-button-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   justify-content: flex-start;
-  align-items: flex-start;
-  width: 100%;
+  align-items: center;
+  min-width: 0;
+  flex: 0 0 auto;
+  width: auto;
 }
 
 .pdf-preview-button-row .pdf-preview-switch-control {
@@ -3554,6 +3710,7 @@ body.modal-open .pdf-preview-iframe {
   justify-content: flex-start;
   align-items: center;
   width: 100%;
+  flex: 1 1 100%;
 }
 
 .pdf-preview-template-control {
@@ -3561,6 +3718,19 @@ body.modal-open .pdf-preview-iframe {
   align-items: start;
   gap: 8px;
   min-width: 0;
+}
+
+.pdf-preview-theme-color-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.pdf-preview-controls-row > .pdf-preview-template-control,
+.pdf-preview-button-row > .pdf-preview-switch-control,
+.pdf-preview-button-row > button {
+  flex: 0 0 auto;
 }
 
 .pdf-preview-template-label {
@@ -3667,11 +3837,19 @@ body.modal-open .pdf-preview-iframe {
   white-space: nowrap;
 }
 
+.pdf-icon-only-button {
+  width: 40px;
+  min-width: 40px;
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
 .pdf-preview-card .panel-header {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(190px, 0.72fr) minmax(0, 1.28fr);
   align-items: start;
-  gap: 12px;
+  gap: 14px;
 }
 
 @media (max-width: 1160px) {
@@ -3681,8 +3859,17 @@ body.modal-open .pdf-preview-iframe {
     justify-content: flex-start;
   }
 
-  .pdf-preview-button-row {
-    flex-basis: 100%;
+  .pdf-preview-card .panel-header {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-review-layout.is-resizable {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .panel-review-divider {
+    display: none;
   }
 }
 
