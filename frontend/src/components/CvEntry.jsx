@@ -185,6 +185,7 @@ export default function CvEntry({
   applicationContextDefaultCollapsed = false,
   collapsible = false,
   defaultCollapsed = false,
+  autoCollapseOnScroll = false,
   remapSuggestionBuilder,
   tailorContext = null
 }) {
@@ -346,6 +347,26 @@ export default function CvEntry({
       setEntryCollapsed(true);
     }
   }, [defaultCollapsed]);
+
+  useEffect(() => {
+    if (!collapsible || !autoCollapseOnScroll || entryCollapsed) return;
+    if (applicationContextOpen || profileBrowserOpen) return;
+
+    const onScroll = () => {
+      if (window.scrollY > 260) {
+        setEntryCollapsed(true);
+      }
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [
+    collapsible,
+    autoCollapseOnScroll,
+    entryCollapsed,
+    applicationContextOpen,
+    profileBrowserOpen
+  ]);
 
   const handleProfileSelect = (profile) => {
     if (profileTableCollapsedByDefault) {
@@ -848,114 +869,133 @@ export default function CvEntry({
               </div>
             </details>
           ) : (
-            <>
-          <div>
-            <label htmlFor="profileSearch" className="label">Search profiles</label>
-            <div className="cv-search-row">
-              <input
-                ref={searchInputRef}
-                id="profileSearch"
-                type="text"
-                placeholder="Search by profile name, company, status, job title, description, or CV text"
-                value={profileSearchDraft}
-                onChange={(e) => setProfileSearchDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Tab" && e.shiftKey) {
-                    e.preventDefault();
-                    refreshButtonRef.current?.focus();
-                    return;
-                  }
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    searchButtonRef.current?.click();
-                    searchButtonRef.current?.focus();
-                    return;
-                  }
-                  if (e.key === "Tab" && !e.shiftKey) {
-                    e.preventDefault();
-                    searchButtonRef.current?.focus();
-                  }
-                }}
-              />
-              <div className="cv-search-actions">
-                <button
-                  ref={searchButtonRef}
-                  type="button"
-                  className="primary cv-search-button"
-                  onClick={() => setProfileSearchQuery(profileSearchDraft)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Tab" && !e.shiftKey) {
-                      e.preventDefault();
-                      resetButtonRef.current?.focus();
-                    }
-                  }}
-                >
-                  <Search size={14} />
-                  Search
-                </button>
-                <button
-                  ref={resetButtonRef}
-                  type="button"
-                  className="ghost cv-reset-button"
-                  onClick={() => {
-                    setProfileSearchDraft("");
-                    setProfileSearchQuery("");
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Tab" && e.shiftKey) {
-                      e.preventDefault();
-                      searchButtonRef.current?.focus();
-                      return;
-                    }
-                    if (e.key === "Tab" && !e.shiftKey) {
-                      e.preventDefault();
-                      if (!hideCreateProfileButton) {
-                        createButtonRef.current?.focus();
-                      } else {
-                        focusFirstRow();
+            <div className={`cv-profile-browser-layout${selectedProfile ? " has-selection" : ""}`}>
+              <div className="cv-profile-browser-search">
+                <label htmlFor="profileSearch" className="label">Search profiles</label>
+                <div className="cv-search-row">
+                  <input
+                    ref={searchInputRef}
+                    id="profileSearch"
+                    type="text"
+                    placeholder="Search by profile name, company, status, job title, description, or CV text"
+                    value={profileSearchDraft}
+                    onChange={(e) => setProfileSearchDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Tab" && e.shiftKey) {
+                        e.preventDefault();
+                        return;
                       }
-                    }
-                  }}
-                >
-                  <RotateCcw size={14} />
-                  Reset
-                </button>
-                <div className="cv-search-profile-actions">
-                  {!hideCreateProfileButton ? (
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        searchButtonRef.current?.click();
+                        searchButtonRef.current?.focus();
+                        return;
+                      }
+                      if (e.key === "Tab" && !e.shiftKey) {
+                        e.preventDefault();
+                        searchButtonRef.current?.focus();
+                      }
+                    }}
+                  />
+                  <div className="cv-search-actions">
                     <button
-                      ref={createButtonRef}
+                      ref={searchButtonRef}
                       type="button"
-                      className="primary cv-create-button"
-                      onClick={openNewEntryDialog}
+                      className="primary cv-search-button"
+                      onClick={() => setProfileSearchQuery(profileSearchDraft)}
                       onKeyDown={(e) => {
                         if (e.key === "Tab" && !e.shiftKey) {
                           e.preventDefault();
-                          focusFirstRow();
+                          resetButtonRef.current?.focus();
                         }
                       }}
                     >
-                      <Plus size={14} />
-                      Create new CV Profile
+                      <Search size={14} />
+                      Search
                     </button>
-                  ) : null}
+                    <button
+                      ref={resetButtonRef}
+                      type="button"
+                      className="ghost cv-reset-button"
+                      onClick={() => {
+                        setProfileSearchDraft("");
+                        setProfileSearchQuery("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Tab" && e.shiftKey) {
+                          e.preventDefault();
+                          searchButtonRef.current?.focus();
+                          return;
+                        }
+                        if (e.key === "Tab" && !e.shiftKey) {
+                          e.preventDefault();
+                          if (!hideCreateProfileButton) {
+                            createButtonRef.current?.focus();
+                          } else {
+                            focusFirstRow();
+                          }
+                        }
+                      }}
+                    >
+                      <RotateCcw size={14} />
+                      Reset
+                    </button>
+                    <div className="cv-search-profile-actions">
+                      {!hideCreateProfileButton ? (
+                        <button
+                          ref={createButtonRef}
+                          type="button"
+                          className="primary cv-create-button"
+                          onClick={openNewEntryDialog}
+                          onKeyDown={(e) => {
+                            if (e.key === "Tab" && !e.shiftKey) {
+                              e.preventDefault();
+                              focusFirstRow();
+                            }
+                          }}
+                        >
+                          <Plus size={14} />
+                          Create new CV Profile
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <div className="cv-profile-table-wrap">
-            <div className="cv-profile-table-wrap-inner" style={{ maxHeight: `${profileTableHeight}px` }}>
-            {renderProfileTable()}
+              <div className="cv-profile-browser-table">
+                <div className="cv-profile-table-wrap">
+                  <div className="cv-profile-table-wrap-inner" style={{ maxHeight: `${profileTableHeight}px` }}>
+                    {renderProfileTable()}
+                  </div>
+                  <div
+                    className="cv-profile-table-resizer"
+                    role="separator"
+                    aria-orientation="horizontal"
+                    onMouseDown={handleTableResizeStart}
+                    title="Drag to resize profile list height"
+                  />
+                </div>
+              </div>
+
+              {selectedProfile ? (
+                <div className="sub-card cv-profile-browser-details">
+                  <div className="sub-card-header">
+                    <strong>Selected profile details</strong>
+                  </div>
+                  <div className="cv-profile-details-grid">
+                    <span><strong>Profile:</strong> {selectedProfile.profile_id}</span>
+                    <span><strong>Company:</strong> {selectedProfile.company || "-"}</span>
+                    <span><strong>Status:</strong> {selectedProfile.application_status || "not set"}</span>
+                    <span><strong>Role:</strong> {selectedProfile.job_title || "-"}</span>
+                    <span><strong>Template:</strong> {selectedProfile.template_id || "awesomecv"}</span>
+                    <span><strong>Revision:</strong> r{selectedProfile.revision ?? 0}</span>
+                    <span><strong>Updated:</strong> {formatDateTime(selectedProfile.updated_at || selectedProfile.created_at)}</span>
+                    <span><strong>CV text:</strong> {String(selectedProfile?.audit?.raw_resume_text || "").trim() ? "Available" : "Missing"}</span>
+                  </div>
+                </div>
+              ) : null}
             </div>
-            <div
-              className="cv-profile-table-resizer"
-              role="separator"
-              aria-orientation="horizontal"
-              onMouseDown={handleTableResizeStart}
-              title="Drag to resize profile list height"
-            />
-          </div>
-            </>
           )}
 
           <div className="sub-card" style={{ marginTop: 4 }}>
@@ -975,7 +1015,7 @@ export default function CvEntry({
             </div>
             {applicationContextOpen ? (
               <>
-            <p className="helper">Track job details and keep CV source text here. Use it for both existing and new entries.</p>
+            <p className="helper">Edit the active profile context used for tailoring and PDF rendering.</p>
             <div className="field-grid">
               <div>
                 <label htmlFor="newProfileName" className="label">CV profile</label>
@@ -1014,36 +1054,6 @@ export default function CvEntry({
                   <option value="german">German</option>
                 </select>
               </div>
-              {cvTemplateId === "hipstercv" || cvTemplateId === "awesomecv" ? (
-                <div>
-                  <label htmlFor="ctxProfileImage" className="label">
-                    {cvTemplateId === "hipstercv" ? "Profile image (top bar)" : "Profile image"}
-                  </label>
-                  <input
-                    id="ctxProfileImage"
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    onChange={handleProfileImageChange}
-                    disabled={isUploadingProfileImage}
-                  />
-                  <p className="helper" style={{ marginTop: 6 }}>
-                    {applicationContext.profile_image
-                      ? `Current image: ${applicationContext.profile_image}`
-                      : "No image selected yet."}
-                  </p>
-                  {applicationContext.profile_image ? (
-                    <button
-                      type="button"
-                      className="ghost"
-                      style={{ marginTop: 6 }}
-                      onClick={() => onApplicationContextChange((prev) => ({ ...prev, profile_image: "" }))}
-                    >
-                      Remove profile image
-                    </button>
-                  ) : null}
-                  {profileImageError ? <p className="error">{profileImageError}</p> : null}
-                </div>
-              ) : null}
             </div>
 
             <div className="field-grid">
@@ -1090,6 +1100,39 @@ export default function CvEntry({
                   <option value="closed">Closed</option>
                 </select>
               </div>
+            </div>
+
+            <div className="field-grid">
+                {cvTemplateId === "hipstercv" || cvTemplateId === "awesomecv" ? (
+                  <div>
+                    <label htmlFor="ctxProfileImage" className="label">
+                      {cvTemplateId === "hipstercv" ? "Profile image (top bar)" : "Profile image"}
+                    </label>
+                    <input
+                      id="ctxProfileImage"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={handleProfileImageChange}
+                      disabled={isUploadingProfileImage}
+                    />
+                    <p className="helper" style={{ marginTop: 6 }}>
+                      {applicationContext.profile_image
+                        ? `Current image: ${applicationContext.profile_image}`
+                        : "No image selected yet."}
+                    </p>
+                    {applicationContext.profile_image ? (
+                      <button
+                        type="button"
+                        className="ghost"
+                        style={{ marginTop: 6 }}
+                        onClick={() => onApplicationContextChange((prev) => ({ ...prev, profile_image: "" }))}
+                      >
+                        Remove profile image
+                      </button>
+                    ) : null}
+                    {profileImageError ? <p className="error">{profileImageError}</p> : null}
+                  </div>
+                ) : null}
               <div style={{ gridColumn: "1 / -1" }}>
                 <label htmlFor="ctxJobUrl" className="label">Job URL</label>
                 <input

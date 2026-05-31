@@ -293,6 +293,9 @@ export default function App() {
   const [isPdfDownloading, setIsPdfDownloading] = useState(false);
   const [cvThemeColors, setCvThemeColors] = useState(DEFAULT_TEMPLATE_THEME_COLORS);
   const [isReranking, setIsReranking] = useState(false);
+  const [isJobDetailsPanelVisible, setIsJobDetailsPanelVisible] = useState(false);
+  const [isProfileBrowserPanelVisible, setIsProfileBrowserPanelVisible] = useState(false);
+  const [activeReviewNav, setActiveReviewNav] = useState("review");
 
   const searchTimerRef = useRef(null);
   const cvRemapTimerRef = useRef(null);
@@ -309,6 +312,9 @@ export default function App() {
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(SIDEBAR_MIN_WIDTH);
   const sidebarWidthRef = useRef(SIDEBAR_MIN_WIDTH);
+  const jobDetailsSectionRef = useRef(null);
+  const profileBrowserSectionRef = useRef(null);
+  const reviewSectionRef = useRef(null);
 
   const jobs = response?.jobs ?? [];
   const descriptionHtml = useJobDescription(selectedJob);
@@ -2089,6 +2095,84 @@ export default function App() {
     : (activeJobAction === "cover" ? "Cover letter" : "CV generation");
   const switchActionLabel = activeJobAction === "cover" ? "Switch to CV generation" : "Switch to Cover letter";
 
+  useEffect(() => {
+    if (!cvReview) {
+      setIsJobDetailsPanelVisible(false);
+      setIsProfileBrowserPanelVisible(false);
+      setActiveReviewNav("review");
+    }
+  }, [cvReview]);
+
+  useEffect(() => {
+    if (!cvReview) return;
+
+    const updateActiveNavFromScroll = () => {
+      const stickyOffset = 140;
+      const reviewRect = reviewSectionRef.current?.getBoundingClientRect();
+      const reviewTop = reviewRect?.top ?? Number.POSITIVE_INFINITY;
+      const profileTop = profileBrowserSectionRef.current?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
+      const detailTop = jobDetailsSectionRef.current?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
+      const reviewIsVisible = Boolean(reviewRect && reviewRect.top < window.innerHeight * 0.72 && reviewRect.bottom > stickyOffset);
+
+      // Once review cards are reached, keep CV review as active section.
+      if (reviewTop <= stickyOffset + 80 || reviewIsVisible) {
+        setActiveReviewNav("review");
+        return;
+      }
+
+      if (isProfileBrowserPanelVisible && profileTop <= stickyOffset + 80) {
+        setActiveReviewNav("profiles");
+        return;
+      }
+
+      if (isJobDetailsPanelVisible && detailTop <= stickyOffset + 80) {
+        setActiveReviewNav("details");
+        return;
+      }
+
+      if (isProfileBrowserPanelVisible) {
+        setActiveReviewNav("profiles");
+        return;
+      }
+
+      if (isJobDetailsPanelVisible) {
+        setActiveReviewNav("details");
+        return;
+      }
+
+      setActiveReviewNav("review");
+    };
+
+    updateActiveNavFromScroll();
+    window.addEventListener("scroll", updateActiveNavFromScroll, { passive: true });
+    return () => window.removeEventListener("scroll", updateActiveNavFromScroll);
+  }, [cvReview, isJobDetailsPanelVisible, isProfileBrowserPanelVisible]);
+
+  const handleOpenJobDetailsPanel = () => {
+    setIsProfileBrowserPanelVisible(false);
+    setIsJobDetailsPanelVisible(true);
+    setActiveReviewNav("details");
+    requestAnimationFrame(() => {
+      jobDetailsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  const handleOpenProfileBrowserPanel = () => {
+    setIsJobDetailsPanelVisible(false);
+    setIsProfileBrowserPanelVisible(true);
+    setActiveReviewNav("profiles");
+    requestAnimationFrame(() => {
+      profileBrowserSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  const handleOpenCvReviewSection = () => {
+    setActiveReviewNav("review");
+    requestAnimationFrame(() => {
+      reviewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
   const jobEditDecisionModal = jobEditDecisionDialog.isOpen ? (
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby="job-edit-decision-title">
       <div className="modal-backdrop" onClick={closeJobEditDecisionDialog} />
@@ -2186,7 +2270,35 @@ export default function App() {
               </>
             ) : (
               <>
-                <span className="action-pill">{actionLabel}</span>
+                {cvReview ? (
+                  <button
+                    type="button"
+                    className={`secondary panel-nav-toggle${activeReviewNav === "review" ? " is-active" : ""}`}
+                    onClick={handleOpenCvReviewSection}
+                  >
+                    CV review
+                  </button>
+                ) : (
+                  <span className="action-pill">{actionLabel}</span>
+                )}
+                {cvReview ? (
+                  <>
+                    <button
+                      type="button"
+                      className={`secondary panel-nav-toggle${activeReviewNav === "details" ? " is-active" : ""}`}
+                      onClick={handleOpenJobDetailsPanel}
+                    >
+                      View job details
+                    </button>
+                    <button
+                      type="button"
+                      className={`secondary panel-nav-toggle${activeReviewNav === "profiles" ? " is-active" : ""}`}
+                      onClick={handleOpenProfileBrowserPanel}
+                    >
+                      Browse CV profiles
+                    </button>
+                  </>
+                ) : null}
                 {showActionSwitcher && (
                   <button
                     className="cta cta-switch"
@@ -2199,16 +2311,90 @@ export default function App() {
             )}
           </div>
         </header>
-        <div className={`panel-body ${showActionsPanel || cvReview ? "" : "is-single"} ${isW1ReviewLayout ? "is-review-layout" : ""}`}>
-          <div className={`panel-column ${isW1ReviewLayout ? "is-review-layout" : ""}`}>
+        {cvReview && isJobDetailsPanelVisible ? (
+          <div ref={jobDetailsSectionRef} className="panel-inline-section">
             <JobDetailsCard
               job={selectedJob}
               descriptionHtml={descriptionHtml}
-              collapsible={showActionsPanel || Boolean(cvReview)}
-              defaultCollapsed={showActionsPanel || Boolean(cvReview)}
+              collapsible={false}
+              defaultCollapsed={false}
             />
+          </div>
+        ) : null}
+        {cvReview && isProfileBrowserPanelVisible ? (
+          <div ref={profileBrowserSectionRef} className="panel-inline-section">
+            <CvEntry
+              cvProfiles={cvProfiles}
+              profilesLoading={profilesLoading}
+              profilesError={profilesError}
+              selectedProfileId={selectedProfileId}
+              onSelectedProfileIdChange={setSelectedProfileId}
+              onProfileRowSelect={(profile) => loadProfileIntoJobCvContext(profile?.profile_id || "")}
+              onRefreshProfiles={loadProfiles}
+              onUpdateProfileCvText={handleUpdateApplicationProfileData}
+              onRemapProfileCvText={handleRemapProfileCvText}
+              onCreateNewEntry={handleCreateNewEntry}
+              onBeginNewEntry={handleBeginNewEntry}
+              isCreatingProfileEntry={isCreatingProfileEntry}
+              isLoadingProfile={isLoadingProfile}
+              isUpdatingProfileCvText={isUpdatingProfileCvText}
+              isRemappingProfileCvText={isRemappingProfileCvText}
+              isUploadingProfileImage={isUploadingProfileImage}
+              remapProgress={cvRemapProgress}
+              cvEntryError={cvEntryError}
+              cvTemplateId={cvTemplateId}
+              onCvTemplateIdChange={handleTemplateIdChange}
+              cvOutputLanguage={cvOutputLanguage}
+              onCvOutputLanguageChange={setCvOutputLanguage}
+              applicationContext={applicationContext}
+              onApplicationContextChange={handleApplicationContextChange}
+              onUploadProfileImage={handleUploadProfileImage}
+              resumeText={resumeText}
+              onResumeTextChange={setResumeText}
+              newProfileId={newProfileId}
+              draftProfileId={draftProfileId}
+              isDraftProfileActive={isDraftProfileActive}
+              contextMode="job"
+              hideCreateProfileButton
+              hideUpdateAction
+              hideTailorAction={!showW1TailorAction || Boolean(cvReview)}
+              hideTailorProgress={Boolean(cvReview)}
+              profileTableCollapsedByDefault={false}
+              applicationContextDefaultCollapsed={false}
+              collapsible={false}
+              defaultCollapsed={false}
+              autoCollapseOnScroll={false}
+              tailorActionDisabled={isRemappingProfileCvText || isLoadingProfile || !resumeText.trim()}
+              remapSuggestionBuilder={({ defaultSuggested, selectedProfile: profile }) => {
+                const baseId = profile?.profile_id || selectedProfileId || newProfileId || defaultSuggested || "profile";
+                return buildCompanySuffixProfileId({
+                  baseId,
+                  company: selectedJob?.company || applicationContext.company || "company"
+                });
+              }}
+              tailorContext={{
+                jobTitle: selectedJob?.title || applicationContext.job_title || "",
+                company: selectedJob?.company || applicationContext.company || "",
+                sourceProfileId: selectedProfileId || "",
+                targetProfileId: newProfileId || "",
+                templateId: cvTemplateId,
+                outputLanguage: cvOutputLanguage
+              }}
+            />
+          </div>
+        ) : null}
+        <div className={`panel-body ${showActionsPanel || cvReview ? "" : "is-single"} ${isW1ReviewLayout ? "is-review-layout" : ""}`}>
+          <div className={`panel-column ${isW1ReviewLayout ? "is-review-layout" : ""}`}>
+            {!cvReview ? (
+              <JobDetailsCard
+                job={selectedJob}
+                descriptionHtml={descriptionHtml}
+                collapsible={showActionsPanel || Boolean(cvReview)}
+                defaultCollapsed={showActionsPanel || Boolean(cvReview)}
+              />
+            ) : null}
             {cvReview && showW1ReviewCards && (
-              <div className="panel-review-main panel-review-main-preview">
+              <div ref={reviewSectionRef} className="panel-review-main panel-review-main-preview">
                 <PdfPreviewCard
                   pdfUrl={pdfPreviewUrl}
                   isGenerating={isPdfGenerating}
@@ -2235,7 +2421,7 @@ export default function App() {
           </div>
           {showActionsPanel || cvReview ? (
             <div className={`panel-column ${isW1ReviewLayout ? "is-review-layout" : ""}`}>
-              {showActionsPanel && (
+              {showActionsPanel && !cvReview && (
                 showJobCvEntryPanel ? (
                   <CvEntry
                     cvProfiles={cvProfiles}
@@ -2275,6 +2461,9 @@ export default function App() {
                     hideTailorProgress={Boolean(cvReview)}
                     profileTableCollapsedByDefault
                     applicationContextDefaultCollapsed={Boolean(cvReview)}
+                    collapsible={Boolean(cvReview)}
+                    defaultCollapsed={Boolean(cvReview)}
+                    autoCollapseOnScroll={Boolean(cvReview)}
                     tailorActionDisabled={isRemappingProfileCvText || isLoadingProfile || !resumeText.trim()}
                     remapSuggestionBuilder={({ defaultSuggested, selectedProfile: profile }) => {
                       const baseId = profile?.profile_id || selectedProfileId || newProfileId || defaultSuggested || "profile";
@@ -2500,6 +2689,7 @@ export default function App() {
                     applicationContextDefaultCollapsed
                     collapsible={Boolean(cvReview)}
                     defaultCollapsed={Boolean(cvReview)}
+                    autoCollapseOnScroll={Boolean(cvReview)}
                   />
                 </section>
                 <div className="create-review-layout">

@@ -58,8 +58,8 @@ export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defa
         >
           <div>
             <p className="eyebrow">Job detail</p>
-            <h2>{job.title}</h2>
-            <p className="subtitle">{job.company}</p>
+            <h2>Details hidden</h2>
+            <p className="subtitle">{job.title} - {job.company}</p>
           </div>
           <button
             type="button"
@@ -209,7 +209,7 @@ export function PdfPreviewCard({
   const previewSrc = (() => {
     if (!pdfUrl) return "";
     const joiner = pdfUrl.includes("#") ? "&" : "#";
-    return `${pdfUrl}${joiner}zoom=page-fit`;
+    return `${pdfUrl}${joiner}zoom=page-width`;
   })();
 
   const handleTemplateKeyDown = (event) => {

@@ -387,10 +387,14 @@ button:active:not(:disabled) {
   align-items: start;
 }
 
+.panel-inline-section {
+  padding: 0 24px;
+  display: grid;
+  gap: 14px;
+}
+
 .panel-body.is-review-layout {
-  align-items: stretch;
-  height: calc(100vh - 108px);
-  overflow: hidden;
+  align-items: start;
 }
 
 .panel-body.is-single {
@@ -404,15 +408,21 @@ button:active:not(:disabled) {
 
 .panel-column.is-review-layout {
   min-height: 0;
-  height: 100%;
-  grid-template-rows: auto 1fr;
-  align-content: stretch;
+  grid-template-rows: auto minmax(680px, 1fr);
+  align-content: start;
+}
+
+.panel-column.is-review-layout:first-child {
+  position: sticky;
+  top: 116px;
+  align-self: start;
 }
 
 .panel-review-main {
   display: grid;
-  min-height: 0;
-  height: 100%;
+  min-height: clamp(720px, calc(100vh - 160px), 980px);
+  height: clamp(720px, calc(100vh - 160px), 980px);
+  max-height: clamp(720px, calc(100vh - 160px), 980px);
 }
 
 .panel-review-main-preview .pdf-preview-card,
@@ -503,7 +513,81 @@ button:active:not(:disabled) {
 
 .cv-entry-panel {
   display: grid;
+  gap: 18px;
+}
+
+.cv-profile-browser-layout {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+.cv-profile-browser-layout.has-selection {
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.9fr);
+  align-items: start;
+}
+
+.cv-profile-browser-search {
+  grid-column: 1 / -1;
+}
+
+.cv-profile-browser-search .label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.cv-profile-browser-table,
+.cv-profile-browser-details {
+  min-width: 0;
+}
+
+.cv-profile-details-grid {
+  display: grid;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #334155;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cv-profile-details-grid span {
+  padding-bottom: 4px;
+  border-bottom: 1px dashed #e5e7eb;
+}
+
+.cv-profile-browser-details {
+  align-content: start;
+  background: #fcfdff;
+  border-color: #dbe4f0;
   gap: 14px;
+}
+
+.cv-entry .sub-card-header strong {
+  font-size: 24px;
+  line-height: 1.2;
+  color: #111827;
+}
+
+.cv-entry .label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #475569;
+}
+
+.cv-entry .field-grid {
+  gap: 14px;
+}
+
+.cv-entry input,
+.cv-entry select,
+.cv-entry textarea {
+  font-size: 14px;
+}
+
+.cv-entry .helper {
+  line-height: 1.45;
 }
 
 .cv-working-copy-note {
@@ -1451,6 +1535,17 @@ button:active:not(:disabled) {
   margin-left: auto;
 }
 
+.panel-nav-toggle {
+  border-color: #cbd5e1;
+  color: #1f2937;
+}
+
+.panel-nav-toggle.is-active {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
 .cta {
   border: none;
   padding: 10px 16px;
@@ -1550,7 +1645,7 @@ button:active:not(:disabled) {
 
 .panel-card .panel-header h2,
 .cv-entry-header h3 {
-  font-size: 28px;
+  font-size: clamp(24px, 1.1vw + 12px, 30px);
   line-height: 1.15;
   font-weight: 800;
   margin: 0;
@@ -1802,10 +1897,10 @@ select {
 .cv-coach-card {
   display: grid;
   gap: 8px;
-  padding: 12px;
   border: 1px solid #dbeafe;
   border-radius: 12px;
   background: #f8fbff;
+  padding: 20px;
 }
 
 .cv-coach-title {
@@ -1813,6 +1908,14 @@ select {
   font-size: 13px;
   font-weight: 700;
   color: #1e3a8a;
+}
+
+.job-panel .panel-header h2 {
+  font-size: clamp(22px, 0.7vw + 18px, 30px);
+}
+
+.job-panel-collapsed .panel-header h2 {
+  font-size: clamp(18px, 0.45vw + 14px, 22px);
 }
 
 .cv-coach-actions {
@@ -1971,10 +2074,16 @@ select {
 .job-list li {
   padding: 16px;
   border-radius: 16px;
-  border: 1px solid #e6e6e6;
-  background: #ffffff;
+  border: 1px solid #dbe4f0;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05);
   display: grid;
   gap: 8px;
+}
+
+.job-list li:hover {
+  border-color: #c6d4e6;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
 }
 
 .job-title {
@@ -2028,6 +2137,12 @@ select {
   gap: 12px;
   font-size: 13px;
   color: #5f5f5f;
+}
+
+.job-meta span + span::before {
+  content: "•";
+  margin-right: 12px;
+  color: #94a3b8;
 }
 
 .details-unavailable {
@@ -3272,6 +3387,15 @@ body.modal-open .pdf-preview-iframe {
 
   .panel-review-main {
     height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .panel-column.is-review-layout:first-child,
+  .panel-review-main-preview,
+  .panel-review-main-editor {
+    position: static;
+    top: auto;
   }
 
   .panel-review-main-preview .pdf-preview-card,
@@ -3323,13 +3447,13 @@ body.modal-open .pdf-preview-iframe {
 }
 
 .pdf-preview-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
+  display: grid;
+  gap: 10px;
+  align-items: start;
   justify-content: flex-start;
+  width: 100%;
   min-width: 0;
-  flex: 1 1 560px;
+  flex: 1 1 auto;
 }
 
 .pdf-preview-controls-row {
@@ -3337,9 +3461,9 @@ body.modal-open .pdf-preview-iframe {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-start;
-  align-items: center;
+  align-items: flex-start;
   min-width: 0;
-  flex: 1 1 auto;
+  width: 100%;
 }
 
 .pdf-preview-button-row {
@@ -3347,8 +3471,8 @@ body.modal-open .pdf-preview-iframe {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-start;
-  align-items: center;
-  flex: 0 0 auto;
+  align-items: flex-start;
+  width: 100%;
 }
 
 .pdf-preview-button-row .pdf-preview-switch-control {
@@ -3365,8 +3489,8 @@ body.modal-open .pdf-preview-iframe {
 }
 
 .pdf-preview-template-control {
-  display: inline-flex;
-  align-items: center;
+  display: inline-grid;
+  align-items: start;
   gap: 8px;
   min-width: 0;
 }
@@ -3428,8 +3552,8 @@ body.modal-open .pdf-preview-iframe {
 }
 
 .pdf-preview-switch-control {
-  display: inline-flex;
-  align-items: center;
+  display: inline-grid;
+  align-items: start;
   gap: 8px;
   white-space: nowrap;
 }
@@ -3476,8 +3600,10 @@ body.modal-open .pdf-preview-iframe {
 }
 
 .pdf-preview-card .panel-header {
-  align-items: flex-start;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: 12px;
 }
 
 @media (max-width: 1160px) {
@@ -3489,6 +3615,20 @@ body.modal-open .pdf-preview-iframe {
 
   .pdf-preview-button-row {
     flex-basis: 100%;
+  }
+}
+
+@media (max-width: 1080px) {
+  .cv-profile-browser-layout.has-selection {
+    grid-template-columns: 1fr;
+  }
+
+  .cv-context-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cv-profile-details-grid {
+    grid-template-columns: 1fr;
   }
 }
 
