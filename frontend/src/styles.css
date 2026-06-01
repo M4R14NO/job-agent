@@ -3693,7 +3693,7 @@ body.modal-open .pdf-preview-iframe {
   display: flex;
   flex-wrap: nowrap;
   gap: 8px 12px;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-start;
   width: auto;
   max-width: 100%;
@@ -3706,7 +3706,7 @@ body.modal-open .pdf-preview-iframe {
   flex-wrap: nowrap;
   gap: 8px;
   justify-content: flex-start;
-  align-items: center;
+  align-items: flex-start;
   min-width: 0;
   flex: 0 0 auto;
   width: auto;
@@ -3717,7 +3717,7 @@ body.modal-open .pdf-preview-iframe {
   flex-wrap: nowrap;
   gap: 8px;
   justify-content: flex-start;
-  align-items: center;
+  align-items: flex-start;
   min-width: 0;
   flex: 0 0 auto;
   width: auto;
@@ -3740,6 +3740,7 @@ body.modal-open .pdf-preview-iframe {
 .pdf-preview-template-control {
   display: inline-grid;
   align-items: start;
+  align-content: start;
   gap: 8px;
   min-width: 0;
 }
@@ -3760,6 +3761,7 @@ body.modal-open .pdf-preview-iframe {
 .pdf-preview-template-label {
   font-size: 12px;
   font-weight: 700;
+  line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #475569;
@@ -3816,6 +3818,7 @@ body.modal-open .pdf-preview-iframe {
 .pdf-preview-switch-control {
   display: inline-grid;
   align-items: start;
+  align-content: start;
   gap: 8px;
   white-space: nowrap;
 }
