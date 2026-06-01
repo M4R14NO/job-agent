@@ -293,6 +293,7 @@ export default function App() {
   const [searchPhaseMessage, setSearchPhaseMessage] = useState("");
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MIN_WIDTH);
   const [reviewPreviewWidth, setReviewPreviewWidth] = useState(null);
+  const [createReviewPreviewWidth, setCreateReviewPreviewWidth] = useState(null);
   const [cvPreviewPayload, setCvPreviewPayload] = useState(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
@@ -316,15 +317,20 @@ export default function App() {
   const queryDebugDataRef = useRef(null);
   const isResizingSidebarRef = useRef(false);
   const isResizingReviewRef = useRef(false);
+  const isResizingCreateReviewRef = useRef(false);
   const resizeStartXRef = useRef(0);
   const resizeStartWidthRef = useRef(SIDEBAR_MIN_WIDTH);
   const reviewResizeStartXRef = useRef(0);
   const reviewResizeStartWidthRef = useRef(0);
+  const createReviewResizeStartXRef = useRef(0);
+  const createReviewResizeStartWidthRef = useRef(0);
   const sidebarWidthRef = useRef(SIDEBAR_MIN_WIDTH);
   const reviewLayoutRef = useRef(null);
+  const createReviewLayoutRef = useRef(null);
   const jobDetailsSectionRef = useRef(null);
   const profileBrowserSectionRef = useRef(null);
   const reviewSectionRef = useRef(null);
+  const createReviewSectionRef = useRef(null);
   const shouldFocusReviewAfterProfileLoadRef = useRef(false);
 
   const jobs = response?.jobs ?? [];
@@ -726,33 +732,7 @@ export default function App() {
   }, [isRemappingProfileCvText]);
 
   useEffect(() => {
-    const handleMouseMove = (event) => {
-      if (isResizingSidebarRef.current) {
-        const delta = event.clientX - resizeStartXRef.current;
-        const nextWidth = Math.min(
-          Math.max(resizeStartWidthRef.current + delta, SIDEBAR_MIN_WIDTH),
-          SIDEBAR_MAX_WIDTH
-        );
-        setSidebarWidth(nextWidth);
-        return;
-      }
-
-      if (!isResizingReviewRef.current) return;
-      const layoutRect = reviewLayoutRef.current?.getBoundingClientRect();
-      if (!layoutRect) return;
-      const delta = event.clientX - reviewResizeStartXRef.current;
-      const maxPreviewWidth = Math.max(
-        REVIEW_PREVIEW_MIN_WIDTH,
-        layoutRect.width - REVIEW_EDITOR_MIN_WIDTH - REVIEW_SPLITTER_WIDTH
-      );
-      const nextPreviewWidth = Math.min(
-        Math.max(reviewResizeStartWidthRef.current + delta, REVIEW_PREVIEW_MIN_WIDTH),
-        maxPreviewWidth
-      );
-      setReviewPreviewWidth(nextPreviewWidth);
-    };
-
-    const handleMouseUp = () => {
+    const stopResizeInteractions = () => {
       let released = false;
       if (isResizingSidebarRef.current) {
         isResizingSidebarRef.current = false;
@@ -763,17 +743,74 @@ export default function App() {
         isResizingReviewRef.current = false;
         released = true;
       }
+      if (isResizingCreateReviewRef.current) {
+        isResizingCreateReviewRef.current = false;
+        released = true;
+      }
       if (released) {
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
       }
     };
 
+    const handleMouseMove = (event) => {
+      if (event.buttons === 0) {
+        stopResizeInteractions();
+        return;
+      }
+
+      if (isResizingSidebarRef.current) {
+        const delta = event.clientX - resizeStartXRef.current;
+        const nextWidth = Math.min(
+          Math.max(resizeStartWidthRef.current + delta, SIDEBAR_MIN_WIDTH),
+          SIDEBAR_MAX_WIDTH
+        );
+        setSidebarWidth(nextWidth);
+        return;
+      }
+
+      if (isResizingReviewRef.current) {
+        const layoutRect = reviewLayoutRef.current?.getBoundingClientRect();
+        if (!layoutRect) return;
+        const delta = event.clientX - reviewResizeStartXRef.current;
+        const maxPreviewWidth = Math.max(
+          REVIEW_PREVIEW_MIN_WIDTH,
+          layoutRect.width - REVIEW_EDITOR_MIN_WIDTH - REVIEW_SPLITTER_WIDTH
+        );
+        const nextPreviewWidth = Math.min(
+          Math.max(reviewResizeStartWidthRef.current + delta, REVIEW_PREVIEW_MIN_WIDTH),
+          maxPreviewWidth
+        );
+        setReviewPreviewWidth(nextPreviewWidth);
+        return;
+      }
+
+      if (!isResizingCreateReviewRef.current) return;
+      const createLayoutRect = createReviewLayoutRef.current?.getBoundingClientRect();
+      if (!createLayoutRect) return;
+      const createDelta = event.clientX - createReviewResizeStartXRef.current;
+      const createMaxPreviewWidth = Math.max(
+        REVIEW_PREVIEW_MIN_WIDTH,
+        createLayoutRect.width - REVIEW_EDITOR_MIN_WIDTH - REVIEW_SPLITTER_WIDTH
+      );
+      const nextCreatePreviewWidth = Math.min(
+        Math.max(createReviewResizeStartWidthRef.current + createDelta, REVIEW_PREVIEW_MIN_WIDTH),
+        createMaxPreviewWidth
+      );
+      setCreateReviewPreviewWidth(nextCreatePreviewWidth);
+    };
+
     window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("mouseup", stopResizeInteractions);
+    window.addEventListener("pointerup", stopResizeInteractions);
+    window.addEventListener("pointercancel", stopResizeInteractions);
+    window.addEventListener("blur", stopResizeInteractions);
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("mouseup", stopResizeInteractions);
+      window.removeEventListener("pointerup", stopResizeInteractions);
+      window.removeEventListener("pointercancel", stopResizeInteractions);
+      window.removeEventListener("blur", stopResizeInteractions);
     };
   }, []);
 
@@ -2179,7 +2216,7 @@ export default function App() {
   };
 
   const handleReviewResizeStart = (event) => {
-    if (!isW1ReviewLayout || window.matchMedia("(max-width: 1160px)").matches) return;
+    if (!isW1ReviewLayout || window.matchMedia("(max-width: 960px)").matches) return;
     const layoutRect = reviewLayoutRef.current?.getBoundingClientRect();
     if (!layoutRect) return;
 
@@ -2190,6 +2227,23 @@ export default function App() {
     isResizingReviewRef.current = true;
     reviewResizeStartXRef.current = event.clientX;
     reviewResizeStartWidthRef.current = currentPreviewWidth;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    event.preventDefault();
+  };
+
+  const handleCreateReviewResizeStart = (event) => {
+    if (activeView !== "create" || window.matchMedia("(max-width: 960px)").matches) return;
+    const layoutRect = createReviewLayoutRef.current?.getBoundingClientRect();
+    if (!layoutRect) return;
+
+    const currentPreviewWidth = createReviewSectionRef.current?.getBoundingClientRect().width
+      || createReviewPreviewWidth
+      || (layoutRect.width * 0.5);
+
+    isResizingCreateReviewRef.current = true;
+    createReviewResizeStartXRef.current = event.clientX;
+    createReviewResizeStartWidthRef.current = currentPreviewWidth;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     event.preventDefault();
@@ -2210,6 +2264,9 @@ export default function App() {
   const showActionSwitcher = activeJobAction !== "none";
   const reviewLayoutStyle = reviewPreviewWidth
     ? { "--review-preview-width": `${Math.round(reviewPreviewWidth)}px` }
+    : undefined;
+  const createReviewLayoutStyle = createReviewPreviewWidth
+    ? { "--create-review-preview-width": `${Math.round(createReviewPreviewWidth)}px` }
     : undefined;
   const actionLabel = cvReview
     ? "CV review"
@@ -2566,7 +2623,6 @@ export default function App() {
                     aria-label="Resize preview and editor panels"
                     title="Drag to resize preview and editor"
                     onMouseDown={handleReviewResizeStart}
-                    onPointerDown={handleReviewResizeStart}
                   />
                   <div className="panel-review-pane panel-review-pane-editor">
                     <CvReview
@@ -2878,8 +2934,12 @@ export default function App() {
                     autoCollapseOnScroll={Boolean(cvReview)}
                   />
                 </section>
-                <div className="create-review-layout">
-                  <div className="create-review-pane create-review-pane-preview">
+                <div
+                  ref={createReviewLayoutRef}
+                  className="create-review-layout is-resizable"
+                  style={createReviewLayoutStyle}
+                >
+                  <div ref={createReviewSectionRef} className="create-review-pane create-review-pane-preview">
                     <PdfPreviewCard
                       pdfUrl={pdfPreviewUrl}
                       isGenerating={isPdfGenerating}
@@ -2902,6 +2962,14 @@ export default function App() {
                       disabledReason="Tailor the CV first to enable preview."
                     />
                   </div>
+                  <div
+                    className="panel-review-divider"
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label="Resize preview and editor panels"
+                    title="Drag to resize preview and editor"
+                    onMouseDown={handleCreateReviewResizeStart}
+                  />
                   <div className="create-review-pane create-review-pane-editor">
                     {cvReview ? (
                       <CvReview
