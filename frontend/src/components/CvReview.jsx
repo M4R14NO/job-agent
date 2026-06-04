@@ -466,6 +466,15 @@ const profileValuePreview = (value) => {
   return truncateValue(value);
 };
 
+const profileLabelMapPreview = (value) => {
+  if (!value || typeof value !== "object") return "(empty)";
+  const entries = Object.entries(value)
+    .filter(([, label]) => Boolean(String(label || "").trim()))
+    .map(([key, label]) => `${fieldLabel(key)}: ${label}`);
+  if (!entries.length) return "(empty)";
+  return truncateValue(entries.join("; "));
+};
+
 const stripInternalIds = (value) => {
   if (Array.isArray(value)) {
     return value.map((entry) => stripInternalIds(entry));
@@ -712,6 +721,17 @@ const buildOverwriteDiff = ({ existingProfile, pendingPayload, targetProfileId }
     });
   }
 
+  const existingSectionLabels = existingProfile?.section_labels || {};
+  const pendingSectionLabels = pendingPayload?.section_labels || {};
+  if (JSON.stringify(existingSectionLabels) !== JSON.stringify(pendingSectionLabels)) {
+    topLevelChanges.push({
+      key: "section_labels",
+      label: "Section titles",
+      oldValue: profileLabelMapPreview(existingSectionLabels),
+      newValue: profileLabelMapPreview(pendingSectionLabels)
+    });
+  }
+
   const sectionChanges = SECTION_DIFF_CONFIG
     .map((config) => buildSectionDiff({
       ...config,
@@ -777,6 +797,7 @@ export default function CvReview({
     })
   );
   const [sectionLabels, setSectionLabels] = useState(() => ({ ...SECTION_LABELS }));
+  const sectionLabelsRef = useRef({ ...SECTION_LABELS });
   const [editingLabelKey, setEditingLabelKey] = useState(null);
   const [rewriteOpen, setRewriteOpen] = useState(false);
   const [saveProfileOpen, setSaveProfileOpen] = useState(false);
@@ -878,6 +899,7 @@ export default function CvReview({
     show_profile_image: applicationContext?.show_profile_image !== false,
     data: formData,
     section_order: currentSectionOrder,
+    section_labels: sectionLabels,
     sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
     main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined
   };
@@ -945,7 +967,9 @@ export default function CvReview({
     setIsRewriting(false);
     setOpenPreviewEditors({});
     setHipsterPreviewTab("sidebar");
-    setSectionLabels({ ...SECTION_LABELS });
+    const nextSectionLabels = canonical?.section_labels ? { ...SECTION_LABELS, ...canonical.section_labels } : { ...SECTION_LABELS };
+    sectionLabelsRef.current = nextSectionLabels;
+    setSectionLabels(nextSectionLabels);
     setEditingLabelKey(null);
     setHiddenPersonalFields(new Set());
     hiddenPersonalFieldValuesRef.current = {};
@@ -1289,7 +1313,11 @@ export default function CvReview({
 
   const updateSectionLabel = (key, value) => {
     cancelScheduledPreview();
-    setSectionLabels((prev) => ({ ...prev, [key]: value }));
+      setSectionLabels((prev) => {
+        const next = { ...prev, [key]: value };
+        sectionLabelsRef.current = next;
+        return next;
+      });
     setPreviewPayload((prev) => prev ? { ...prev, section_labels: { ...(prev.section_labels || {}), [key]: value } } : prev);
   };
 
@@ -1455,7 +1483,8 @@ export default function CvReview({
       data: formData,
       section_order: currentSectionOrder,
       sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
-      main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined
+      main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined,
+      section_labels: sectionLabels
     };
 
     setIsSaving(true);
@@ -1629,7 +1658,7 @@ export default function CvReview({
         main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined,
         mapping_mode: "deterministic"
       });
-      setPreviewPayload(result.payload ? { ...result.payload, section_labels: sectionLabels } : null);
+      setPreviewPayload(result.payload ? { ...result.payload, section_labels: sectionLabelsRef.current } : null);
       setPreviewHash(nextHash);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Preview failed");

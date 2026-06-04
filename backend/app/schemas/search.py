@@ -302,6 +302,7 @@ class CvCanonicalProfile(BaseModel):
     section_order: list[str] | None = None
     sidebar_section_order: list[str] | None = None
     main_section_order: list[str] | None = None
+    section_labels: dict[str, str] | None = None
     audit: CvAuditTrail | None = None
 
 
