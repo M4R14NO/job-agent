@@ -223,10 +223,12 @@ export default function CvEntry({
   const [overwriteOnImport, setOverwriteOnImport] = useState(true);
   const [importError, setImportError] = useState("");
   const [isImportingProfiles, setIsImportingProfiles] = useState(false);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const searchInputRef = useRef(null);
   const searchButtonRef = useRef(null);
   const resetButtonRef = useRef(null);
-  const createButtonRef = useRef(null);
+  const actionsMenuButtonRef = useRef(null);
+  const actionsMenuContainerRef = useRef(null);
   const firstRowRef = useRef(null);
   const exampleButtonRef = useRef(null);
   const updateProfileButtonRef = useRef(null);
@@ -433,6 +435,29 @@ export default function CvEntry({
     applicationContextOpen,
     profileBrowserOpen
   ]);
+
+  useEffect(() => {
+    if (!actionsMenuOpen) return undefined;
+
+    const handleOutsideClick = (event) => {
+      if (!actionsMenuContainerRef.current?.contains(event.target)) {
+        setActionsMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key !== "Escape") return;
+      setActionsMenuOpen(false);
+      actionsMenuButtonRef.current?.focus();
+    };
+
+    window.addEventListener("mousedown", handleOutsideClick);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handleOutsideClick);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [actionsMenuOpen]);
 
   const handleProfileSelect = (profile) => {
     if (profileTableCollapsedByDefault) {
@@ -915,51 +940,92 @@ export default function CvEntry({
     }
   };
 
-  const renderProfileBulkActions = () => (
-    <div className="cv-bulk-actions">
-      {selectedPersistedProfileIds.length ? (
-        <button
-          type="button"
-          className="secondary"
-          onClick={handleExportSelectedProfiles}
-          disabled={isProfileBulkActionBusy}
-          title="Export selected profiles as JSON"
-        >
-          <Download size={14} />
-          Export selected
-        </button>
-      ) : null}
+  const renderProfileActionsDropdown = () => (
+    <div className="cv-actions-dropdown" ref={actionsMenuContainerRef}>
       <button
+        ref={actionsMenuButtonRef}
         type="button"
-        className="ghost"
-        onClick={handleExportAllProfiles}
-        disabled={isProfileBulkActionBusy || !cvProfiles.length}
-        title="Export all profiles as JSON"
+        className={`secondary cv-actions-dropdown-trigger${actionsMenuOpen ? " is-open" : ""}`}
+        onClick={() => setActionsMenuOpen((prev) => !prev)}
+        aria-haspopup="menu"
+        aria-expanded={actionsMenuOpen}
       >
-        <Download size={14} />
-        Export all
+        Actions
+        <ChevronDown size={14} />
       </button>
-      <button
-        type="button"
-        className="ghost"
-        onClick={() => importFileInputRef.current?.click()}
-        disabled={isProfileBulkActionBusy}
-        title="Import profiles from JSON"
-      >
-        <Upload size={14} />
-        Import JSON
-      </button>
-      {selectedPersistedProfileIds.length ? (
-        <button
-          type="button"
-          className="secondary cv-action-danger"
-          onClick={() => setDeleteDialogOpen(true)}
-          disabled={isProfileBulkActionBusy}
-          title="Delete selected profiles"
-        >
-          <Trash2 size={14} />
-          Delete selected
-        </button>
+      {actionsMenuOpen ? (
+        <div className="cv-actions-dropdown-menu" role="menu">
+          {!hideCreateProfileButton ? (
+            <button
+              type="button"
+              className="cv-actions-menu-item"
+              onClick={() => {
+                openNewEntryDialog(isJobMode ? "assign-id" : "create-and-save");
+                setActionsMenuOpen(false);
+              }}
+              role="menuitem"
+            >
+              <Plus size={14} />
+              New profile
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="cv-actions-menu-item"
+            onClick={() => {
+              handleExportAllProfiles();
+              setActionsMenuOpen(false);
+            }}
+            disabled={isProfileBulkActionBusy || !cvProfiles.length}
+            role="menuitem"
+          >
+            <Download size={14} />
+            Export all
+          </button>
+          <button
+            type="button"
+            className="cv-actions-menu-item"
+            onClick={() => {
+              importFileInputRef.current?.click();
+              setActionsMenuOpen(false);
+            }}
+            disabled={isProfileBulkActionBusy}
+            role="menuitem"
+          >
+            <Upload size={14} />
+            Import JSON
+          </button>
+          {selectedPersistedProfileIds.length ? (
+            <button
+              type="button"
+              className="cv-actions-menu-item"
+              onClick={() => {
+                handleExportSelectedProfiles();
+                setActionsMenuOpen(false);
+              }}
+              disabled={isProfileBulkActionBusy}
+              role="menuitem"
+            >
+              <Download size={14} />
+              Export selected
+            </button>
+          ) : null}
+          {selectedPersistedProfileIds.length ? (
+            <button
+              type="button"
+              className="cv-actions-menu-item is-danger"
+              onClick={() => {
+                setDeleteDialogOpen(true);
+                setActionsMenuOpen(false);
+              }}
+              disabled={isProfileBulkActionBusy}
+              role="menuitem"
+            >
+              <Trash2 size={14} />
+              Delete selected
+            </button>
+          ) : null}
+        </div>
       ) : null}
       <input
         ref={importFileInputRef}
@@ -1105,11 +1171,7 @@ export default function CvEntry({
                           }
                           if (e.key === "Tab" && !e.shiftKey) {
                             e.preventDefault();
-                            if (!hideCreateProfileButton) {
-                              createButtonRef.current?.focus();
-                            } else {
-                              focusFirstRow();
-                            }
+                            actionsMenuButtonRef.current?.focus();
                           }
                         }}
                       >
@@ -1117,30 +1179,7 @@ export default function CvEntry({
                         Reset
                       </button>
                       <div className="cv-search-profile-actions">
-                        {!hideCreateProfileButton ? (
-                          <button
-                            ref={createButtonRef}
-                            type="button"
-                            className="primary cv-create-button"
-                            onClick={() => openNewEntryDialog(isJobMode ? "assign-id" : "create-and-save")}
-                            title="Create new CV Profile"
-                            onKeyDown={(e) => {
-                              if (e.key === "Tab" && e.shiftKey) {
-                                e.preventDefault();
-                                resetButtonRef.current?.focus();
-                                return;
-                              }
-                              if (e.key === "Tab" && !e.shiftKey) {
-                                e.preventDefault();
-                                focusFirstRow();
-                              }
-                            }}
-                          >
-                            <Plus size={14} />
-                            New profile
-                          </button>
-                        ) : null}
-                        {renderProfileBulkActions()}
+                        {renderProfileActionsDropdown()}
                       </div>
                     </div>
                   </div>
@@ -1221,11 +1260,7 @@ export default function CvEntry({
                         }
                         if (e.key === "Tab" && !e.shiftKey) {
                           e.preventDefault();
-                          if (!hideCreateProfileButton) {
-                            createButtonRef.current?.focus();
-                          } else {
-                            focusFirstRow();
-                          }
+                          actionsMenuButtonRef.current?.focus();
                         }
                       }}
                     >
@@ -1233,25 +1268,7 @@ export default function CvEntry({
                       Reset
                     </button>
                     <div className="cv-search-profile-actions">
-                      {!hideCreateProfileButton ? (
-                        <button
-                          ref={createButtonRef}
-                          type="button"
-                          className="primary cv-create-button"
-                          onClick={() => openNewEntryDialog(isJobMode ? "assign-id" : "create-and-save")}
-                          title="Create new CV Profile"
-                          onKeyDown={(e) => {
-                            if (e.key === "Tab" && !e.shiftKey) {
-                              e.preventDefault();
-                              focusFirstRow();
-                            }
-                          }}
-                        >
-                          <Plus size={14} />
-                          New profile
-                        </button>
-                      ) : null}
-                      {renderProfileBulkActions()}
+                      {renderProfileActionsDropdown()}
                     </div>
                   </div>
                 </div>
