@@ -869,15 +869,77 @@ export default function CvEntry({
     }
   };
 
+  const resolveImportedProfileId = (profile) =>
+    String(
+      profile?.profile_id
+      || profile?.profileId
+      || profile?.id
+      || profile?.name
+      || ""
+    ).trim();
+
+  const collectImportCandidates = (payload) => {
+    const candidates = [];
+    const visited = new Set();
+
+    const walk = (node, depth = 0) => {
+      if (!node || depth > 5) return;
+      if (typeof node !== "object") return;
+      if (visited.has(node)) return;
+      visited.add(node);
+
+      if (Array.isArray(node)) {
+        node.forEach((entry) => walk(entry, depth + 1));
+        return;
+      }
+
+      const unwrapped = node.profile && typeof node.profile === "object"
+        ? node.profile
+        : node;
+
+      const looksLikeProfile = Boolean(
+        unwrapped.profile_id
+        || unwrapped.profileId
+        || (unwrapped.id && (unwrapped.revision != null || unwrapped.data || unwrapped.template_id))
+      );
+      if (looksLikeProfile) {
+        candidates.push(unwrapped);
+      }
+
+      [
+        node.profiles,
+        node.items,
+        node.entries,
+        node.data,
+        node.payload,
+        node.export,
+        node.value
+      ].forEach((child) => {
+        if (child && typeof child === "object") {
+          walk(child, depth + 1);
+        }
+      });
+
+      if (node.profiles && !Array.isArray(node.profiles) && typeof node.profiles === "object") {
+        Object.values(node.profiles).forEach((child) => {
+          if (child && typeof child === "object") {
+            walk(child, depth + 1);
+          }
+        });
+      }
+    };
+
+    walk(payload, 0);
+    return candidates;
+  };
+
   const openImportDialogFromFile = async (file) => {
     if (!file) return;
     setImportError("");
     try {
       const content = await file.text();
       const parsed = JSON.parse(content);
-      const importedProfiles = Array.isArray(parsed)
-        ? parsed
-        : (Array.isArray(parsed?.profiles) ? parsed.profiles : []);
+      const importedProfiles = collectImportCandidates(parsed);
       if (!importedProfiles.length) {
         setImportError("No profiles found in this JSON file.");
         return;
@@ -885,7 +947,7 @@ export default function CvEntry({
 
       const deduplicated = new Map();
       importedProfiles.forEach((profile) => {
-        const profileId = String(profile?.profile_id || "").trim();
+        const profileId = resolveImportedProfileId(profile);
         if (!profileId) return;
         deduplicated.set(profileId, { ...profile, profile_id: profileId });
       });

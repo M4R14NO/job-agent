@@ -621,16 +621,18 @@ export default function App() {
     setIsProfileBulkActionBusy(true);
     setCvEntryError("");
     try {
-      const outcomes = await Promise.allSettled(ids.map((id) => getCvProfile(id)));
-      const exported = [];
-      const failedIds = [];
-      outcomes.forEach((outcome, index) => {
-        if (outcome.status === "fulfilled") {
-          exported.push(outcome.value);
-        } else {
-          failedIds.push(ids[index]);
-        }
-      });
+      // Use one list call instead of many profile calls to avoid partial exports when requests fail.
+      const listed = await listCvProfiles();
+      const allProfiles = Array.isArray(listed?.profiles) ? listed.profiles : [];
+      const profileById = new Map(
+        allProfiles
+          .filter((profile) => profile?.profile_id)
+          .map((profile) => [profile.profile_id, profile])
+      );
+      const exported = ids
+        .map((id) => profileById.get(id))
+        .filter(Boolean);
+      const failedIds = ids.filter((id) => !profileById.has(id));
 
       if (!exported.length) {
         throw new Error("No profiles could be exported.");
@@ -638,8 +640,7 @@ export default function App() {
 
       downloadJson(
         {
-          export_version: "cv-profile-export-v1",
-          exported_at: new Date().toISOString(),
+          // Keep export format storage-compatible so imports can consume it reliably.
           profiles: exported
         },
         buildExportFilename()
@@ -663,12 +664,75 @@ export default function App() {
     const incomingProfiles = Array.isArray(profiles) ? profiles : [];
     if (!incomingProfiles.length) return;
 
+    const resolveImportedProfileId = (profile) =>
+      String(
+        profile?.profile_id
+        || profile?.profileId
+        || profile?.id
+        || profile?.name
+        || ""
+      ).trim();
+
+    const normalizeImportedProfile = ({ profilePayload, profileId, existing }) => {
+      const candidate = profilePayload?.profile && typeof profilePayload.profile === "object"
+        ? profilePayload.profile
+        : profilePayload;
+
+      const normalizedData = candidate?.data && typeof candidate.data === "object" && !Array.isArray(candidate.data)
+        ? candidate.data
+        : (existing?.data || {});
+
+      const normalizedAudit = candidate?.audit && typeof candidate.audit === "object" && !Array.isArray(candidate.audit)
+        ? candidate.audit
+        : (existing?.audit || {});
+
+      return {
+        schema_version: candidate?.schema_version || existing?.schema_version || CANONICAL_SCHEMA_VERSION,
+        profile_id: profileId,
+        revision: existing ? (existing.revision ?? 0) : 0,
+        template_id: candidate?.template_id || existing?.template_id || "awesomecv",
+        data: normalizedData,
+        company: candidate?.company ?? existing?.company ?? null,
+        application_status: candidate?.application_status ?? existing?.application_status ?? null,
+        application_date: candidate?.application_date ?? existing?.application_date ?? null,
+        job_title: candidate?.job_title ?? existing?.job_title ?? null,
+        job_description: candidate?.job_description ?? existing?.job_description ?? null,
+        job_url: candidate?.job_url ?? existing?.job_url ?? null,
+        theme_color: candidate?.theme_color ?? existing?.theme_color ?? null,
+        show_profile_image: typeof candidate?.show_profile_image === "boolean"
+          ? candidate.show_profile_image
+          : (existing?.show_profile_image ?? true),
+        header_text_align: candidate?.header_text_align ?? existing?.header_text_align ?? "right",
+        header_title_size: candidate?.header_title_size ?? existing?.header_title_size ?? "Huge",
+        header_subtitle_size: candidate?.header_subtitle_size ?? existing?.header_subtitle_size ?? "Large",
+        parent_profile_id: candidate?.parent_profile_id ?? existing?.parent_profile_id ?? null,
+        lineage_root_profile_id: candidate?.lineage_root_profile_id ?? existing?.lineage_root_profile_id ?? profileId,
+        lineage_depth: Number.isFinite(candidate?.lineage_depth)
+          ? Number(candidate.lineage_depth)
+          : (existing?.lineage_depth ?? 0),
+        branch_reason: candidate?.branch_reason ?? existing?.branch_reason ?? null,
+        section_order: Array.isArray(candidate?.section_order)
+          ? candidate.section_order
+          : (existing?.section_order || []),
+        sidebar_section_order: Array.isArray(candidate?.sidebar_section_order)
+          ? candidate.sidebar_section_order
+          : (existing?.sidebar_section_order || []),
+        main_section_order: Array.isArray(candidate?.main_section_order)
+          ? candidate.main_section_order
+          : (existing?.main_section_order || []),
+        section_labels: candidate?.section_labels && typeof candidate.section_labels === "object" && !Array.isArray(candidate.section_labels)
+          ? candidate.section_labels
+          : (existing?.section_labels || undefined),
+        audit: normalizedAudit
+      };
+    };
+
     setIsProfileBulkActionBusy(true);
     setCvEntryError("");
     try {
       const uniqueById = new Map();
       incomingProfiles.forEach((profile) => {
-        const id = String(profile?.profile_id || "").trim();
+        const id = resolveImportedProfileId(profile);
         if (!id) return;
         uniqueById.set(id, { ...profile, profile_id: id });
       });
@@ -696,11 +760,11 @@ export default function App() {
           continue;
         }
 
-        const savePayload = {
-          ...profilePayload,
-          profile_id: profileId,
-          revision: existing ? (existing.revision ?? 0) : 0
-        };
+        const savePayload = normalizeImportedProfile({
+          profilePayload,
+          profileId,
+          existing
+        });
 
         try {
           await saveCvProfile(profileId, savePayload);
