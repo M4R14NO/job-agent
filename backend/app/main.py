@@ -325,6 +325,7 @@ def enrich_linkedin_details(payload: LinkedInEnrichRequest) -> LinkedInEnrichRes
                 job_url=result.job_url,
                 job_id=result.job_id,
                 description=result.description,
+                description_html=result.description_html,
                 status=result.status,
                 error=result.error,
             )

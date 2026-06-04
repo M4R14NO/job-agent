@@ -1,5 +1,5 @@
 import { Spinner } from "@chakra-ui/react";
-import { Download, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { generateCoverLetter, parseCvCanonical } from "../api/llm";
 
@@ -29,6 +29,12 @@ const formatRerankReason = (reason) => {
 
 export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defaultCollapsed = false }) {
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+
+  useEffect(() => {
+    if (defaultCollapsed) {
+      setIsCollapsed(true);
+    }
+  }, [defaultCollapsed]);
   const rawRerankReason = job?.rerank_score != null && Array.isArray(job?.match_reasons)
     ? String(job.match_reasons[0] || "").trim()
     : "";
@@ -37,19 +43,34 @@ export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defa
   if (collapsible && isCollapsed) {
     return (
       <div className="panel-card job-panel job-panel-collapsed">
-        <div className="panel-header">
+        <div
+          className={`panel-header ${collapsible ? "is-collapsible-header" : ""}`}
+          onClick={() => setIsCollapsed(false)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              setIsCollapsed(false);
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          aria-label="Expand job detail"
+        >
           <div>
             <p className="eyebrow">Job detail</p>
-            <h2>{job.title}</h2>
-            <p className="subtitle">{job.company}</p>
+            <h2>Details hidden</h2>
+            <p className="subtitle">{job.title} - {job.company}</p>
           </div>
           <button
             type="button"
             className="ghost icon-button"
-            onClick={() => setIsCollapsed(false)}
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsCollapsed(false);
+            }}
             aria-label="Expand job detail"
           >
-            <span className="icon" aria-hidden="true">▸</span>
+            <ChevronRight size={15} />
             <span>Expand</span>
           </button>
         </div>
@@ -59,7 +80,19 @@ export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defa
 
   return (
     <div className="panel-card job-panel">
-      <div className="panel-header">
+      <div
+        className={`panel-header ${collapsible ? "is-collapsible-header" : ""}`}
+        onClick={collapsible ? () => setIsCollapsed(true) : undefined}
+        onKeyDown={collapsible ? ((event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setIsCollapsed(true);
+          }
+        }) : undefined}
+        role={collapsible ? "button" : undefined}
+        tabIndex={collapsible ? 0 : undefined}
+        aria-label={collapsible ? "Collapse job detail" : undefined}
+      >
         <div>
           <p className="eyebrow">Job detail</p>
           <h2>{job.title}</h2>
@@ -69,10 +102,13 @@ export function JobDetailsCard({ job, descriptionHtml, collapsible = false, defa
           <button
             type="button"
             className="ghost icon-button"
-            onClick={() => setIsCollapsed(true)}
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsCollapsed(true);
+            }}
             aria-label="Collapse job detail"
           >
-            <span className="icon" aria-hidden="true">▾</span>
+            <ChevronDown size={15} />
             <span>Collapse</span>
           </button>
         )}
@@ -166,9 +202,11 @@ export function PdfPreviewCard({
   disabled = false,
   disabledReason = ""
 }) {
-  const colorPresets = templateId === "hipstercv"
-    ? ["#496E8C", "#2F5D50", "#0F766E", "#374151", "#7C3AED", "#B45309"]
-    : ["#C0392B", "#E11D48", "#0F766E", "#2563EB", "#9333EA", "#EA580C"];
+  const previewSrc = (() => {
+    if (!pdfUrl) return "";
+    const joiner = pdfUrl.includes("#") ? "&" : "#";
+    return `${pdfUrl}${joiner}zoom=page-width`;
+  })();
 
   const handleTemplateKeyDown = (event) => {
     if (event.key === "Tab" && !event.shiftKey && !disabled && !isGenerating) {
@@ -212,29 +250,17 @@ export function PdfPreviewCard({
             )}
             {onThemeColorChange && (
               <div className="pdf-preview-template-control">
-                <span className="pdf-preview-template-label">Theme color</span>
-                <input
-                  id="pdf-preview-theme-color"
-                  className="pdf-preview-theme-color-input"
-                  type="color"
-                  value={themeColor || "#496E8C"}
-                  onChange={(event) => onThemeColorChange(event.target.value)}
-                  disabled={disabled || isGenerating}
-                  aria-label="Theme color"
-                />
-                <div className="pdf-preview-color-palette" role="group" aria-label="Theme color presets">
-                  {colorPresets.map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      className={`pdf-preview-color-swatch${(themeColor || "").toUpperCase() === preset.toUpperCase() ? " is-active" : ""}`}
-                      style={{ backgroundColor: preset }}
-                      onClick={() => onThemeColorChange(preset)}
-                      disabled={disabled || isGenerating}
-                      aria-label={`Set color ${preset}`}
-                      title={preset}
-                    />
-                  ))}
+                <span className="pdf-preview-template-label">Color</span>
+                <div className="pdf-preview-theme-color-row">
+                  <input
+                    id="pdf-preview-theme-color"
+                    className="pdf-preview-theme-color-input"
+                    type="color"
+                    value={themeColor || "#496E8C"}
+                    onChange={(event) => onThemeColorChange(event.target.value)}
+                    disabled={disabled || isGenerating}
+                    aria-label="Theme color"
+                  />
                 </div>
               </div>
             )}
@@ -242,7 +268,7 @@ export function PdfPreviewCard({
           <div className="pdf-preview-button-row">
             {onShowProfileImageChange && (
               <div className="pdf-preview-switch-control">
-                <span className="pdf-preview-template-label">Show image</span>
+                <span className="pdf-preview-template-label">Image</span>
                 <button
                   id="pdf-preview-show-image-toggle"
                   type="button"
@@ -260,24 +286,25 @@ export function PdfPreviewCard({
             <button
               id="pdf-update-preview-button"
               type="button"
-              className="secondary btn-sm"
+              className="secondary btn-sm pdf-icon-only-button"
               onClick={onUpdate}
               disabled={disabled || isGenerating}
               onKeyDown={handleUpdateKeyDown}
+              aria-label={isGenerating ? "Rendering preview" : "Render preview"}
+              title={isGenerating ? "Rendering preview" : "Render preview"}
             >
               <RefreshCw size={14} />
-              {isGenerating ? "Rendering…" : "Update preview"}
             </button>
             <button
               id="pdf-download-button"
               type="button"
-              className="primary btn-sm pdf-download-button"
+              className="primary btn-sm pdf-download-button pdf-icon-only-button"
               onClick={onDownload}
               disabled={disabled || isDownloading || !pdfUrl}
-              title={disabled ? disabledReason : (!pdfUrl ? "Render a preview first" : "Download the current PDF")}
+              aria-label={isDownloading ? "Downloading PDF" : "Save PDF"}
+              title={disabled ? disabledReason : (!pdfUrl ? "Render a preview first" : (isDownloading ? "Downloading PDF" : "Save PDF"))}
             >
               <Download size={14} />
-              {isDownloading ? "Downloading…" : "Download PDF"}
             </button>
           </div>
           {templateId === "hipstercv" && (
@@ -333,7 +360,7 @@ export function PdfPreviewCard({
           </div>
         ) : pdfUrl ? (
           <iframe
-            src={pdfUrl}
+            src={previewSrc}
             title="CV PDF preview"
             className="pdf-preview-iframe"
           />

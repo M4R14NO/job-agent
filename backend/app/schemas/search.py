@@ -109,6 +109,7 @@ class LinkedInEnrichItem(BaseModel):
     job_url: str
     job_id: str | None = None
     description: str | None = None
+    description_html: str | None = None
     status: str
     error: str | None = None
 
@@ -295,9 +296,14 @@ class CvCanonicalProfile(BaseModel):
     header_text_align: str | None = None
     header_title_size: str | None = None
     header_subtitle_size: str | None = None
+    parent_profile_id: str | None = None
+    lineage_root_profile_id: str | None = None
+    lineage_depth: int | None = None
+    branch_reason: str | None = None
     section_order: list[str] | None = None
     sidebar_section_order: list[str] | None = None
     main_section_order: list[str] | None = None
+    section_labels: dict[str, str] | None = None
     audit: CvAuditTrail | None = None
 
 

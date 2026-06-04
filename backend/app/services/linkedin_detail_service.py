@@ -5,9 +5,11 @@ from dataclasses import dataclass
 
 import httpx
 from bs4 import BeautifulSoup
-from markdownify import markdownify
 
 LINKEDIN_JOB_ID_RE = re.compile(r"/jobs/view/(?P<job_id>\d+)")
+
+# Attributes to strip from LinkedIn HTML before storing/displaying
+_STRIP_ATTRS = frozenset({"class", "style", "id", "dir"})
 
 
 @dataclass
@@ -16,6 +18,7 @@ class LinkedInDetailResult:
     job_id: str | None
     description: str | None
     status: str
+    description_html: str | None = None
     error: str | None = None
 
 
@@ -26,23 +29,29 @@ def parse_linkedin_job_id(job_url: str | None) -> str | None:
     return match.group("job_id") if match else None
 
 
-def _extract_description_from_html(html: str) -> str | None:
+def _extract_description_from_html(html: str) -> tuple[str | None, str | None]:
+    """Return (plain_text, clean_html) extracted from a LinkedIn job page HTML."""
     soup = BeautifulSoup(html, "html.parser")
     container = soup.find(
         "div",
         class_=lambda value: isinstance(value, str) and "show-more-less-html__markup" in value,
     )
     if container is None:
-        return None
+        return None, None
 
-    markdown = markdownify(str(container), heading_style="ATX")
-    if not markdown:
-        return None
+    # Plain text for LLM prompts and keyword ranking (no HTML noise).
+    plain_text = container.get_text(separator="\n", strip=True).strip() or None
 
-    # Keep semantic markdown while removing excessive empty lines.
-    lines = [line.rstrip() for line in markdown.splitlines()]
-    cleaned = "\n".join(lines).strip()
-    return cleaned or None
+    # Clean HTML for display: strip presentational / tracking attributes but
+    # keep all semantic tags (<strong>, <ul>, <li>, <p>, <br>, etc.) intact so
+    # the browser renders structure correctly.
+    for tag in container.find_all(True):
+        for attr in list(tag.attrs.keys()):
+            if attr in _STRIP_ATTRS or attr.startswith("data-"):
+                del tag[attr]
+    clean_html = container.decode_contents().strip() or None
+
+    return plain_text, clean_html
 
 
 def fetch_linkedin_job_details(
@@ -104,13 +113,14 @@ def fetch_linkedin_job_details(
             try:
                 response = client.get(job_url)
                 response.raise_for_status()
-                description = _extract_description_from_html(response.text)
-                if description:
+                description, description_html = _extract_description_from_html(response.text)
+                if description or description_html:
                     results.append(
                         LinkedInDetailResult(
                             job_url=job_url,
                             job_id=job_id,
                             description=description,
+                            description_html=description_html,
                             status="ok",
                         )
                     )
@@ -120,6 +130,7 @@ def fetch_linkedin_job_details(
                             job_url=job_url,
                             job_id=job_id,
                             description=None,
+                            description_html=None,
                             status="not_found",
                         )
                     )

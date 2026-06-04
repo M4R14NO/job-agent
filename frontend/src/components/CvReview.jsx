@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Progress, Spinner } from "@chakra-ui/react";
 import {
   Check,
   ChevronDown,
@@ -465,6 +466,15 @@ const profileValuePreview = (value) => {
   return truncateValue(value);
 };
 
+const profileLabelMapPreview = (value) => {
+  if (!value || typeof value !== "object") return "(empty)";
+  const entries = Object.entries(value)
+    .filter(([, label]) => Boolean(String(label || "").trim()))
+    .map(([key, label]) => `${fieldLabel(key)}: ${label}`);
+  if (!entries.length) return "(empty)";
+  return truncateValue(entries.join("; "));
+};
+
 const stripInternalIds = (value) => {
   if (Array.isArray(value)) {
     return value.map((entry) => stripInternalIds(entry));
@@ -711,6 +721,17 @@ const buildOverwriteDiff = ({ existingProfile, pendingPayload, targetProfileId }
     });
   }
 
+  const existingSectionLabels = existingProfile?.section_labels || {};
+  const pendingSectionLabels = pendingPayload?.section_labels || {};
+  if (JSON.stringify(existingSectionLabels) !== JSON.stringify(pendingSectionLabels)) {
+    topLevelChanges.push({
+      key: "section_labels",
+      label: "Section titles",
+      oldValue: profileLabelMapPreview(existingSectionLabels),
+      newValue: profileLabelMapPreview(pendingSectionLabels)
+    });
+  }
+
   const sectionChanges = SECTION_DIFF_CONFIG
     .map((config) => buildSectionDiff({
       ...config,
@@ -751,7 +772,14 @@ export default function CvReview({
   initialProfileId,
   applicationContext,
   onDraftStateChange,
-  onPreviewPayloadChange
+  onPreviewPayloadChange,
+  onProfileSaved,
+  onTailor,
+  isTailoring = false,
+  tailorProgress = null,
+  readOnly = false,
+  showTailorAction = true,
+  onEditProfile
 }) {
   const isHipsterTemplate = templateId === "hipstercv";
   const resolvedInitialProfileId = canonical?.profile_id || initialProfileId || "default";
@@ -769,6 +797,7 @@ export default function CvReview({
     })
   );
   const [sectionLabels, setSectionLabels] = useState(() => ({ ...SECTION_LABELS }));
+  const sectionLabelsRef = useRef({ ...SECTION_LABELS });
   const [editingLabelKey, setEditingLabelKey] = useState(null);
   const [rewriteOpen, setRewriteOpen] = useState(false);
   const [saveProfileOpen, setSaveProfileOpen] = useState(false);
@@ -870,6 +899,7 @@ export default function CvReview({
     show_profile_image: applicationContext?.show_profile_image !== false,
     data: formData,
     section_order: currentSectionOrder,
+    section_labels: sectionLabels,
     sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
     main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined
   };
@@ -937,7 +967,9 @@ export default function CvReview({
     setIsRewriting(false);
     setOpenPreviewEditors({});
     setHipsterPreviewTab("sidebar");
-    setSectionLabels({ ...SECTION_LABELS });
+    const nextSectionLabels = canonical?.section_labels ? { ...SECTION_LABELS, ...canonical.section_labels } : { ...SECTION_LABELS };
+    sectionLabelsRef.current = nextSectionLabels;
+    setSectionLabels(nextSectionLabels);
     setEditingLabelKey(null);
     setHiddenPersonalFields(new Set());
     hiddenPersonalFieldValuesRef.current = {};
@@ -1281,7 +1313,11 @@ export default function CvReview({
 
   const updateSectionLabel = (key, value) => {
     cancelScheduledPreview();
-    setSectionLabels((prev) => ({ ...prev, [key]: value }));
+      setSectionLabels((prev) => {
+        const next = { ...prev, [key]: value };
+        sectionLabelsRef.current = next;
+        return next;
+      });
     setPreviewPayload((prev) => prev ? { ...prev, section_labels: { ...(prev.section_labels || {}), [key]: value } } : prev);
   };
 
@@ -1342,7 +1378,24 @@ export default function CvReview({
         onDragLeave={dragKey ? (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOverKey(null); } : undefined}
         onDrop={dragKey ? () => { handleDrop(dragKey); setDragOverKey(null); } : undefined}
       >
-        <div className="section-header">
+        <div
+          className="section-header is-collapsible-header"
+          onClick={(event) => {
+            const target = event.target instanceof Element ? event.target : null;
+            const interactiveTarget = target?.closest("button, input, textarea, select, a, [role='button']");
+            if (interactiveTarget) return;
+            toggleExpandedSection(key);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              toggleExpandedSection(key);
+            }
+          }}
+          role="button"
+          tabIndex={0}
+          aria-expanded={isOpen}
+        >
           <div className="section-heading">
             {actions}
             <div>
@@ -1354,7 +1407,10 @@ export default function CvReview({
             <button
               type="button"
               className="ghost icon-button section-collapse-button"
-              onClick={() => toggleExpandedSection(key)}
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleExpandedSection(key);
+              }}
             >
               {isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
               <span>{isOpen ? "Collapse" : "Expand"}</span>
@@ -1397,6 +1453,7 @@ export default function CvReview({
   };
 
   const handleSave = async () => {
+    if (readOnly) return;
     setError("");
     setOverwriteDialog((prev) => ({ ...prev, error: "" }));
     const targetProfileId = profileId.trim();
@@ -1405,15 +1462,29 @@ export default function CvReview({
       return;
     }
 
+    const sourceProfileId = canonical?.profile_id || loadedProfileId || "";
+    const sourceRootProfileId = canonical?.lineage_root_profile_id || sourceProfileId || targetProfileId;
+    const sourceDepth = Number.isFinite(canonical?.lineage_depth)
+      ? Number(canonical.lineage_depth)
+      : 0;
+    const isNewBranchedId = Boolean(sourceProfileId) && sourceProfileId !== targetProfileId;
+
     const payload = {
       schema_version: schemaVersion,
       profile_id: targetProfileId,
       revision,
       template_id: templateId,
+      parent_profile_id: isNewBranchedId ? sourceProfileId : (canonical?.parent_profile_id ?? null),
+      lineage_root_profile_id: isNewBranchedId
+        ? sourceRootProfileId
+        : (canonical?.lineage_root_profile_id || targetProfileId),
+      lineage_depth: isNewBranchedId ? sourceDepth + 1 : (canonical?.lineage_depth ?? 0),
+      branch_reason: isNewBranchedId ? "manual-save-as" : (canonical?.branch_reason ?? null),
       data: formData,
       section_order: currentSectionOrder,
       sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
-      main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined
+      main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined,
+      section_labels: sectionLabels
     };
 
     setIsSaving(true);
@@ -1457,6 +1528,7 @@ export default function CvReview({
       setRevision(saved.revision);
       setLoadedProfileId(saved.profile_id);
       setLoadedRevision(saved.revision);
+      onProfileSaved?.(saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -1477,6 +1549,7 @@ export default function CvReview({
   };
 
   const handleConfirmOverwrite = async () => {
+    if (readOnly) return;
     if (!overwriteDialog.pendingPayload || !overwriteDialog.pendingTargetProfileId) return;
     setOverwriteDialog((prev) => ({ ...prev, error: "" }));
     setIsSaving(true);
@@ -1491,6 +1564,7 @@ export default function CvReview({
       setRevision(saved.revision);
       setLoadedProfileId(saved.profile_id);
       setLoadedRevision(saved.revision);
+      onProfileSaved?.(saved);
       closeOverwriteDialog();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Overwrite failed";
@@ -1501,6 +1575,7 @@ export default function CvReview({
   };
 
   const handleSaveAsNewFromDialog = async () => {
+    if (readOnly) return;
     const nextId = overwriteDialog.suggestedProfileId.trim();
     if (!nextId || !overwriteDialog.pendingPayload) {
       setOverwriteDialog((prev) => ({ ...prev, error: "Enter a new profile name." }));
@@ -1527,13 +1602,20 @@ export default function CvReview({
       const payload = {
         ...overwriteDialog.pendingPayload,
         profile_id: nextId,
-        revision: 0
+        revision: 0,
+        parent_profile_id: overwriteDialog.pendingTargetProfileId || overwriteDialog.pendingPayload.profile_id || null,
+        lineage_root_profile_id: overwriteDialog.pendingPayload.lineage_root_profile_id || overwriteDialog.pendingTargetProfileId || nextId,
+        lineage_depth: (Number.isFinite(overwriteDialog.pendingPayload.lineage_depth)
+          ? Number(overwriteDialog.pendingPayload.lineage_depth)
+          : 0) + 1,
+        branch_reason: "manual-save-as"
       };
       const saved = await saveCvProfile(nextId, payload);
       setProfileId(saved.profile_id);
       setRevision(saved.revision);
       setLoadedProfileId(saved.profile_id);
       setLoadedRevision(saved.revision);
+      onProfileSaved?.(saved);
       closeOverwriteDialog();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Save as new profile failed";
@@ -1544,6 +1626,7 @@ export default function CvReview({
   };
 
   const handleDelete = async () => {
+    if (readOnly) return;
     setError("");
     try {
       await deleteCvProfile(profileId);
@@ -1575,7 +1658,7 @@ export default function CvReview({
         main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined,
         mapping_mode: "deterministic"
       });
-      setPreviewPayload(result.payload ? { ...result.payload, section_labels: sectionLabels } : null);
+      setPreviewPayload(result.payload ? { ...result.payload, section_labels: sectionLabelsRef.current } : null);
       setPreviewHash(nextHash);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Preview failed");
@@ -1585,6 +1668,7 @@ export default function CvReview({
   };
 
   const handleRewrite = async () => {
+    if (readOnly) return;
     setError("");
     if (!model) {
       setError("Select a model to rewrite the canonical CV.");
@@ -3199,7 +3283,7 @@ export default function CvReview({
   };
 
   return (
-    <div className="panel-card cv-editor">
+    <div className={`panel-card cv-editor${readOnly ? " is-readonly" : ""}`}>
       <div className="panel-header">
         <div>
           <p className="eyebrow">CV editor</p>
@@ -3207,24 +3291,79 @@ export default function CvReview({
         </div>
       </div>
 
+      {readOnly ? (
+        <div className="cv-readonly-note">
+          <p className="helper" style={{ margin: 0 }}>
+            Read-only preview mode: this profile is opened for safe browsing. Use Tailor to create a new editable profile version.
+          </p>
+          <div className="cv-readonly-actions">
+            {showTailorAction && onTailor ? (
+              <button
+                type="button"
+                className="secondary cv-readonly-tailor-button llm-action-button"
+                onClick={onTailor}
+                disabled={isTailoring}
+              >
+                <Sparkles size={14} />
+                {isTailoring ? "Tailoring..." : "Tailor & create editable copy"}
+              </button>
+            ) : null}
+            {onEditProfile ? (
+              <button
+                type="button"
+                className="secondary cv-readonly-edit-button"
+                onClick={onEditProfile}
+                disabled={isTailoring}
+              >
+                <Pencil size={14} />
+                Edit profile
+              </button>
+            ) : null}
+          </div>
+          {isTailoring && tailorProgress ? (
+            <div className="cv-readonly-progress">
+              <div className="results-loading">
+                <Spinner size="sm" color="blue.500" />
+                <span>Tailoring this profile for the job. This can take about a minute.</span>
+              </div>
+              <div className="progress-header">
+                <span>Tailoring progress</span>
+                <span>{tailorProgress.percent}% complete</span>
+              </div>
+              <Progress.Root value={tailorProgress.percent} size="sm" colorPalette="blue">
+                <Progress.Track>
+                  <Progress.Range />
+                </Progress.Track>
+              </Progress.Root>
+              <p className="helper">
+                {tailorProgress.elapsedSeconds}s / {tailorProgress.timeoutSeconds}s elapsed
+              </p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="cv-step-panel">
+        <fieldset className="cv-readonly-scope" disabled={readOnly}>
         <div className="cv-step-content">
           {!hasJobContext && (
-            <p className="helper">No job context provided. Preview will be generic.</p>
+            <p className="helper">No job details are loaded. Preview still renders from your CV form data.</p>
           )}
 
           <div className="sub-card">
             <div className="sub-card-header">
-              <strong className="sub-card-title"><Sparkles size={15} /> Rewrite with AI (optional)</strong>
               <button
                 type="button"
-                className="ghost icon-button section-collapse-button"
+                className="sub-card-toggle"
                 onClick={() => setRewriteOpen((prev) => !prev)}
                 aria-expanded={rewriteOpen}
                 title="Open the AI rewrite panel to update wording across your full CV."
               >
-                {rewriteOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-                <span>{rewriteOpen ? "Collapse" : "Expand"}</span>
+                <strong className="sub-card-title"><Sparkles size={15} /> Rewrite with AI (optional)</strong>
+                <span className="sub-card-toggle-indicator">
+                  {rewriteOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                  <span>{rewriteOpen ? "Collapse" : "Expand"}</span>
+                </span>
               </button>
             </div>
             {rewriteOpen && (
@@ -3303,17 +3442,20 @@ export default function CvReview({
           )}
 
           {/* Save profile — collapsible, at bottom of edit panel */}
+          {!readOnly ? (
           <div className="sub-card save-profile-card">
             <div className="sub-card-header">
-              <strong className="sub-card-title"><Save size={15} /> Save profile (optional)</strong>
               <button
                 type="button"
-                className="ghost icon-button section-collapse-button"
+                className="sub-card-toggle"
                 onClick={() => setSaveProfileOpen((prev) => !prev)}
                 aria-expanded={saveProfileOpen}
               >
-                {saveProfileOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-                <span>{saveProfileOpen ? "Collapse" : "Expand"}</span>
+                <strong className="sub-card-title"><Save size={15} /> Save profile (optional)</strong>
+                <span className="sub-card-toggle-indicator">
+                  {saveProfileOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                  <span>{saveProfileOpen ? "Collapse" : "Expand"}</span>
+                </span>
               </button>
             </div>
             {saveProfileOpen && (
@@ -3356,13 +3498,15 @@ export default function CvReview({
               </>
             )}
           </div>
+          ) : null}
         </div>
+        </fieldset>
       </div>
 
       {error && <p className="error">{error}</p>}
 
       <OverwriteConfirmationModal
-        isOpen={overwriteDialog.isOpen}
+        isOpen={!readOnly && overwriteDialog.isOpen}
         targetProfileId={overwriteDialog.pendingTargetProfileId}
         existingRevision={overwriteDialog.diff?.existingRevision ?? 0}
         existingUpdatedAt={overwriteDialog.diff?.existingUpdatedAt}

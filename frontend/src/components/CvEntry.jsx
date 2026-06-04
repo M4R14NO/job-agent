@@ -1,19 +1,6 @@
-import { useMemo, useRef, useState } from "react";
-import { CheckCircle2, Download, PencilLine, Plus, RefreshCw, Search, RotateCcw, Sparkles, Tag } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CheckCircle2, ChevronDown, ChevronRight, Download, PencilLine, Plus, Search, RotateCcw, Sparkles, Tag, Trash2, Upload } from "lucide-react";
 import { Progress, Spinner } from "@chakra-ui/react";
-
-const SECTION_DESCRIPTORS = [
-  { key: "summary", label: "Summary", hasContent: (profile) => Boolean((profile?.data?.summary || "").trim()) },
-  { key: "skills", label: "Skills", hasContent: (profile) => (profile?.data?.skills || []).length > 0 },
-  { key: "languages", label: "Languages", hasContent: (profile) => (profile?.data?.languages || []).length > 0 },
-  { key: "interests", label: "Interests", hasContent: (profile) => (profile?.data?.interests || []).length > 0 },
-  { key: "experience", label: "Experience", hasContent: (profile) => (profile?.data?.experience || []).length > 0 },
-  { key: "volunteer", label: "Volunteer", hasContent: (profile) => (profile?.data?.volunteer || []).length > 0 },
-  { key: "honors", label: "Honors", hasContent: (profile) => (profile?.data?.awards || []).length > 0 },
-  { key: "certificates", label: "Certificates", hasContent: (profile) => (profile?.data?.certificates || []).length > 0 },
-  { key: "writing", label: "Writing", hasContent: (profile) => (profile?.data?.publications || []).length > 0 },
-  { key: "education", label: "Education", hasContent: (profile) => (profile?.data?.education || []).length > 0 }
-];
 
 const EXAMPLE_CV_TEXT = `PROFILE
 Name: Alex Rivers
@@ -80,12 +67,10 @@ const formatDateTime = (value) => {
   if (!value) return "-";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "-";
-  return parsed.toLocaleString("en-GB", {
+  return parsed.toLocaleDateString("en-GB", {
     year: "numeric",
     month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
+    day: "2-digit"
   });
 };
 
@@ -150,47 +135,28 @@ const nextProfileVersionName = (profileId) => {
   return `${normalized}-v2`;
 };
 
-const getSectionStats = (profile) => {
-  const knownKeys = SECTION_DESCRIPTORS.map((descriptor) => descriptor.key);
-  const templateId = profile?.template_id || "awesomecv";
-  const orderedSections = templateId === "hipstercv"
-    ? [
-      ...(Array.isArray(profile?.sidebar_section_order) ? profile.sidebar_section_order : []),
-      ...(Array.isArray(profile?.main_section_order) ? profile.main_section_order : [])
-    ]
-    : (Array.isArray(profile?.section_order) ? profile.section_order : []);
-
-  const hasExplicitLayout = orderedSections.length > 0;
-  const visibleKeySet = hasExplicitLayout
-    ? new Set(orderedSections.filter((key) => knownKeys.includes(key)))
-    : new Set(
-      SECTION_DESCRIPTORS
-        .filter((descriptor) => descriptor.hasContent(profile))
-        .map((descriptor) => descriptor.key)
-    );
-
-  const visible = SECTION_DESCRIPTORS
-    .filter((descriptor) => visibleKeySet.has(descriptor.key))
-    .map((descriptor) => descriptor.label);
-  const hidden = SECTION_DESCRIPTORS
-    .filter((descriptor) => !visibleKeySet.has(descriptor.key))
-    .map((descriptor) => descriptor.label);
-  return {
-    visible,
-    hidden
-  };
-};
+const PROFILE_TABLE_COLUMNS = [
+  { key: "profile_id", label: "CV profile", sortable: true, defaultWidth: 220, minWidth: 150 },
+  { key: "company", label: "Company", sortable: true, defaultWidth: 165, minWidth: 120 },
+  { key: "application_status", label: "Status", sortable: true, defaultWidth: 108, minWidth: 88 },
+  { key: "job_title", label: "Job title", sortable: true, defaultWidth: 215, minWidth: 140 },
+  { key: "template_id", label: "Template", sortable: true, defaultWidth: 112, minWidth: 92 },
+  { key: "revision", label: "Revision", sortable: true, defaultWidth: 84, minWidth: 72 },
+  { key: "cv_text", label: "CV text", sortable: false, defaultWidth: 98, minWidth: 84 },
+  { key: "updated", label: "Updated", sortable: true, defaultWidth: 132, minWidth: 108 }
+];
 
 export default function CvEntry({
   cvProfiles,
-  profilesLoading,
   profilesError,
   selectedProfileId,
   onSelectedProfileIdChange,
   onProfileRowSelect,
-  onRefreshProfiles,
   onUpdateProfileCvText,
   onRemapProfileCvText,
+  onDeleteProfiles,
+  onExportProfiles,
+  onImportProfiles,
   onCreateNewEntry,
   onBeginNewEntry,
   isCreatingProfileEntry,
@@ -198,6 +164,7 @@ export default function CvEntry({
   isUpdatingProfileCvText,
   isRemappingProfileCvText,
   isUploadingProfileImage,
+  isProfileBulkActionBusy = false,
   remapProgress,
   cvEntryError,
   cvTemplateId,
@@ -210,9 +177,27 @@ export default function CvEntry({
   resumeText,
   onResumeTextChange,
   newProfileId,
+  onNewProfileIdChange,
   draftProfileId,
-  isDraftProfileActive
+  isDraftProfileActive,
+  contextMode = "create",
+  hideCreateProfileButton = false,
+  hideUpdateAction = false,
+  hideTailorAction = false,
+  hideTailorProgress = false,
+  tailorActionDisabled,
+  autoOpenProfileIdDialog = false,
+  profileTableCollapsedByDefault = false,
+  applicationContextDefaultCollapsed = false,
+  collapsible = false,
+  defaultCollapsed = false,
+  autoCollapseOnScroll = false,
+  remapSuggestionBuilder,
+  tailorContext = null
 }) {
+  const isJobMode = contextMode === "job";
+  const setupEyebrow = isJobMode ? "CV generation" : "Profile setup";
+  const setupTitle = isJobMode ? "Application context" : "Profile & context setup";
   const [showExampleCvText, setShowExampleCvText] = useState(false);
   const [profileSearchDraft, setProfileSearchDraft] = useState("");
   const [profileSearchQuery, setProfileSearchQuery] = useState("");
@@ -221,19 +206,42 @@ export default function CvEntry({
   const [remapDialogOpen, setRemapDialogOpen] = useState(false);
   const [remapProfileName, setRemapProfileName] = useState("");
   const [newEntryDialogOpen, setNewEntryDialogOpen] = useState(false);
+  const [newEntryDialogMode, setNewEntryDialogMode] = useState("create-and-save");
   const [newEntryProfileName, setNewEntryProfileName] = useState("");
   const [newEntryError, setNewEntryError] = useState("");
   const [profileImageError, setProfileImageError] = useState("");
+  const [profileBrowserOpen, setProfileBrowserOpen] = useState(!profileTableCollapsedByDefault);
+  const [applicationContextOpen, setApplicationContextOpen] = useState(!applicationContextDefaultCollapsed);
+  const [entryCollapsed, setEntryCollapsed] = useState(defaultCollapsed);
+  const [profileTableHeight, setProfileTableHeight] = useState(420);
+  const [columnWidths, setColumnWidths] = useState(() => PROFILE_TABLE_COLUMNS.map((column) => column.defaultWidth));
+  const [selectedProfileIds, setSelectedProfileIds] = useState(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeletingProfiles, setIsDeletingProfiles] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState(null);
+  const [overwriteOnImport, setOverwriteOnImport] = useState(true);
+  const [importError, setImportError] = useState("");
+  const [isImportingProfiles, setIsImportingProfiles] = useState(false);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const searchInputRef = useRef(null);
   const searchButtonRef = useRef(null);
   const resetButtonRef = useRef(null);
-  const createButtonRef = useRef(null);
-  const refreshButtonRef = useRef(null);
+  const actionsMenuButtonRef = useRef(null);
+  const actionsMenuContainerRef = useRef(null);
   const firstRowRef = useRef(null);
   const exampleButtonRef = useRef(null);
   const updateProfileButtonRef = useRef(null);
   const tailorButtonRef = useRef(null);
   const cvTextRef = useRef(null);
+  const isResizingTableRef = useRef(false);
+  const tableResizeStartYRef = useRef(0);
+  const tableResizeStartHeightRef = useRef(420);
+  const columnResizeIndexRef = useRef(-1);
+  const columnResizeStartXRef = useRef(0);
+  const columnResizeStartWidthRef = useRef(0);
+  const autoOpenProfileIdHandledRef = useRef(false);
+  const importFileInputRef = useRef(null);
 
   const profilesWithDraft = useMemo(() => {
     if (!isDraftProfileActive || !draftProfileId) return cvProfiles;
@@ -271,36 +279,190 @@ export default function CvEntry({
     [profilesWithDraft, selectedProfileId]
   );
 
+  const persistedProfileIdSet = useMemo(
+    () => new Set(cvProfiles.map((profile) => profile.profile_id)),
+    [cvProfiles]
+  );
+
   const hasPersistedSelectedProfile = useMemo(
     () => cvProfiles.some((profile) => profile.profile_id === selectedProfileId),
     [cvProfiles, selectedProfileId]
   );
+  const canSaveProfile = hasPersistedSelectedProfile || Boolean(String(newProfileId || "").trim());
 
-  const filteredProfiles = useMemo(() => {
+  useEffect(() => {
+    if (!autoOpenProfileIdDialog) {
+      autoOpenProfileIdHandledRef.current = false;
+      return;
+    }
+    if (autoOpenProfileIdHandledRef.current) return;
+    if (newEntryDialogOpen) return;
+
+    autoOpenProfileIdHandledRef.current = true;
+    openNewEntryDialog("assign-id");
+  }, [autoOpenProfileIdDialog, newEntryDialogOpen]);
+
+  const compareProfiles = (a, b) => {
+    const leftDate = Date.parse(a.updated_at || a.created_at || "") || 0;
+    const rightDate = Date.parse(b.updated_at || b.created_at || "") || 0;
+    const getValue = (profile, key) => {
+      if (key === "updated") return Date.parse(profile.updated_at || profile.created_at || "") || 0;
+      if (key === "revision") return Number(profile.revision || 0);
+      return normalizeText(profile?.[key]);
+    };
+    const left = sortBy === "updated" ? leftDate : getValue(a, sortBy);
+    const right = sortBy === "updated" ? rightDate : getValue(b, sortBy);
+    if (left < right) return sortDirection === "asc" ? -1 : 1;
+    if (left > right) return sortDirection === "asc" ? 1 : -1;
+    return normalizeText(a.profile_id).localeCompare(normalizeText(b.profile_id));
+  };
+
+  const sortedProfiles = useMemo(() => {
     const filtered = profilesWithDraft.filter((profile) => profileMatchesQuery(profile, profileSearchQuery));
-    const sorted = [...filtered].sort((a, b) => {
-      const leftDate = Date.parse(a.updated_at || a.created_at || "") || 0;
-      const rightDate = Date.parse(b.updated_at || b.created_at || "") || 0;
-      const getValue = (profile, key) => {
-        if (key === "updated") return Date.parse(profile.updated_at || profile.created_at || "") || 0;
-        if (key === "revision") return Number(profile.revision || 0);
-        return normalizeText(profile?.[key]);
-      };
-      const left = sortBy === "updated" ? leftDate : getValue(a, sortBy);
-      const right = sortBy === "updated" ? rightDate : getValue(b, sortBy);
-      if (left < right) return sortDirection === "asc" ? -1 : 1;
-      if (left > right) return sortDirection === "asc" ? 1 : -1;
-      return normalizeText(a.profile_id).localeCompare(normalizeText(b.profile_id));
-    });
+    const sorted = [...filtered].sort(compareProfiles);
     return sorted;
   }, [profilesWithDraft, profileSearchQuery, sortBy, sortDirection]);
+
+  const treeRows = useMemo(() => {
+    const profileMap = new Map(sortedProfiles.map((profile) => [profile.profile_id, profile]));
+    const childMap = new Map();
+    const roots = [];
+
+    sortedProfiles.forEach((profile) => {
+      const parentId = String(profile.parent_profile_id || "").trim();
+      if (parentId && profileMap.has(parentId)) {
+        if (!childMap.has(parentId)) childMap.set(parentId, []);
+        childMap.get(parentId).push(profile);
+      } else {
+        roots.push(profile);
+      }
+    });
+
+    childMap.forEach((children) => children.sort(compareProfiles));
+    roots.sort(compareProfiles);
+
+    const flattened = [];
+    const visit = (profile, depth, guideLevels, isLastSibling) => {
+      const parentId = String(profile.parent_profile_id || "").trim();
+      const isRoot = !parentId || !profileMap.has(parentId);
+      flattened.push({
+        profile,
+        depth,
+        parentId,
+        isRoot,
+        hasCvText: Boolean(String(profile?.audit?.raw_resume_text || "").trim()),
+        guideLevels,
+        isLastSibling
+      });
+      const children = childMap.get(profile.profile_id) || [];
+      children.forEach((child, childIndex) => {
+        const childIsLast = childIndex === children.length - 1;
+        visit(child, depth + 1, [...guideLevels, !isLastSibling], childIsLast);
+      });
+    };
+
+    roots.forEach((root, rootIndex) => {
+      const isLastRoot = rootIndex === roots.length - 1;
+      visit(root, 0, [], isLastRoot);
+    });
+    return flattened;
+  }, [sortedProfiles, sortBy, sortDirection]);
 
   const remapTargetExists = useMemo(
     () => cvProfiles.some((profile) => profile.profile_id === remapProfileName.trim()),
     [cvProfiles, remapProfileName]
   );
 
+  const selectedPersistedProfileIds = useMemo(
+    () => Array.from(selectedProfileIds).filter((id) => persistedProfileIdSet.has(id)),
+    [selectedProfileIds, persistedProfileIdSet]
+  );
+
+  const visiblePersistedProfileIds = useMemo(
+    () => treeRows
+      .map((row) => row.profile?.profile_id || "")
+      .filter((id) => id && persistedProfileIdSet.has(id)),
+    [treeRows, persistedProfileIdSet]
+  );
+
+  const areAllVisibleRowsSelected = useMemo(
+    () =>
+      visiblePersistedProfileIds.length > 0
+      && visiblePersistedProfileIds.every((id) => selectedProfileIds.has(id)),
+    [visiblePersistedProfileIds, selectedProfileIds]
+  );
+
+  useEffect(() => {
+    if (profileTableCollapsedByDefault) {
+      setProfileBrowserOpen(false);
+    }
+  }, [profileTableCollapsedByDefault]);
+
+  useEffect(() => {
+    if (defaultCollapsed) {
+      setEntryCollapsed(true);
+    }
+  }, [defaultCollapsed]);
+
+  useEffect(() => {
+    setSelectedProfileIds((prev) => {
+      const next = new Set();
+      prev.forEach((id) => {
+        if (persistedProfileIdSet.has(id)) {
+          next.add(id);
+        }
+      });
+      return next;
+    });
+  }, [persistedProfileIdSet]);
+
+  useEffect(() => {
+    if (!collapsible || !autoCollapseOnScroll || entryCollapsed) return;
+    if (applicationContextOpen || profileBrowserOpen) return;
+
+    const onScroll = () => {
+      if (window.scrollY > 260) {
+        setEntryCollapsed(true);
+      }
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [
+    collapsible,
+    autoCollapseOnScroll,
+    entryCollapsed,
+    applicationContextOpen,
+    profileBrowserOpen
+  ]);
+
+  useEffect(() => {
+    if (!actionsMenuOpen) return undefined;
+
+    const handleOutsideClick = (event) => {
+      if (!actionsMenuContainerRef.current?.contains(event.target)) {
+        setActionsMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key !== "Escape") return;
+      setActionsMenuOpen(false);
+      actionsMenuButtonRef.current?.focus();
+    };
+
+    window.addEventListener("mousedown", handleOutsideClick);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handleOutsideClick);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [actionsMenuOpen]);
+
   const handleProfileSelect = (profile) => {
+    if (profileTableCollapsedByDefault) {
+      setProfileBrowserOpen(false);
+    }
     if (onProfileRowSelect) {
       onProfileRowSelect(profile);
       return;
@@ -327,8 +489,11 @@ export default function CvEntry({
     cvTextRef.current?.focus();
   };
 
-  const openNewEntryDialog = () => {
-    onBeginNewEntry?.();
+  const openNewEntryDialog = (mode = "create-and-save") => {
+    setNewEntryDialogMode(mode);
+    if (mode === "create-and-save") {
+      onBeginNewEntry?.();
+    }
     const defaultName = String(newProfileId || "").trim();
     setNewEntryProfileName(defaultName);
     setNewEntryError("");
@@ -341,6 +506,20 @@ export default function CvEntry({
       setNewEntryError("Profile name is required.");
       return;
     }
+
+    if (newEntryDialogMode === "assign-id") {
+      const normalizedName = String(requestedName || "").trim();
+      if (!normalizedName) {
+        setNewEntryError("Profile name is required.");
+        return;
+      }
+      onSelectedProfileIdChange("");
+      onNewProfileIdChange?.(normalizedName);
+      setNewEntryDialogOpen(false);
+      setNewEntryError("");
+      return;
+    }
+
     try {
       await onCreateNewEntry?.({ profileName: requestedName });
       setNewEntryDialogOpen(false);
@@ -350,10 +529,28 @@ export default function CvEntry({
     }
   };
 
+  const handleSaveProfileClick = () => {
+    if (canSaveProfile) {
+      onUpdateProfileCvText?.();
+      return;
+    }
+    openNewEntryDialog("assign-id");
+  };
+
   const openRemapDialog = () => {
-    const suggested = hasPersistedSelectedProfile
+    const defaultSuggested = hasPersistedSelectedProfile
       ? nextProfileVersionName(selectedProfile?.profile_id || selectedProfileId || "profile")
       : (newProfileId.trim() || "");
+    const suggested = typeof remapSuggestionBuilder === "function"
+      ? (remapSuggestionBuilder({
+        defaultSuggested,
+        selectedProfile,
+        selectedProfileId,
+        newProfileId,
+        hasPersistedSelectedProfile,
+        applicationContext
+      }) || defaultSuggested)
+      : defaultSuggested;
     setRemapProfileName(suggested);
     setRemapDialogOpen(true);
   };
@@ -396,214 +593,802 @@ export default function CvEntry({
     </button>
   );
 
-  return (
-    <div className="cv-entry">
-      <div className="cv-entry-header">
-        <div>
-          <p className="eyebrow">CV editor</p>
-          <h3>CV profiles</h3>
-          <p className="helper">Select a profile or start a new entry directly from this table.</p>
-        </div>
-      </div>
+  const handleTableResizeStart = (event) => {
+    isResizingTableRef.current = true;
+    tableResizeStartYRef.current = event.clientY;
+    tableResizeStartHeightRef.current = profileTableHeight;
+    document.body.style.cursor = "ns-resize";
+    document.body.style.userSelect = "none";
+  };
 
-      <div className="cv-entry-panel">
-          <div>
-            <label htmlFor="profileSearch" className="label">Search profiles</label>
-            <div className="cv-search-row">
-              <input
-                ref={searchInputRef}
-                id="profileSearch"
-                type="text"
-                placeholder="Search by profile name, company, status, job title, description, or CV text"
-                value={profileSearchDraft}
-                onChange={(e) => setProfileSearchDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Tab" && e.shiftKey) {
-                    e.preventDefault();
-                    refreshButtonRef.current?.focus();
-                    return;
-                  }
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    searchButtonRef.current?.click();
-                    searchButtonRef.current?.focus();
-                    return;
-                  }
-                  if (e.key === "Tab" && !e.shiftKey) {
-                    e.preventDefault();
-                    searchButtonRef.current?.focus();
-                  }
-                }}
-              />
-              <div className="cv-search-actions">
-                <button
-                  ref={searchButtonRef}
-                  type="button"
-                  className="primary cv-search-button"
-                  onClick={() => setProfileSearchQuery(profileSearchDraft)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Tab" && e.shiftKey) {
-                      e.preventDefault();
-                      searchInputRef.current?.focus();
-                      return;
+  const handleColumnResizeStart = (event, columnIndex) => {
+    event.preventDefault();
+    event.stopPropagation();
+    columnResizeIndexRef.current = columnIndex;
+    columnResizeStartXRef.current = event.clientX;
+    columnResizeStartWidthRef.current = columnWidths[columnIndex];
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  useEffect(() => {
+    if (applicationContextDefaultCollapsed) {
+      setApplicationContextOpen(false);
+    }
+  }, [applicationContextDefaultCollapsed]);
+
+  useEffect(() => {
+    const onMouseMove = (event) => {
+      if (columnResizeIndexRef.current >= 0) {
+        const index = columnResizeIndexRef.current;
+        const delta = event.clientX - columnResizeStartXRef.current;
+        const minWidth = PROFILE_TABLE_COLUMNS[index]?.minWidth || 80;
+        const nextWidth = Math.max(minWidth, columnResizeStartWidthRef.current + delta);
+        setColumnWidths((prev) => {
+          if (prev[index] === nextWidth) return prev;
+          const updated = [...prev];
+          updated[index] = nextWidth;
+          return updated;
+        });
+        return;
+      }
+
+      if (!isResizingTableRef.current) return;
+      const delta = event.clientY - tableResizeStartYRef.current;
+      const next = Math.min(Math.max(tableResizeStartHeightRef.current + delta, 240), 920);
+      setProfileTableHeight(next);
+    };
+
+    const onMouseUp = () => {
+      const wasColumnResizing = columnResizeIndexRef.current >= 0;
+      if (wasColumnResizing) {
+        columnResizeIndexRef.current = -1;
+      }
+
+      const wasTableResizing = isResizingTableRef.current;
+      if (wasTableResizing) {
+        isResizingTableRef.current = false;
+      }
+
+      if (wasColumnResizing || wasTableResizing) {
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [profileTableHeight]);
+
+  const renderProfileHeaderCell = (column, index) => (
+    <th key={column.key} className="cv-profile-table-header-cell">
+      <div className="cv-profile-table-header-content">
+        {column.sortable
+          ? renderSortHeader(column.label, column.key)
+          : <span className="table-header-label">{column.label}</span>}
+      </div>
+      {index < PROFILE_TABLE_COLUMNS.length - 1 ? (
+        <span
+          className="cv-profile-column-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={`Resize ${column.label} column`}
+          onMouseDown={(event) => handleColumnResizeStart(event, index)}
+          title={`Drag to resize ${column.label} column`}
+        />
+      ) : null}
+    </th>
+  );
+
+  const renderProfileTable = () => (
+    <table className="cv-profile-table">
+      <colgroup>
+        <col style={{ width: "44px" }} />
+        {columnWidths.map((width, index) => (
+          <col key={PROFILE_TABLE_COLUMNS[index].key} style={{ width: `${width}px` }} />
+        ))}
+      </colgroup>
+      <thead>
+        <tr>
+          <th className="cv-profile-table-header-cell cv-profile-select-col">
+            <input
+              type="checkbox"
+              className="cv-profile-row-select"
+              aria-label="Select all visible profiles"
+              checked={areAllVisibleRowsSelected}
+              onChange={(event) => {
+                const nextChecked = event.target.checked;
+                setSelectedProfileIds((prev) => {
+                  const next = new Set(prev);
+                  visiblePersistedProfileIds.forEach((id) => {
+                    if (nextChecked) {
+                      next.add(id);
+                    } else {
+                      next.delete(id);
                     }
-                    if (e.key === "Tab" && !e.shiftKey) {
-                      e.preventDefault();
-                      resetButtonRef.current?.focus();
-                    }
-                  }}
+                  });
+                  return next;
+                });
+              }}
+            />
+          </th>
+          {PROFILE_TABLE_COLUMNS.map((column, index) => renderProfileHeaderCell(column, index))}
+        </tr>
+      </thead>
+      <tbody>{renderProfileTableRows()}</tbody>
+    </table>
+  );
+
+  const renderProfileTableRows = () => {
+    if (profilesError) {
+      return (
+        <tr>
+          <td colSpan={9}>
+            <p className="error">Failed to load profiles: {profilesError}</p>
+          </td>
+        </tr>
+      );
+    }
+
+    if (treeRows.length === 0) {
+      return (
+        <tr>
+          <td colSpan={9}>
+            <p className="helper">No matching profiles found.</p>
+          </td>
+        </tr>
+      );
+    }
+
+    return treeRows.map((row, index) => {
+      const { profile, depth, parentId, isRoot, hasCvText, guideLevels, isLastSibling } = row;
+      const isSelected = selectedProfileId === profile.profile_id;
+      const ancestorGuideLevels = guideLevels.slice(0, -1);
+      const firstContinuingGuideIndex = ancestorGuideLevels.findIndex((hasNext) => hasNext);
+      return (
+        <tr
+          key={profile.profile_id}
+          ref={index === 0 ? firstRowRef : null}
+          className={isSelected ? "is-selected" : ""}
+          onClick={() => handleProfileSelect(profile)}
+          onKeyDown={(event) => handleProfileRowKeyDown(event, profile)}
+          tabIndex={0}
+          role="button"
+          aria-selected={isSelected}
+          aria-label={`Load profile ${profile.profile_id}`}
+        >
+          <td className="cv-profile-select-col">
+            <input
+              type="checkbox"
+              className="cv-profile-row-select"
+              aria-label={`Select profile ${profile.profile_id}`}
+              checked={selectedProfileIds.has(profile.profile_id)}
+              disabled={!persistedProfileIdSet.has(profile.profile_id)}
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => {
+                event.stopPropagation();
+                const checked = event.target.checked;
+                setSelectedProfileIds((prev) => {
+                  const next = new Set(prev);
+                  if (checked) {
+                    next.add(profile.profile_id);
+                  } else {
+                    next.delete(profile.profile_id);
+                  }
+                  return next;
+                });
+              }}
+            />
+          </td>
+          <td className="cv-profile-tree-td">
+            {!isRoot ? (
+              <span className="cv-profile-tree-rail" aria-hidden="true">
+                {firstContinuingGuideIndex >= 0 ? (
+                  <span
+                    key={`${profile.profile_id}-guide-${firstContinuingGuideIndex}`}
+                    className="cv-profile-tree-guide-col"
+                    style={{ left: `${(firstContinuingGuideIndex + 1) * 20 - 10}px` }}
+                  />
+                ) : null}
+                <span
+                  className={`cv-profile-tree-branch ${isLastSibling ? "is-last" : "has-next"}`}
+                  style={{ left: `${depth * 20 - 10}px` }}
+                />
+              </span>
+            ) : null}
+            <div className="cv-profile-tree-cell">
+              <div className="cv-profile-tree-main" style={{ paddingLeft: `${8 + depth * 20}px` }}>
+                <span
+                  className={`cv-profile-tree-label${isRoot ? " is-root" : ""}`}
+                  title={profile.profile_id}
                 >
-                  <Search size={14} />
-                  Search
-                </button>
-                <button
-                  ref={resetButtonRef}
-                  type="button"
-                  className="ghost cv-reset-button"
-                  onClick={() => {
-                    setProfileSearchDraft("");
-                    setProfileSearchQuery("");
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Tab" && e.shiftKey) {
-                      e.preventDefault();
-                      searchButtonRef.current?.focus();
-                      return;
-                    }
-                    if (e.key === "Tab" && !e.shiftKey) {
-                      e.preventDefault();
-                      createButtonRef.current?.focus();
-                    }
-                  }}
-                >
-                  <RotateCcw size={14} />
-                  Reset
-                </button>
-                <div className="cv-search-profile-actions">
-                  <button
-                    ref={createButtonRef}
-                    type="button"
-                    className="primary cv-create-button"
-                    onClick={openNewEntryDialog}
-                    onKeyDown={(e) => {
-                      if (e.key === "Tab" && e.shiftKey) {
-                        e.preventDefault();
-                        resetButtonRef.current?.focus();
-                        return;
-                      }
-                      if (e.key === "Tab" && !e.shiftKey) {
-                        e.preventDefault();
-                        refreshButtonRef.current?.focus();
-                      }
-                    }}
-                  >
-                    <Plus size={14} />
-                    Create new CV Profile
-                  </button>
-                  <button
-                    ref={refreshButtonRef}
-                    type="button"
-                    className="ghost cv-refresh-button"
-                    onClick={onRefreshProfiles}
-                    disabled={profilesLoading}
-                    onKeyDown={(e) => {
-                      if (e.key === "Tab" && e.shiftKey) {
-                        e.preventDefault();
-                        createButtonRef.current?.focus();
-                        return;
-                      }
-                      if (e.key === "Tab" && !e.shiftKey) {
-                        e.preventDefault();
-                        focusFirstRow();
-                      }
-                    }}
-                  >
-                    <RefreshCw size={14} />
-                    {profilesLoading ? "Refreshing..." : "Refresh profiles"}
-                  </button>
-                </div>
+                  {profile.profile_id}
+                </span>
               </div>
             </div>
-          </div>
+          </td>
+          <td>
+            <span className="cv-profile-table-text" title={profile.company || "-"}>
+              {profile.company || "-"}
+            </span>
+          </td>
+          <td>
+            {profile.application_status ? (
+              <span className={statusBadgeClass(profile.application_status)}>{profile.application_status}</span>
+            ) : "-"}
+          </td>
+          <td>
+            <span className="cv-profile-table-text" title={profile.job_title || "-"}>
+              {profile.job_title || "-"}
+            </span>
+          </td>
+          <td>
+            <span className="cv-profile-table-text" title={profile.template_id || "awesomecv"}>
+              {profile.template_id || "awesomecv"}
+            </span>
+          </td>
+          <td>r{profile.revision ?? 0}</td>
+          <td>
+            <span className={`cv-text-availability ${hasCvText ? "is-available" : "is-missing"}`}>
+              {hasCvText ? "Available" : "Missing"}
+            </span>
+          </td>
+          <td>{formatDateTime(profile.updated_at || profile.created_at)}</td>
+        </tr>
+      );
+    });
+  };
 
-          <div className="cv-profile-table-wrap">
-            <table className="cv-profile-table">
-              <thead>
-                <tr>
-                  <th>{renderSortHeader("CV profile", "profile_id")}</th>
-                  <th>{renderSortHeader("Company", "company")}</th>
-                  <th>{renderSortHeader("Status", "application_status")}</th>
-                  <th>{renderSortHeader("Job title", "job_title")}</th>
-                  <th>{renderSortHeader("Template", "template_id")}</th>
-                  <th>{renderSortHeader("Revision", "revision")}</th>
-                  <th>{renderSortHeader("Updated", "updated")}</th>
-                  <th>Sections</th>
-                </tr>
-              </thead>
-              <tbody>
-                {profilesError ? (
-                  <tr>
-                    <td colSpan={8}>
-                      <p className="error">Failed to load profiles: {profilesError}</p>
-                    </td>
-                  </tr>
-                ) : filteredProfiles.length === 0 ? (
-                  <tr>
-                    <td colSpan={8}>
-                      <p className="helper">No matching profiles found.</p>
-                    </td>
-                  </tr>
-                ) : (
-                  filteredProfiles.map((profile) => {
-                    const sectionStats = getSectionStats(profile);
-                    const isSelected = selectedProfileId === profile.profile_id;
-                    return (
-                      <tr
-                        key={profile.profile_id}
-                        ref={filteredProfiles[0]?.profile_id === profile.profile_id ? firstRowRef : null}
-                        className={isSelected ? "is-selected" : ""}
-                        onClick={() => handleProfileSelect(profile)}
-                        onKeyDown={(event) => handleProfileRowKeyDown(event, profile)}
-                        tabIndex={0}
-                        role="button"
-                        aria-selected={isSelected}
-                        aria-label={`Load profile ${profile.profile_id}`}
-                      >
-                        <td>{profile.profile_id}</td>
-                        <td>{profile.company || "-"}</td>
-                        <td>
-                          {profile.application_status ? (
-                            <span className={statusBadgeClass(profile.application_status)}>{profile.application_status}</span>
-                          ) : "-"}
-                        </td>
-                        <td>{profile.job_title || "-"}</td>
-                        <td>{profile.template_id || "awesomecv"}</td>
-                        <td>r{profile.revision ?? 0}</td>
-                        <td>{formatDateTime(profile.updated_at || profile.created_at)}</td>
-                        <td>
-                          <span className="cv-profile-section-meta">
-                            {sectionStats.visible.length} shown / {sectionStats.hidden.length} hidden
-                          </span>
-                          <span className="cv-profile-section-list">
-                            + {sectionStats.visible.join(", ") || "None"}
-                          </span>
-                          <span className="cv-profile-section-list muted">
-                            - {sectionStats.hidden.join(", ") || "None"}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+  const handleExportSelectedProfiles = async () => {
+    if (!selectedPersistedProfileIds.length) return;
+    await onExportProfiles?.(selectedPersistedProfileIds);
+  };
+
+  const handleExportAllProfiles = async () => {
+    const allIds = cvProfiles.map((profile) => profile.profile_id).filter(Boolean);
+    if (!allIds.length) return;
+    await onExportProfiles?.(allIds);
+  };
+
+  const handleConfirmDeleteProfiles = async () => {
+    if (!selectedPersistedProfileIds.length) {
+      setDeleteDialogOpen(false);
+      return;
+    }
+    setIsDeletingProfiles(true);
+    try {
+      await onDeleteProfiles?.(selectedPersistedProfileIds);
+      setSelectedProfileIds(new Set());
+      setDeleteDialogOpen(false);
+    } finally {
+      setIsDeletingProfiles(false);
+    }
+  };
+
+  const resolveImportedProfileId = (profile) =>
+    String(
+      profile?.profile_id
+      || profile?.profileId
+      || profile?.id
+      || profile?.name
+      || ""
+    ).trim();
+
+  const collectImportCandidates = (payload) => {
+    const candidates = [];
+    const visited = new Set();
+
+    const walk = (node, depth = 0) => {
+      if (!node || depth > 5) return;
+      if (typeof node !== "object") return;
+      if (visited.has(node)) return;
+      visited.add(node);
+
+      if (Array.isArray(node)) {
+        node.forEach((entry) => walk(entry, depth + 1));
+        return;
+      }
+
+      const unwrapped = node.profile && typeof node.profile === "object"
+        ? node.profile
+        : node;
+
+      const looksLikeProfile = Boolean(
+        unwrapped.profile_id
+        || unwrapped.profileId
+        || (unwrapped.id && (unwrapped.revision != null || unwrapped.data || unwrapped.template_id))
+      );
+      if (looksLikeProfile) {
+        candidates.push(unwrapped);
+      }
+
+      [
+        node.profiles,
+        node.items,
+        node.entries,
+        node.data,
+        node.payload,
+        node.export,
+        node.value
+      ].forEach((child) => {
+        if (child && typeof child === "object") {
+          walk(child, depth + 1);
+        }
+      });
+
+      if (node.profiles && !Array.isArray(node.profiles) && typeof node.profiles === "object") {
+        Object.values(node.profiles).forEach((child) => {
+          if (child && typeof child === "object") {
+            walk(child, depth + 1);
+          }
+        });
+      }
+    };
+
+    walk(payload, 0);
+    return candidates;
+  };
+
+  const openImportDialogFromFile = async (file) => {
+    if (!file) return;
+    setImportError("");
+    try {
+      const content = await file.text();
+      const parsed = JSON.parse(content);
+      const importedProfiles = collectImportCandidates(parsed);
+      if (!importedProfiles.length) {
+        setImportError("No profiles found in this JSON file.");
+        return;
+      }
+
+      const deduplicated = new Map();
+      importedProfiles.forEach((profile) => {
+        const profileId = resolveImportedProfileId(profile);
+        if (!profileId) return;
+        deduplicated.set(profileId, { ...profile, profile_id: profileId });
+      });
+
+      const profiles = Array.from(deduplicated.values());
+      if (!profiles.length) {
+        setImportError("No valid profile entries with profile_id were found.");
+        return;
+      }
+
+      const existingCount = profiles.filter((profile) => persistedProfileIdSet.has(profile.profile_id)).length;
+      setImportPreview({
+        profiles,
+        totalInFile: importedProfiles.length,
+        validCount: profiles.length,
+        duplicateCount: importedProfiles.length - profiles.length,
+        existingCount,
+        newCount: profiles.length - existingCount
+      });
+      setOverwriteOnImport(true);
+      setImportDialogOpen(true);
+    } catch (_err) {
+      setImportError("Invalid JSON file. Please choose a valid profile export.");
+    }
+  };
+
+  const handleImportFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    await openImportDialogFromFile(file);
+  };
+
+  const handleConfirmImportProfiles = async () => {
+    if (!importPreview?.profiles?.length) {
+      setImportDialogOpen(false);
+      return;
+    }
+    setIsImportingProfiles(true);
+    setImportError("");
+    try {
+      await onImportProfiles?.({
+        profiles: importPreview.profiles,
+        overwriteExisting: overwriteOnImport
+      });
+      setImportDialogOpen(false);
+      setImportPreview(null);
+      setSelectedProfileIds(new Set());
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Failed to import profiles.");
+    } finally {
+      setIsImportingProfiles(false);
+    }
+  };
+
+  const renderProfileActionsDropdown = () => (
+    <div className="cv-actions-dropdown" ref={actionsMenuContainerRef}>
+      <button
+        ref={actionsMenuButtonRef}
+        type="button"
+        className={`secondary cv-actions-dropdown-trigger${actionsMenuOpen ? " is-open" : ""}`}
+        onClick={() => setActionsMenuOpen((prev) => !prev)}
+        aria-haspopup="menu"
+        aria-expanded={actionsMenuOpen}
+      >
+        Actions
+        <ChevronDown size={14} />
+      </button>
+      {actionsMenuOpen ? (
+        <div className="cv-actions-dropdown-menu" role="menu">
+          {!hideCreateProfileButton ? (
+            <button
+              type="button"
+              className="cv-actions-menu-item"
+              onClick={() => {
+                openNewEntryDialog(isJobMode ? "assign-id" : "create-and-save");
+                setActionsMenuOpen(false);
+              }}
+              role="menuitem"
+            >
+              <Plus size={14} />
+              New profile
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="cv-actions-menu-item"
+            onClick={() => {
+              handleExportAllProfiles();
+              setActionsMenuOpen(false);
+            }}
+            disabled={isProfileBulkActionBusy || !cvProfiles.length}
+            role="menuitem"
+          >
+            <Download size={14} />
+            Export all
+          </button>
+          <button
+            type="button"
+            className="cv-actions-menu-item"
+            onClick={() => {
+              importFileInputRef.current?.click();
+              setActionsMenuOpen(false);
+            }}
+            disabled={isProfileBulkActionBusy}
+            role="menuitem"
+          >
+            <Upload size={14} />
+            Import JSON
+          </button>
+          {selectedPersistedProfileIds.length ? (
+            <button
+              type="button"
+              className="cv-actions-menu-item"
+              onClick={() => {
+                handleExportSelectedProfiles();
+                setActionsMenuOpen(false);
+              }}
+              disabled={isProfileBulkActionBusy}
+              role="menuitem"
+            >
+              <Download size={14} />
+              Export selected
+            </button>
+          ) : null}
+          {selectedPersistedProfileIds.length ? (
+            <button
+              type="button"
+              className="cv-actions-menu-item is-danger"
+              onClick={() => {
+                setDeleteDialogOpen(true);
+                setActionsMenuOpen(false);
+              }}
+              disabled={isProfileBulkActionBusy}
+              role="menuitem"
+            >
+              <Trash2 size={14} />
+              Delete selected
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      <input
+        ref={importFileInputRef}
+        type="file"
+        accept="application/json"
+        style={{ display: "none" }}
+        onChange={handleImportFileChange}
+      />
+    </div>
+  );
+
+  if (collapsible && entryCollapsed) {
+    return (
+      <div className={`cv-entry${isJobMode ? " is-job-mode" : ""}`}>
+        <button
+          type="button"
+          className="cv-entry-header cv-entry-header-toggle"
+          onClick={() => setEntryCollapsed(false)}
+          aria-label="Open profile setup"
+        >
+          <div>
+            <p className="eyebrow">{setupEyebrow}</p>
+            <h3>{setupTitle}</h3>
+            <p className="helper">
+              {selectedProfileId
+                ? `Active profile: ${selectedProfileId}`
+                : "Profile setup is hidden to keep focus on preview and editing."}
+            </p>
           </div>
+          <span className="sub-card-toggle-indicator">
+            <ChevronRight size={15} />
+            <span>Open setup</span>
+          </span>
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`cv-entry${isJobMode ? " is-job-mode" : ""}`}>
+      {collapsible ? (
+        <button
+          type="button"
+          className="cv-entry-header cv-entry-header-toggle"
+          onClick={() => setEntryCollapsed(true)}
+          aria-label="Hide profile setup"
+        >
+          <div>
+            <p className="eyebrow">{setupEyebrow}</p>
+            <h3>{setupTitle}</h3>
+            <p className="helper">
+              {isJobMode
+                ? "Review context and tailor against this job. Profile browsing is optional and collapsed by default."
+                : "Select a profile or start a new entry. Collapse this setup section to focus on preview and editing."}
+            </p>
+          </div>
+          <span className="sub-card-toggle-indicator">
+            <ChevronDown size={15} />
+            <span>Hide setup</span>
+          </span>
+        </button>
+      ) : (
+        <div className="cv-entry-header">
+          <div>
+            <p className="eyebrow">{setupEyebrow}</p>
+            <h3>{setupTitle}</h3>
+            <p className="helper">
+              {isJobMode
+                ? "Review context and tailor against this job. Profile browsing is optional and collapsed by default."
+                : "Select a profile or start a new entry directly from this table."}
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="cv-entry-panel">
+          {profileTableCollapsedByDefault ? (
+            <details
+              className="cv-profile-collapsible"
+              open={profileBrowserOpen}
+              onToggle={(event) => setProfileBrowserOpen(event.currentTarget.open)}
+            >
+              <summary className="cv-profile-collapsible-summary">
+                <span>Browse and switch CV profiles</span>
+                <span className="sub-card-toggle-indicator">
+                  {profileBrowserOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                  <span>{profileBrowserOpen ? "Collapse" : "Expand"}</span>
+                </span>
+              </summary>
+              <div style={{ marginTop: 12 }}>
+                <div>
+                  <label htmlFor="profileSearch" className="label">Search profiles</label>
+                  <div className="cv-search-row">
+                    <input
+                      ref={searchInputRef}
+                      id="profileSearch"
+                      type="text"
+                      placeholder="Search by profile name, company, status, job title, description, or CV text"
+                      value={profileSearchDraft}
+                      onChange={(e) => setProfileSearchDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          searchButtonRef.current?.click();
+                          searchButtonRef.current?.focus();
+                          return;
+                        }
+                        if (e.key === "Tab" && !e.shiftKey) {
+                          e.preventDefault();
+                          searchButtonRef.current?.focus();
+                        }
+                      }}
+                    />
+                    <div className="cv-search-actions">
+                      <button
+                        ref={searchButtonRef}
+                        type="button"
+                        className="primary cv-search-button"
+                        onClick={() => setProfileSearchQuery(profileSearchDraft)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Tab" && !e.shiftKey) {
+                            e.preventDefault();
+                            resetButtonRef.current?.focus();
+                          }
+                        }}
+                      >
+                        <Search size={14} />
+                        Search
+                      </button>
+                      <button
+                        ref={resetButtonRef}
+                        type="button"
+                        className="ghost cv-reset-button"
+                        onClick={() => {
+                          setProfileSearchDraft("");
+                          setProfileSearchQuery("");
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Tab" && e.shiftKey) {
+                            e.preventDefault();
+                            searchButtonRef.current?.focus();
+                            return;
+                          }
+                          if (e.key === "Tab" && !e.shiftKey) {
+                            e.preventDefault();
+                            actionsMenuButtonRef.current?.focus();
+                          }
+                        }}
+                      >
+                        <RotateCcw size={14} />
+                        Reset
+                      </button>
+                      <div className="cv-search-profile-actions">
+                        {renderProfileActionsDropdown()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="cv-profile-table-wrap">
+                  <div className="cv-profile-table-wrap-inner" style={{ maxHeight: `${profileTableHeight}px` }}>
+                  {renderProfileTable()}
+                  </div>
+                  <div
+                    className="cv-profile-table-resizer"
+                    role="separator"
+                    aria-orientation="horizontal"
+                    onMouseDown={handleTableResizeStart}
+                    title="Drag to resize profile list height"
+                  />
+                </div>
+              </div>
+            </details>
+          ) : (
+            <div className={`cv-profile-browser-layout${selectedProfile ? " has-selection" : ""}`}>
+              <div className="cv-profile-browser-search">
+                <label htmlFor="profileSearch" className="label">Search profiles</label>
+                <div className="cv-search-row">
+                  <input
+                    ref={searchInputRef}
+                    id="profileSearch"
+                    type="text"
+                    placeholder="Search by profile name, company, status, job title, description, or CV text"
+                    value={profileSearchDraft}
+                    onChange={(e) => setProfileSearchDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Tab" && e.shiftKey) {
+                        e.preventDefault();
+                        return;
+                      }
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        searchButtonRef.current?.click();
+                        searchButtonRef.current?.focus();
+                        return;
+                      }
+                      if (e.key === "Tab" && !e.shiftKey) {
+                        e.preventDefault();
+                        searchButtonRef.current?.focus();
+                      }
+                    }}
+                  />
+                  <div className="cv-search-actions">
+                    <button
+                      ref={searchButtonRef}
+                      type="button"
+                      className="primary cv-search-button"
+                      onClick={() => setProfileSearchQuery(profileSearchDraft)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Tab" && !e.shiftKey) {
+                          e.preventDefault();
+                          resetButtonRef.current?.focus();
+                        }
+                      }}
+                    >
+                      <Search size={14} />
+                      Search
+                    </button>
+                    <button
+                      ref={resetButtonRef}
+                      type="button"
+                      className="ghost cv-reset-button"
+                      onClick={() => {
+                        setProfileSearchDraft("");
+                        setProfileSearchQuery("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Tab" && e.shiftKey) {
+                          e.preventDefault();
+                          searchButtonRef.current?.focus();
+                          return;
+                        }
+                        if (e.key === "Tab" && !e.shiftKey) {
+                          e.preventDefault();
+                          actionsMenuButtonRef.current?.focus();
+                        }
+                      }}
+                    >
+                      <RotateCcw size={14} />
+                      Reset
+                    </button>
+                    <div className="cv-search-profile-actions">
+                      {renderProfileActionsDropdown()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="cv-profile-browser-table">
+                <div className="cv-profile-table-wrap">
+                  <div className="cv-profile-table-wrap-inner" style={{ maxHeight: `${profileTableHeight}px` }}>
+                    {renderProfileTable()}
+                  </div>
+                  <div
+                    className="cv-profile-table-resizer"
+                    role="separator"
+                    aria-orientation="horizontal"
+                    onMouseDown={handleTableResizeStart}
+                    title="Drag to resize profile list height"
+                  />
+                </div>
+              </div>
+
+              {selectedProfile ? (
+                <div className="sub-card cv-profile-browser-details">
+                  <div className="sub-card-header">
+                    <strong>Selected profile details</strong>
+                  </div>
+                  <div className="cv-profile-details-grid">
+                    <span><strong>Profile:</strong> {selectedProfile.profile_id}</span>
+                    <span><strong>Company:</strong> {selectedProfile.company || "-"}</span>
+                    <span><strong>Status:</strong> {selectedProfile.application_status || "not set"}</span>
+                    <span><strong>Role:</strong> {selectedProfile.job_title || "-"}</span>
+                    <span><strong>Template:</strong> {selectedProfile.template_id || "awesomecv"}</span>
+                    <span><strong>Revision:</strong> r{selectedProfile.revision ?? 0}</span>
+                    <span><strong>Updated:</strong> {formatDateTime(selectedProfile.updated_at || selectedProfile.created_at)}</span>
+                    <span><strong>CV text:</strong> {String(selectedProfile?.audit?.raw_resume_text || "").trim() ? "Available" : "Missing"}</span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
 
           <div className="sub-card" style={{ marginTop: 4 }}>
             <div className="sub-card-header">
-              <strong>Application context</strong>
+              <button
+                type="button"
+                className="sub-card-toggle"
+                onClick={() => setApplicationContextOpen((prev) => !prev)}
+                aria-expanded={applicationContextOpen}
+              >
+                <strong>Application context</strong>
+                <span className="sub-card-toggle-indicator">
+                  {applicationContextOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                  <span>{applicationContextOpen ? "Collapse" : "Expand"}</span>
+                </span>
+              </button>
             </div>
-            <p className="helper">Track job details and keep CV source text here. Use it for both existing and new entries.</p>
+            {applicationContextOpen ? (
+              <>
+            <p className="helper">Edit the active profile context used for tailoring and PDF rendering.</p>
             <div className="field-grid">
               <div>
                 <label htmlFor="newProfileName" className="label">CV profile</label>
@@ -614,6 +1399,21 @@ export default function CvEntry({
                   readOnly
                   aria-readonly="true"
                 />
+                {isJobMode ? (
+                  <p className="helper cv-working-copy-note">
+                    Working copy mode: nothing is saved until you confirm Tailor for a new profile version.
+                  </p>
+                ) : null}
+                {isJobMode ? (
+                  <button
+                    type="button"
+                    className="secondary cv-profile-id-button"
+                    style={{ marginTop: 8 }}
+                    onClick={() => openNewEntryDialog("assign-id")}
+                  >
+                    Choose profile ID
+                  </button>
+                ) : null}
               </div>
               <div>
                 <label htmlFor="cvTemplateEntry" className="label">Template</label>
@@ -637,36 +1437,6 @@ export default function CvEntry({
                   <option value="german">German</option>
                 </select>
               </div>
-              {cvTemplateId === "hipstercv" || cvTemplateId === "awesomecv" ? (
-                <div>
-                  <label htmlFor="ctxProfileImage" className="label">
-                    {cvTemplateId === "hipstercv" ? "Profile image (top bar)" : "Profile image"}
-                  </label>
-                  <input
-                    id="ctxProfileImage"
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    onChange={handleProfileImageChange}
-                    disabled={isUploadingProfileImage}
-                  />
-                  <p className="helper" style={{ marginTop: 6 }}>
-                    {applicationContext.profile_image
-                      ? `Current image: ${applicationContext.profile_image}`
-                      : "No image selected yet."}
-                  </p>
-                  {applicationContext.profile_image ? (
-                    <button
-                      type="button"
-                      className="ghost"
-                      style={{ marginTop: 6 }}
-                      onClick={() => onApplicationContextChange((prev) => ({ ...prev, profile_image: "" }))}
-                    >
-                      Remove profile image
-                    </button>
-                  ) : null}
-                  {profileImageError ? <p className="error">{profileImageError}</p> : null}
-                </div>
-              ) : null}
             </div>
 
             <div className="field-grid">
@@ -713,6 +1483,39 @@ export default function CvEntry({
                   <option value="closed">Closed</option>
                 </select>
               </div>
+            </div>
+
+            <div className="field-grid">
+                {cvTemplateId === "hipstercv" || cvTemplateId === "awesomecv" ? (
+                  <div>
+                    <label htmlFor="ctxProfileImage" className="label">
+                      {cvTemplateId === "hipstercv" ? "Profile image (top bar)" : "Profile image"}
+                    </label>
+                    <input
+                      id="ctxProfileImage"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={handleProfileImageChange}
+                      disabled={isUploadingProfileImage}
+                    />
+                    <p className="helper" style={{ marginTop: 6 }}>
+                      {applicationContext.profile_image
+                        ? `Current image: ${applicationContext.profile_image}`
+                        : "No image selected yet."}
+                    </p>
+                    {applicationContext.profile_image ? (
+                      <button
+                        type="button"
+                        className="ghost"
+                        style={{ marginTop: 6 }}
+                        onClick={() => onApplicationContextChange((prev) => ({ ...prev, profile_image: "" }))}
+                      >
+                        Remove profile image
+                      </button>
+                    ) : null}
+                    {profileImageError ? <p className="error">{profileImageError}</p> : null}
+                  </div>
+                ) : null}
               <div style={{ gridColumn: "1 / -1" }}>
                 <label htmlFor="ctxJobUrl" className="label">Job URL</label>
                 <input
@@ -771,57 +1574,83 @@ export default function CvEntry({
                 {showExampleCvText ? <pre className="example-box">{EXAMPLE_CV_TEXT}</pre> : null}
               </div>
             </div>
+              </>
+            ) : null}
           </div>
 
           <div className="cv-entry-cta-wrap">
+            {isJobMode && tailorContext && !hideTailorAction ? (
+              <div className="w1-tailor-context">
+                <p className="w1-tailor-context-title">
+                  Create an editable, job-tailored copy for {tailorContext.jobTitle || "this role"}
+                  {tailorContext.company ? ` at ${tailorContext.company}` : ""}.
+                </p>
+                <div className="w1-tailor-context-grid">
+                  <span><strong>Target job:</strong> {(tailorContext.jobTitle || "-")}{tailorContext.company ? ` · ${tailorContext.company}` : ""}</span>
+                  <span><strong>Source profile:</strong> {tailorContext.sourceProfileId || "none selected"}</span>
+                  <span><strong>Target profile:</strong> {tailorContext.targetProfileId || "auto-generated"}</span>
+                  <span><strong>Template + language:</strong> {tailorContext.templateId || "awesomecv"} · {tailorContext.outputLanguage || "english"}</span>
+                </div>
+              </div>
+            ) : null}
             <div className="cv-entry-actions">
-              <button
-                ref={updateProfileButtonRef}
-                type="button"
-                className="primary cv-action-update"
-                onClick={onUpdateProfileCvText}
-                disabled={isUpdatingProfileCvText || isLoadingProfile || !hasPersistedSelectedProfile}
-                onKeyDown={(e) => {
-                  if (e.key === "Tab" && e.shiftKey) {
-                    e.preventDefault();
-                    exampleButtonRef.current?.focus();
-                    return;
-                  }
-                  if (e.key === "Tab" && !e.shiftKey) {
-                    e.preventDefault();
-                    tailorButtonRef.current?.focus();
-                  }
-                }}
-              >
-                <PencilLine size={14} />
-                {isUpdatingProfileCvText ? "Updating profile..." : "Update CV profile data"}
-              </button>
-              <button
-                ref={tailorButtonRef}
-                type="button"
-                className="primary cv-action-remap llm-action-button"
-                title="Use AI to tailor this CV profile from your CV text and the job details you added above."
-                onClick={openRemapDialog}
-                disabled={isRemappingProfileCvText || isLoadingProfile || !resumeText.trim()}
-                onKeyDown={(e) => {
-                  if (e.key === "Tab" && e.shiftKey) {
-                    e.preventDefault();
-                    updateProfileButtonRef.current?.focus();
-                    return;
-                  }
-                  if (e.key === "Tab" && !e.shiftKey) {
-                    e.preventDefault();
-                    focusElementById("pdf-preview-template-select");
-                  }
-                }}
-              >
-                <Sparkles size={14} />
-                {isRemappingProfileCvText ? "Tailoring profile..." : "Tailor CV using CV text & job description"}
-              </button>
+              {!hideUpdateAction ? (
+                <button
+                  ref={updateProfileButtonRef}
+                  type="button"
+                  className="secondary cv-action-save"
+                  onClick={handleSaveProfileClick}
+                  disabled={isUpdatingProfileCvText || isLoadingProfile}
+                  onKeyDown={(e) => {
+                    if (e.key === "Tab" && e.shiftKey) {
+                      e.preventDefault();
+                      exampleButtonRef.current?.focus();
+                      return;
+                    }
+                    if (e.key === "Tab" && !e.shiftKey) {
+                      e.preventDefault();
+                      tailorButtonRef.current?.focus();
+                    }
+                  }}
+                >
+                  <PencilLine size={14} />
+                  {isUpdatingProfileCvText ? "Saving profile..." : "Save profile"}
+                </button>
+              ) : null}
+              {!hideTailorAction ? (
+                <button
+                  ref={tailorButtonRef}
+                  type="button"
+                  className="primary cv-action-remap llm-action-button"
+                  title="Use AI to tailor this CV profile from your CV text and the job details you added above."
+                  onClick={openRemapDialog}
+                  disabled={typeof tailorActionDisabled === "boolean"
+                    ? tailorActionDisabled
+                    : (isRemappingProfileCvText || isLoadingProfile || !resumeText.trim())}
+                  onKeyDown={(e) => {
+                    if (e.key === "Tab" && e.shiftKey) {
+                      e.preventDefault();
+                      if (!hideUpdateAction) {
+                        updateProfileButtonRef.current?.focus();
+                      } else {
+                        exampleButtonRef.current?.focus();
+                      }
+                      return;
+                    }
+                    if (e.key === "Tab" && !e.shiftKey) {
+                      e.preventDefault();
+                      focusElementById("pdf-preview-template-select");
+                    }
+                  }}
+                >
+                  <Sparkles size={14} />
+                  {isRemappingProfileCvText ? "Tailoring profile..." : "Tailor CV using CV text & job description"}
+                </button>
+              ) : null}
             </div>
           </div>
 
-          {isRemappingProfileCvText && remapProgress ? (
+          {!hideTailorProgress && isRemappingProfileCvText && remapProgress ? (
             <div className="refinement-progress">
               <div className="results-loading">
                 <Spinner size="sm" color="blue.500" />
@@ -847,6 +1676,84 @@ export default function CvEntry({
 
       {profilesError && <p className="error">{profilesError}</p>}
       {cvEntryError && <p className="error">{cvEntryError}</p>}
+      {importError ? <p className="error">{importError}</p> : null}
+
+      {deleteDialogOpen ? (
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="delete-profiles-title">
+          <div className="modal-backdrop" onClick={() => setDeleteDialogOpen(false)} />
+          <div className="modal-card">
+            <div className="modal-header">
+              <h2 id="delete-profiles-title">Delete selected profiles?</h2>
+            </div>
+            <p className="helper">
+              You are about to delete {selectedPersistedProfileIds.length} profile(s). This action cannot be undone.
+            </p>
+            <div className="inline-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setDeleteDialogOpen(false)}
+                disabled={isDeletingProfiles}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="secondary cv-action-danger"
+                onClick={handleConfirmDeleteProfiles}
+                disabled={isDeletingProfiles || !selectedPersistedProfileIds.length}
+              >
+                {isDeletingProfiles ? "Deleting..." : "Delete profiles"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {importDialogOpen ? (
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="import-profiles-title">
+          <div className="modal-backdrop" onClick={() => setImportDialogOpen(false)} />
+          <div className="modal-card">
+            <div className="modal-header">
+              <h2 id="import-profiles-title">Import CV profiles</h2>
+            </div>
+            <p className="helper">
+              Found {importPreview?.validCount || 0} valid profile(s) in file.
+              {importPreview?.duplicateCount ? ` Ignored ${importPreview.duplicateCount} duplicate/invalid row(s).` : ""}
+            </p>
+            <div className="cv-import-summary">
+              <span><strong>New:</strong> {importPreview?.newCount || 0}</span>
+              <span><strong>Already existing:</strong> {importPreview?.existingCount || 0}</span>
+            </div>
+            <label className="cv-import-overwrite">
+              <input
+                type="checkbox"
+                checked={overwriteOnImport}
+                onChange={(event) => setOverwriteOnImport(event.target.checked)}
+              />
+              Overwrite existing profiles with the same profile ID
+            </label>
+            <div className="inline-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setImportDialogOpen(false)}
+                disabled={isImportingProfiles}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="secondary cv-action-remap"
+                onClick={handleConfirmImportProfiles}
+                disabled={isImportingProfiles || !importPreview?.validCount}
+              >
+                {isImportingProfiles ? "Importing..." : "Import profiles"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {remapDialogOpen && (
         <div className="modal" role="dialog" aria-modal="true" aria-labelledby="remap-name-title">
@@ -890,9 +1797,15 @@ export default function CvEntry({
           <div className="modal-backdrop" onClick={() => setNewEntryDialogOpen(false)} />
           <div className="modal-card">
             <div className="modal-header">
-              <h2 id="new-entry-title">Create new CV Profile</h2>
+              <h2 id="new-entry-title">
+                {newEntryDialogMode === "assign-id" ? "Choose profile ID" : "Create new CV Profile"}
+              </h2>
             </div>
-            <p className="helper">Choose a profile name to create and save a new entry immediately.</p>
+            <p className="helper">
+              {newEntryDialogMode === "assign-id"
+                ? "Choose the profile ID for this working copy. Nothing is saved yet."
+                : "Choose a profile name to create and save a new entry immediately."}
+            </p>
             <div>
               <label htmlFor="newEntryProfileName" className="label">Profile name</label>
               <input
@@ -916,7 +1829,9 @@ export default function CvEntry({
                 onClick={handleConfirmCreateEntry}
                 disabled={isCreatingProfileEntry || !newEntryProfileName.trim()}
               >
-                {isCreatingProfileEntry ? "Creating..." : "Create and save profile"}
+                {newEntryDialogMode === "assign-id"
+                  ? "Use this profile ID"
+                  : (isCreatingProfileEntry ? "Creating..." : "Create and save profile")}
               </button>
             </div>
           </div>
