@@ -136,14 +136,14 @@ const nextProfileVersionName = (profileId) => {
 };
 
 const PROFILE_TABLE_COLUMNS = [
-  { key: "profile_id", label: "CV profile", sortable: true, defaultWidth: 290, minWidth: 180 },
-  { key: "company", label: "Company", sortable: true, defaultWidth: 210, minWidth: 140 },
-  { key: "application_status", label: "Status", sortable: true, defaultWidth: 130, minWidth: 96 },
-  { key: "job_title", label: "Job title", sortable: true, defaultWidth: 260, minWidth: 160 },
-  { key: "template_id", label: "Template", sortable: true, defaultWidth: 130, minWidth: 96 },
-  { key: "revision", label: "Revision", sortable: true, defaultWidth: 96, minWidth: 76 },
-  { key: "cv_text", label: "CV text", sortable: false, defaultWidth: 110, minWidth: 88 },
-  { key: "updated", label: "Updated", sortable: true, defaultWidth: 170, minWidth: 120 }
+  { key: "profile_id", label: "CV profile", sortable: true, defaultWidth: 220, minWidth: 150 },
+  { key: "company", label: "Company", sortable: true, defaultWidth: 165, minWidth: 120 },
+  { key: "application_status", label: "Status", sortable: true, defaultWidth: 108, minWidth: 88 },
+  { key: "job_title", label: "Job title", sortable: true, defaultWidth: 215, minWidth: 140 },
+  { key: "template_id", label: "Template", sortable: true, defaultWidth: 112, minWidth: 92 },
+  { key: "revision", label: "Revision", sortable: true, defaultWidth: 84, minWidth: 72 },
+  { key: "cv_text", label: "CV text", sortable: false, defaultWidth: 98, minWidth: 84 },
+  { key: "updated", label: "Updated", sortable: true, defaultWidth: 132, minWidth: 108 }
 ];
 
 export default function CvEntry({
@@ -917,16 +917,18 @@ export default function CvEntry({
 
   const renderProfileBulkActions = () => (
     <div className="cv-bulk-actions">
-      <button
-        type="button"
-        className="secondary"
-        onClick={handleExportSelectedProfiles}
-        disabled={isProfileBulkActionBusy || !selectedPersistedProfileIds.length}
-        title="Export selected profiles as JSON"
-      >
-        <Download size={14} />
-        Export selected
-      </button>
+      {selectedPersistedProfileIds.length ? (
+        <button
+          type="button"
+          className="secondary"
+          onClick={handleExportSelectedProfiles}
+          disabled={isProfileBulkActionBusy}
+          title="Export selected profiles as JSON"
+        >
+          <Download size={14} />
+          Export selected
+        </button>
+      ) : null}
       <button
         type="button"
         className="ghost"
@@ -947,16 +949,18 @@ export default function CvEntry({
         <Upload size={14} />
         Import JSON
       </button>
-      <button
-        type="button"
-        className="secondary cv-action-danger"
-        onClick={() => setDeleteDialogOpen(true)}
-        disabled={isProfileBulkActionBusy || !selectedPersistedProfileIds.length}
-        title="Delete selected profiles"
-      >
-        <Trash2 size={14} />
-        Delete selected
-      </button>
+      {selectedPersistedProfileIds.length ? (
+        <button
+          type="button"
+          className="secondary cv-action-danger"
+          onClick={() => setDeleteDialogOpen(true)}
+          disabled={isProfileBulkActionBusy}
+          title="Delete selected profiles"
+        >
+          <Trash2 size={14} />
+          Delete selected
+        </button>
+      ) : null}
       <input
         ref={importFileInputRef}
         type="file"
