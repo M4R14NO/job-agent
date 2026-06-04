@@ -6,6 +6,7 @@ import {
   searchJobs
 } from "./api/search";
 import {
+  deleteCvProfile,
   fetchModels,
   getCvProfile,
   listCvProfiles,
@@ -240,6 +241,7 @@ export default function App() {
   const [cvProfiles, setCvProfiles] = useState([]);
   const [profilesError, setProfilesError] = useState("");
   const [profilesLoading, setProfilesLoading] = useState(false);
+  const [isProfileBulkActionBusy, setIsProfileBulkActionBusy] = useState(false);
   const [isCreatingProfileEntry, setIsCreatingProfileEntry] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState("");
   const [draftProfileId, setDraftProfileId] = useState("");
@@ -536,6 +538,192 @@ export default function App() {
   useEffect(() => {
     loadProfiles();
   }, []);
+
+  const buildExportFilename = () => {
+    const datePart = new Date().toISOString().slice(0, 10);
+    return `cv-profiles-${datePart}.json`;
+  };
+
+  const downloadJson = (payload, filename) => {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDeleteProfiles = async (profileIds = []) => {
+    const ids = Array.from(new Set((profileIds || []).filter(Boolean)));
+    if (!ids.length) return;
+
+    setIsProfileBulkActionBusy(true);
+    setCvEntryError("");
+    try {
+      const failedIds = [];
+      for (const id of ids) {
+        try {
+          await deleteCvProfile(id);
+        } catch (_err) {
+          failedIds.push(id);
+        }
+      }
+
+      const deletedIds = ids.filter((id) => !failedIds.includes(id));
+      if (deletedIds.length) {
+        setCvProfiles((prev) => prev.filter((profile) => !deletedIds.includes(profile.profile_id)));
+      }
+
+      if (deletedIds.includes(selectedProfileId)) {
+        clearCreatePreviewState();
+        setSelectedProfileId("");
+        setDraftProfileId("");
+        setIsDraftProfileActive(false);
+        setNewProfileId("");
+        setResumeText("");
+        setApplicationContext({ ...EMPTY_APPLICATION_CONTEXT });
+        setLoadedProfileSnapshot({
+          profile_id: "",
+          revision: 0,
+          updated_at: null,
+          raw_resume_text: "",
+          ...EMPTY_APPLICATION_CONTEXT
+        });
+      }
+
+      if (deletedIds.includes(selectedRerankProfileId)) {
+        setSelectedRerankProfileId("");
+      }
+
+      await loadProfiles();
+
+      if (!failedIds.length) {
+        setCvEntryError(`Deleted ${deletedIds.length} profile(s).`);
+      } else {
+        setCvEntryError(
+          `Deleted ${deletedIds.length} profile(s). Failed to delete ${failedIds.length}: ${failedIds.join(", ")}`
+        );
+      }
+    } catch (err) {
+      setCvEntryError(err instanceof Error ? err.message : "Failed to delete selected profiles.");
+    } finally {
+      setIsProfileBulkActionBusy(false);
+    }
+  };
+
+  const handleExportProfiles = async (profileIds = []) => {
+    const ids = Array.from(new Set((profileIds || []).filter(Boolean)));
+    if (!ids.length) return;
+
+    setIsProfileBulkActionBusy(true);
+    setCvEntryError("");
+    try {
+      const outcomes = await Promise.allSettled(ids.map((id) => getCvProfile(id)));
+      const exported = [];
+      const failedIds = [];
+      outcomes.forEach((outcome, index) => {
+        if (outcome.status === "fulfilled") {
+          exported.push(outcome.value);
+        } else {
+          failedIds.push(ids[index]);
+        }
+      });
+
+      if (!exported.length) {
+        throw new Error("No profiles could be exported.");
+      }
+
+      downloadJson(
+        {
+          export_version: "cv-profile-export-v1",
+          exported_at: new Date().toISOString(),
+          profiles: exported
+        },
+        buildExportFilename()
+      );
+
+      if (!failedIds.length) {
+        setCvEntryError(`Exported ${exported.length} profile(s).`);
+      } else {
+        setCvEntryError(
+          `Exported ${exported.length} profile(s). Failed to export ${failedIds.length}: ${failedIds.join(", ")}`
+        );
+      }
+    } catch (err) {
+      setCvEntryError(err instanceof Error ? err.message : "Failed to export profiles.");
+    } finally {
+      setIsProfileBulkActionBusy(false);
+    }
+  };
+
+  const handleImportProfiles = async ({ profiles = [], overwriteExisting = true } = {}) => {
+    const incomingProfiles = Array.isArray(profiles) ? profiles : [];
+    if (!incomingProfiles.length) return;
+
+    setIsProfileBulkActionBusy(true);
+    setCvEntryError("");
+    try {
+      const uniqueById = new Map();
+      incomingProfiles.forEach((profile) => {
+        const id = String(profile?.profile_id || "").trim();
+        if (!id) return;
+        uniqueById.set(id, { ...profile, profile_id: id });
+      });
+
+      const stats = {
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        failed: 0
+      };
+
+      for (const [profileId, profilePayload] of uniqueById.entries()) {
+        let existing = null;
+        try {
+          existing = await getCvProfile(profileId);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "";
+          if (!message.includes("status 404")) {
+            throw err;
+          }
+        }
+
+        if (existing && !overwriteExisting) {
+          stats.skipped += 1;
+          continue;
+        }
+
+        const savePayload = {
+          ...profilePayload,
+          profile_id: profileId,
+          revision: existing ? (existing.revision ?? 0) : 0
+        };
+
+        try {
+          await saveCvProfile(profileId, savePayload);
+          if (existing) {
+            stats.updated += 1;
+          } else {
+            stats.created += 1;
+          }
+        } catch (_err) {
+          stats.failed += 1;
+        }
+      }
+
+      await loadProfiles();
+      setCvEntryError(
+        `Import done. Created: ${stats.created}, updated: ${stats.updated}, skipped: ${stats.skipped}, failed: ${stats.failed}.`
+      );
+    } catch (err) {
+      setCvEntryError(err instanceof Error ? err.message : "Failed to import profiles.");
+    } finally {
+      setIsProfileBulkActionBusy(false);
+    }
+  };
 
   const contextFromProfile = (profile) => ({
     company: profile?.company || "",
@@ -2535,6 +2723,9 @@ export default function App() {
                   onSelectedProfileIdChange={setSelectedProfileId}
                   onProfileRowSelect={(profile) => loadProfileIntoJobCvContext(profile?.profile_id || "")}
                   onRefreshProfiles={loadProfiles}
+                  onDeleteProfiles={handleDeleteProfiles}
+                  onExportProfiles={handleExportProfiles}
+                  onImportProfiles={handleImportProfiles}
                   onUpdateProfileCvText={handleUpdateApplicationProfileData}
                   onRemapProfileCvText={handleRemapProfileCvText}
                   onCreateNewEntry={handleCreateNewEntry}
@@ -2546,6 +2737,7 @@ export default function App() {
                   isUploadingProfileImage={isUploadingProfileImage}
                   remapProgress={cvRemapProgress}
                   cvEntryError={cvEntryError}
+                  isProfileBulkActionBusy={isProfileBulkActionBusy}
                   cvTemplateId={cvTemplateId}
                   onCvTemplateIdChange={handleTemplateIdChange}
                   cvOutputLanguage={cvOutputLanguage}
@@ -2697,6 +2889,9 @@ export default function App() {
                       onSelectedProfileIdChange={setSelectedProfileId}
                       onProfileRowSelect={(profile) => loadProfileIntoJobCvContext(profile?.profile_id || "")}
                       onRefreshProfiles={loadProfiles}
+                      onDeleteProfiles={handleDeleteProfiles}
+                      onExportProfiles={handleExportProfiles}
+                      onImportProfiles={handleImportProfiles}
                       onUpdateProfileCvText={handleUpdateApplicationProfileData}
                       onRemapProfileCvText={handleRemapProfileCvText}
                       onCreateNewEntry={handleCreateNewEntry}
@@ -2708,6 +2903,7 @@ export default function App() {
                       isUploadingProfileImage={isUploadingProfileImage}
                       remapProgress={cvRemapProgress}
                       cvEntryError={cvEntryError}
+                      isProfileBulkActionBusy={isProfileBulkActionBusy}
                       cvTemplateId={cvTemplateId}
                       onCvTemplateIdChange={handleTemplateIdChange}
                       cvOutputLanguage={cvOutputLanguage}
@@ -2903,6 +3099,9 @@ export default function App() {
                     onSelectedProfileIdChange={setSelectedProfileId}
                     onProfileRowSelect={handleProfileRowSelect}
                     onRefreshProfiles={loadProfiles}
+                    onDeleteProfiles={handleDeleteProfiles}
+                    onExportProfiles={handleExportProfiles}
+                    onImportProfiles={handleImportProfiles}
                     onUpdateProfileCvText={handleUpdateApplicationProfileData}
                     onRemapProfileCvText={handleRemapProfileCvText}
                     onCreateNewEntry={handleCreateNewEntry}
@@ -2912,6 +3111,7 @@ export default function App() {
                     isUpdatingProfileCvText={isUpdatingProfileCvText}
                     isRemappingProfileCvText={isRemappingProfileCvText}
                     isUploadingProfileImage={isUploadingProfileImage}
+                    isProfileBulkActionBusy={isProfileBulkActionBusy}
                     remapProgress={cvRemapProgress}
                     cvEntryError={cvEntryError}
                     cvTemplateId={cvTemplateId}

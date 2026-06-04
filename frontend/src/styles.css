@@ -841,6 +841,13 @@ button:active:not(:disabled) {
   flex-wrap: wrap;
 }
 
+.cv-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .cv-profile-table-wrap {
   border: 1px solid #e5e7eb;
   border-radius: 12px;
@@ -883,10 +890,29 @@ button:active:not(:disabled) {
   white-space: nowrap;
 }
 
-.cv-profile-table td:nth-child(1) {
+.cv-profile-table td:nth-child(2) {
   padding-top: 0;
   padding-bottom: 0;
   padding-right: 14px;
+}
+
+.cv-profile-select-col {
+  width: 44px;
+  text-align: center;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.cv-profile-row-select {
+  width: 15px;
+  height: 15px;
+  accent-color: #1d4ed8;
+  cursor: pointer;
+}
+
+.cv-profile-row-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .cv-profile-table-text {
@@ -929,7 +955,7 @@ button:active:not(:disabled) {
   padding-bottom: 10px;
 }
 
-.cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(1) {
+.cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(2) {
   padding-top: 0;
   padding-bottom: 0;
 }
@@ -952,8 +978,8 @@ button:active:not(:disabled) {
   background: #f8fbff;
 }
 
-.cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(1),
-.cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(1) {
+.cv-entry:not(.is-job-mode) .cv-profile-table th:nth-child(2),
+.cv-entry:not(.is-job-mode) .cv-profile-table td:nth-child(2) {
   padding-right: 14px;
 }
 
@@ -1069,9 +1095,29 @@ button:active:not(:disabled) {
   padding-bottom: 7px;
 }
 
-.cv-entry.is-job-mode .cv-profile-table td:nth-child(1) {
+.cv-entry.is-job-mode .cv-profile-table td:nth-child(2) {
   padding-top: 0;
   padding-bottom: 0;
+}
+
+.cv-import-summary {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+
+.cv-import-overwrite {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 2px;
+  font-size: 14px;
+}
+
+.cv-import-overwrite input {
+  width: auto;
+  flex: 0 0 auto;
 }
 
 .cv-profile-tree-main {

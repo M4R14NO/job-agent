@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ChevronDown, ChevronRight, Download, PencilLine, Plus, Search, RotateCcw, Sparkles, Tag } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Download, PencilLine, Plus, Search, RotateCcw, Sparkles, Tag, Trash2, Upload } from "lucide-react";
 import { Progress, Spinner } from "@chakra-ui/react";
 
 const EXAMPLE_CV_TEXT = `PROFILE
@@ -154,6 +154,9 @@ export default function CvEntry({
   onProfileRowSelect,
   onUpdateProfileCvText,
   onRemapProfileCvText,
+  onDeleteProfiles,
+  onExportProfiles,
+  onImportProfiles,
   onCreateNewEntry,
   onBeginNewEntry,
   isCreatingProfileEntry,
@@ -161,6 +164,7 @@ export default function CvEntry({
   isUpdatingProfileCvText,
   isRemappingProfileCvText,
   isUploadingProfileImage,
+  isProfileBulkActionBusy = false,
   remapProgress,
   cvEntryError,
   cvTemplateId,
@@ -211,6 +215,14 @@ export default function CvEntry({
   const [entryCollapsed, setEntryCollapsed] = useState(defaultCollapsed);
   const [profileTableHeight, setProfileTableHeight] = useState(420);
   const [columnWidths, setColumnWidths] = useState(() => PROFILE_TABLE_COLUMNS.map((column) => column.defaultWidth));
+  const [selectedProfileIds, setSelectedProfileIds] = useState(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeletingProfiles, setIsDeletingProfiles] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState(null);
+  const [overwriteOnImport, setOverwriteOnImport] = useState(true);
+  const [importError, setImportError] = useState("");
+  const [isImportingProfiles, setIsImportingProfiles] = useState(false);
   const searchInputRef = useRef(null);
   const searchButtonRef = useRef(null);
   const resetButtonRef = useRef(null);
@@ -227,6 +239,7 @@ export default function CvEntry({
   const columnResizeStartXRef = useRef(0);
   const columnResizeStartWidthRef = useRef(0);
   const autoOpenProfileIdHandledRef = useRef(false);
+  const importFileInputRef = useRef(null);
 
   const profilesWithDraft = useMemo(() => {
     if (!isDraftProfileActive || !draftProfileId) return cvProfiles;
@@ -262,6 +275,11 @@ export default function CvEntry({
   const selectedProfile = useMemo(
     () => profilesWithDraft.find((profile) => profile.profile_id === selectedProfileId) || null,
     [profilesWithDraft, selectedProfileId]
+  );
+
+  const persistedProfileIdSet = useMemo(
+    () => new Set(cvProfiles.map((profile) => profile.profile_id)),
+    [cvProfiles]
   );
 
   const hasPersistedSelectedProfile = useMemo(
@@ -353,6 +371,25 @@ export default function CvEntry({
     [cvProfiles, remapProfileName]
   );
 
+  const selectedPersistedProfileIds = useMemo(
+    () => Array.from(selectedProfileIds).filter((id) => persistedProfileIdSet.has(id)),
+    [selectedProfileIds, persistedProfileIdSet]
+  );
+
+  const visiblePersistedProfileIds = useMemo(
+    () => treeRows
+      .map((row) => row.profile?.profile_id || "")
+      .filter((id) => id && persistedProfileIdSet.has(id)),
+    [treeRows, persistedProfileIdSet]
+  );
+
+  const areAllVisibleRowsSelected = useMemo(
+    () =>
+      visiblePersistedProfileIds.length > 0
+      && visiblePersistedProfileIds.every((id) => selectedProfileIds.has(id)),
+    [visiblePersistedProfileIds, selectedProfileIds]
+  );
+
   useEffect(() => {
     if (profileTableCollapsedByDefault) {
       setProfileBrowserOpen(false);
@@ -364,6 +401,18 @@ export default function CvEntry({
       setEntryCollapsed(true);
     }
   }, [defaultCollapsed]);
+
+  useEffect(() => {
+    setSelectedProfileIds((prev) => {
+      const next = new Set();
+      prev.forEach((id) => {
+        if (persistedProfileIdSet.has(id)) {
+          next.add(id);
+        }
+      });
+      return next;
+    });
+  }, [persistedProfileIdSet]);
 
   useEffect(() => {
     if (!collapsible || !autoCollapseOnScroll || entryCollapsed) return;
@@ -613,12 +662,35 @@ export default function CvEntry({
   const renderProfileTable = () => (
     <table className="cv-profile-table">
       <colgroup>
+        <col style={{ width: "44px" }} />
         {columnWidths.map((width, index) => (
           <col key={PROFILE_TABLE_COLUMNS[index].key} style={{ width: `${width}px` }} />
         ))}
       </colgroup>
       <thead>
         <tr>
+          <th className="cv-profile-table-header-cell cv-profile-select-col">
+            <input
+              type="checkbox"
+              className="cv-profile-row-select"
+              aria-label="Select all visible profiles"
+              checked={areAllVisibleRowsSelected}
+              onChange={(event) => {
+                const nextChecked = event.target.checked;
+                setSelectedProfileIds((prev) => {
+                  const next = new Set(prev);
+                  visiblePersistedProfileIds.forEach((id) => {
+                    if (nextChecked) {
+                      next.add(id);
+                    } else {
+                      next.delete(id);
+                    }
+                  });
+                  return next;
+                });
+              }}
+            />
+          </th>
           {PROFILE_TABLE_COLUMNS.map((column, index) => renderProfileHeaderCell(column, index))}
         </tr>
       </thead>
@@ -630,7 +702,7 @@ export default function CvEntry({
     if (profilesError) {
       return (
         <tr>
-          <td colSpan={8}>
+          <td colSpan={9}>
             <p className="error">Failed to load profiles: {profilesError}</p>
           </td>
         </tr>
@@ -640,7 +712,7 @@ export default function CvEntry({
     if (treeRows.length === 0) {
       return (
         <tr>
-          <td colSpan={8}>
+          <td colSpan={9}>
             <p className="helper">No matching profiles found.</p>
           </td>
         </tr>
@@ -664,6 +736,29 @@ export default function CvEntry({
           aria-selected={isSelected}
           aria-label={`Load profile ${profile.profile_id}`}
         >
+          <td className="cv-profile-select-col">
+            <input
+              type="checkbox"
+              className="cv-profile-row-select"
+              aria-label={`Select profile ${profile.profile_id}`}
+              checked={selectedProfileIds.has(profile.profile_id)}
+              disabled={!persistedProfileIdSet.has(profile.profile_id)}
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => {
+                event.stopPropagation();
+                const checked = event.target.checked;
+                setSelectedProfileIds((prev) => {
+                  const next = new Set(prev);
+                  if (checked) {
+                    next.add(profile.profile_id);
+                  } else {
+                    next.delete(profile.profile_id);
+                  }
+                  return next;
+                });
+              }}
+            />
+          </td>
           <td className="cv-profile-tree-td">
             {!isRoot ? (
               <span className="cv-profile-tree-rail" aria-hidden="true">
@@ -722,6 +817,155 @@ export default function CvEntry({
       );
     });
   };
+
+  const handleExportSelectedProfiles = async () => {
+    if (!selectedPersistedProfileIds.length) return;
+    await onExportProfiles?.(selectedPersistedProfileIds);
+  };
+
+  const handleExportAllProfiles = async () => {
+    const allIds = cvProfiles.map((profile) => profile.profile_id).filter(Boolean);
+    if (!allIds.length) return;
+    await onExportProfiles?.(allIds);
+  };
+
+  const handleConfirmDeleteProfiles = async () => {
+    if (!selectedPersistedProfileIds.length) {
+      setDeleteDialogOpen(false);
+      return;
+    }
+    setIsDeletingProfiles(true);
+    try {
+      await onDeleteProfiles?.(selectedPersistedProfileIds);
+      setSelectedProfileIds(new Set());
+      setDeleteDialogOpen(false);
+    } finally {
+      setIsDeletingProfiles(false);
+    }
+  };
+
+  const openImportDialogFromFile = async (file) => {
+    if (!file) return;
+    setImportError("");
+    try {
+      const content = await file.text();
+      const parsed = JSON.parse(content);
+      const importedProfiles = Array.isArray(parsed)
+        ? parsed
+        : (Array.isArray(parsed?.profiles) ? parsed.profiles : []);
+      if (!importedProfiles.length) {
+        setImportError("No profiles found in this JSON file.");
+        return;
+      }
+
+      const deduplicated = new Map();
+      importedProfiles.forEach((profile) => {
+        const profileId = String(profile?.profile_id || "").trim();
+        if (!profileId) return;
+        deduplicated.set(profileId, { ...profile, profile_id: profileId });
+      });
+
+      const profiles = Array.from(deduplicated.values());
+      if (!profiles.length) {
+        setImportError("No valid profile entries with profile_id were found.");
+        return;
+      }
+
+      const existingCount = profiles.filter((profile) => persistedProfileIdSet.has(profile.profile_id)).length;
+      setImportPreview({
+        profiles,
+        totalInFile: importedProfiles.length,
+        validCount: profiles.length,
+        duplicateCount: importedProfiles.length - profiles.length,
+        existingCount,
+        newCount: profiles.length - existingCount
+      });
+      setOverwriteOnImport(true);
+      setImportDialogOpen(true);
+    } catch (_err) {
+      setImportError("Invalid JSON file. Please choose a valid profile export.");
+    }
+  };
+
+  const handleImportFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    await openImportDialogFromFile(file);
+  };
+
+  const handleConfirmImportProfiles = async () => {
+    if (!importPreview?.profiles?.length) {
+      setImportDialogOpen(false);
+      return;
+    }
+    setIsImportingProfiles(true);
+    setImportError("");
+    try {
+      await onImportProfiles?.({
+        profiles: importPreview.profiles,
+        overwriteExisting: overwriteOnImport
+      });
+      setImportDialogOpen(false);
+      setImportPreview(null);
+      setSelectedProfileIds(new Set());
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Failed to import profiles.");
+    } finally {
+      setIsImportingProfiles(false);
+    }
+  };
+
+  const renderProfileBulkActions = () => (
+    <div className="cv-bulk-actions">
+      <button
+        type="button"
+        className="secondary"
+        onClick={handleExportSelectedProfiles}
+        disabled={isProfileBulkActionBusy || !selectedPersistedProfileIds.length}
+        title="Export selected profiles as JSON"
+      >
+        <Download size={14} />
+        Export selected
+      </button>
+      <button
+        type="button"
+        className="ghost"
+        onClick={handleExportAllProfiles}
+        disabled={isProfileBulkActionBusy || !cvProfiles.length}
+        title="Export all profiles as JSON"
+      >
+        <Download size={14} />
+        Export all
+      </button>
+      <button
+        type="button"
+        className="ghost"
+        onClick={() => importFileInputRef.current?.click()}
+        disabled={isProfileBulkActionBusy}
+        title="Import profiles from JSON"
+      >
+        <Upload size={14} />
+        Import JSON
+      </button>
+      <button
+        type="button"
+        className="secondary cv-action-danger"
+        onClick={() => setDeleteDialogOpen(true)}
+        disabled={isProfileBulkActionBusy || !selectedPersistedProfileIds.length}
+        title="Delete selected profiles"
+      >
+        <Trash2 size={14} />
+        Delete selected
+      </button>
+      <input
+        ref={importFileInputRef}
+        type="file"
+        accept="application/json"
+        style={{ display: "none" }}
+        onChange={handleImportFileChange}
+      />
+    </div>
+  );
 
   if (collapsible && entryCollapsed) {
     return (
@@ -891,6 +1135,7 @@ export default function CvEntry({
                             Create new CV Profile
                           </button>
                         ) : null}
+                        {renderProfileBulkActions()}
                       </div>
                     </div>
                   </div>
@@ -1000,6 +1245,7 @@ export default function CvEntry({
                           Create new CV Profile
                         </button>
                       ) : null}
+                      {renderProfileBulkActions()}
                     </div>
                   </div>
                 </div>
@@ -1345,6 +1591,84 @@ export default function CvEntry({
 
       {profilesError && <p className="error">{profilesError}</p>}
       {cvEntryError && <p className="error">{cvEntryError}</p>}
+      {importError ? <p className="error">{importError}</p> : null}
+
+      {deleteDialogOpen ? (
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="delete-profiles-title">
+          <div className="modal-backdrop" onClick={() => setDeleteDialogOpen(false)} />
+          <div className="modal-card">
+            <div className="modal-header">
+              <h2 id="delete-profiles-title">Delete selected profiles?</h2>
+            </div>
+            <p className="helper">
+              You are about to delete {selectedPersistedProfileIds.length} profile(s). This action cannot be undone.
+            </p>
+            <div className="inline-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setDeleteDialogOpen(false)}
+                disabled={isDeletingProfiles}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="secondary cv-action-danger"
+                onClick={handleConfirmDeleteProfiles}
+                disabled={isDeletingProfiles || !selectedPersistedProfileIds.length}
+              >
+                {isDeletingProfiles ? "Deleting..." : "Delete profiles"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {importDialogOpen ? (
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="import-profiles-title">
+          <div className="modal-backdrop" onClick={() => setImportDialogOpen(false)} />
+          <div className="modal-card">
+            <div className="modal-header">
+              <h2 id="import-profiles-title">Import CV profiles</h2>
+            </div>
+            <p className="helper">
+              Found {importPreview?.validCount || 0} valid profile(s) in file.
+              {importPreview?.duplicateCount ? ` Ignored ${importPreview.duplicateCount} duplicate/invalid row(s).` : ""}
+            </p>
+            <div className="cv-import-summary">
+              <span><strong>New:</strong> {importPreview?.newCount || 0}</span>
+              <span><strong>Already existing:</strong> {importPreview?.existingCount || 0}</span>
+            </div>
+            <label className="cv-import-overwrite">
+              <input
+                type="checkbox"
+                checked={overwriteOnImport}
+                onChange={(event) => setOverwriteOnImport(event.target.checked)}
+              />
+              Overwrite existing profiles with the same profile ID
+            </label>
+            <div className="inline-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setImportDialogOpen(false)}
+                disabled={isImportingProfiles}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="secondary cv-action-remap"
+                onClick={handleConfirmImportProfiles}
+                disabled={isImportingProfiles || !importPreview?.validCount}
+              >
+                {isImportingProfiles ? "Importing..." : "Import profiles"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {remapDialogOpen && (
         <div className="modal" role="dialog" aria-modal="true" aria-labelledby="remap-name-title">
