@@ -1,7 +1,7 @@
 import math
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from datetime import datetime
@@ -42,6 +42,7 @@ from .services.cv_service import (
     render_cv_pdf_from_payload,
     rewrite_canonical_with_prompt,
     save_profile_image,
+    _resolve_profile_image_path,
 )
 from .services.cv_storage import RevisionMismatchError, get_profile_store
 from .services.lmstudio_client import chat_completion, list_models, safe_request
@@ -464,6 +465,14 @@ async def upload_cv_profile_image(file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return {"image_path": image_path}
+
+
+@app.get("/cv/profile-image/{image_name}")
+def get_cv_profile_image(image_name: str) -> FileResponse:
+    resolved = _resolve_profile_image_path(image_name)
+    if resolved is None:
+        raise HTTPException(status_code=404, detail="Profile image not found")
+    return FileResponse(resolved)
 
 
 @app.get("/cv/profiles", response_model=CvProfileListResponse)

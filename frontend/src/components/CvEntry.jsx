@@ -163,7 +163,6 @@ export default function CvEntry({
   isLoadingProfile,
   isUpdatingProfileCvText,
   isRemappingProfileCvText,
-  isUploadingProfileImage,
   isProfileBulkActionBusy = false,
   remapProgress,
   cvEntryError,
@@ -173,7 +172,6 @@ export default function CvEntry({
   onCvOutputLanguageChange,
   applicationContext,
   onApplicationContextChange,
-  onUploadProfileImage,
   resumeText,
   onResumeTextChange,
   newProfileId,
@@ -209,7 +207,6 @@ export default function CvEntry({
   const [newEntryDialogMode, setNewEntryDialogMode] = useState("create-and-save");
   const [newEntryProfileName, setNewEntryProfileName] = useState("");
   const [newEntryError, setNewEntryError] = useState("");
-  const [profileImageError, setProfileImageError] = useState("");
   const [profileBrowserOpen, setProfileBrowserOpen] = useState(!profileTableCollapsedByDefault);
   const [applicationContextOpen, setApplicationContextOpen] = useState(!applicationContextDefaultCollapsed);
   const [entryCollapsed, setEntryCollapsed] = useState(defaultCollapsed);
@@ -565,17 +562,6 @@ export default function CvEntry({
     setRemapDialogOpen(false);
   };
 
-  const handleProfileImageChange = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setProfileImageError("");
-    try {
-      await onUploadProfileImage?.(file);
-    } catch (err) {
-      setProfileImageError(err instanceof Error ? err.message : "Failed to upload profile image");
-    }
-  };
 
   const toggleSort = (nextSortBy) => {
     if (sortBy === nextSortBy) {
@@ -1486,36 +1472,6 @@ export default function CvEntry({
             </div>
 
             <div className="field-grid">
-                {cvTemplateId === "hipstercv" || cvTemplateId === "awesomecv" ? (
-                  <div>
-                    <label htmlFor="ctxProfileImage" className="label">
-                      {cvTemplateId === "hipstercv" ? "Profile image (top bar)" : "Profile image"}
-                    </label>
-                    <input
-                      id="ctxProfileImage"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      onChange={handleProfileImageChange}
-                      disabled={isUploadingProfileImage}
-                    />
-                    <p className="helper" style={{ marginTop: 6 }}>
-                      {applicationContext.profile_image
-                        ? `Current image: ${applicationContext.profile_image}`
-                        : "No image selected yet."}
-                    </p>
-                    {applicationContext.profile_image ? (
-                      <button
-                        type="button"
-                        className="ghost"
-                        style={{ marginTop: 6 }}
-                        onClick={() => onApplicationContextChange((prev) => ({ ...prev, profile_image: "" }))}
-                      >
-                        Remove profile image
-                      </button>
-                    ) : null}
-                    {profileImageError ? <p className="error">{profileImageError}</p> : null}
-                  </div>
-                ) : null}
               <div style={{ gridColumn: "1 / -1" }}>
                 <label htmlFor="ctxJobUrl" className="label">Job URL</label>
                 <input

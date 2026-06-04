@@ -17,7 +17,8 @@ import {
   deleteCvProfile,
   previewCvMapping,
   rewriteCvCanonical,
-  saveCvProfile
+  saveCvProfile,
+  API_BASE_URL
 } from "../api/llm";
 import OverwriteConfirmationModal from "./OverwriteConfirmationModal";
 
@@ -779,7 +780,10 @@ export default function CvReview({
   tailorProgress = null,
   readOnly = false,
   showTailorAction = true,
-  onEditProfile
+  onEditProfile,
+  onUploadProfileImage,
+  onClearProfileImage,
+  isUploadingProfileImage = false
 }) {
   const isHipsterTemplate = templateId === "hipstercv";
   const resolvedInitialProfileId = canonical?.profile_id || initialProfileId || "default";
@@ -817,6 +821,8 @@ export default function CvReview({
   const [dragOverItem, setDragOverItem] = useState(null); // { namespace, index }
   const [openPreviewEditors, setOpenPreviewEditors] = useState({});
   const [hipsterPreviewTab, setHipsterPreviewTab] = useState("sidebar");
+  const [showProfileImageUploader, setShowProfileImageUploader] = useState(false);
+  const [profileImagePreviewError, setProfileImagePreviewError] = useState(false);
   const [expandedSections, setExpandedSections] = useState(() => ({
     basics: true,
     summary: false,
@@ -983,6 +989,13 @@ export default function CvReview({
       setHipsterPreviewTab("sidebar");
     }
   }, [isHipsterTemplate]);
+
+  useEffect(() => {
+    setProfileImagePreviewError(false);
+    if (!applicationContext?.profile_image) {
+      setShowProfileImageUploader(false);
+    }
+  }, [applicationContext?.profile_image]);
 
   useEffect(() => {
     const sourceProfileId = canonical?.profile_id || initialProfileId || "default";
@@ -2569,6 +2582,22 @@ export default function CvReview({
     );
   };
 
+  const handleProfileImageChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    await onUploadProfileImage?.(file);
+    setShowProfileImageUploader(false);
+  };
+
+  const profileImageSrc = useMemo(() => {
+    const value = applicationContext?.profile_image;
+    if (!value) return "";
+    if (/^https?:\/\//i.test(value)) return value;
+    if (value.startsWith("/")) return `${API_BASE_URL}${value}`;
+    return `${API_BASE_URL}/cv/profile-image/${encodeURIComponent(value)}`;
+  }, [applicationContext?.profile_image]);
+
   const renderBasics = () =>
     renderCollapsibleSection({
       key: "basics",
@@ -2576,6 +2605,57 @@ export default function CvReview({
       helper: "Edit the details shown in the CV header. Use the eye icon to hide optional fields.",
       content: (
         <div className="personal-fields-grid">
+          {(templateId === "awesomecv" || templateId === "hipstercv")
+            && typeof onUploadProfileImage === "function" && (
+            <div className="personal-field-row is-full-width">
+              <label className="label">Profile image</label>
+              <div className="profile-image-row">
+                {applicationContext?.profile_image && !profileImagePreviewError ? (
+                  <img
+                    className="profile-image-thumb"
+                    src={profileImageSrc}
+                    alt="Profile image preview"
+                    onError={() => setProfileImagePreviewError(true)}
+                  />
+                ) : null}
+                {applicationContext?.profile_image ? (
+                  <div className="profile-image-actions">
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setShowProfileImageUploader(true)}
+                    >
+                      Change
+                    </button>
+                    {typeof onClearProfileImage === "function" ? (
+                      <button
+                        type="button"
+                        className="ghost"
+                        onClick={onClearProfileImage}
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              {(!applicationContext?.profile_image || showProfileImageUploader) ? (
+                <div className="profile-image-uploader">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleProfileImageChange}
+                    disabled={isUploadingProfileImage}
+                  />
+                </div>
+              ) : null}
+              <p className="helper">
+                {applicationContext?.profile_image
+                  ? `Current image: ${applicationContext.profile_image}`
+                  : "No image selected yet."}
+              </p>
+            </div>
+          )}
           {renderPersonalField({ label: "First name", previewKey: "first_name", canonicalField: "first_name" })}
           {renderPersonalField({ label: "Last name", previewKey: "last_name", canonicalField: "last_name" })}
           {renderPersonalField({ label: "Headline / Position", previewKey: "position", canonicalField: "headline" })}

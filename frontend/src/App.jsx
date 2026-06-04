@@ -17,10 +17,10 @@ import {
 } from "./api/llm";
 import { useJobDescription } from "./hooks/useJobDescription";
 import SearchFilters from "./components/SearchFilters";
-import ResultsList from "./components/ResultsList";
 import { JobActionsCard, JobDetailsCard, PdfPreviewCard } from "./components/JobModal";
 import CvReview from "./components/CvReview";
-import CvEntry from "./components/CvEntry";
+import CreateCvView from "./components/CreateCvView";
+import FindJobsView from "./components/FindJobsView";
 import OverwriteConfirmationModal from "./components/OverwriteConfirmationModal";
 import { Box, Grid, GridItem } from "@chakra-ui/react";
 
@@ -287,6 +287,7 @@ export default function App() {
     draftProfileName: ""
   });
   const [activeView, setActiveView] = useState("find");
+  const [createMode, setCreateMode] = useState("newbie");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeJobAction, setActiveJobAction] = useState("none");
   const [jobCvEntryStep, setJobCvEntryStep] = useState("choice");
@@ -339,6 +340,7 @@ export default function App() {
   const jobs = response?.jobs ?? [];
   const descriptionHtml = useJobDescription(selectedJob);
   const isFindView = activeView === "find";
+  const isNewbieCreateMode = activeView === "create" && createMode === "newbie";
   const isW1CvWorkflow = Boolean(selectedJob) && activeJobAction === "cv";
   const isJobCvChoiceStep = isW1CvWorkflow && !cvReview && jobCvEntryStep === "choice";
   const isJobCvCreateStep = isW1CvWorkflow && !cvReview && jobCvEntryStep === "create";
@@ -878,8 +880,11 @@ export default function App() {
     }
   }, [activeView, cvProfiles.length, profilesLoading]);
 
+  const shouldAutoRenderPdfPreview = !isNewbieCreateMode;
+
   useEffect(() => {
     if (!cvPreviewPayload || !cvReview) return undefined;
+    if (!shouldAutoRenderPdfPreview) return undefined;
     const activeTemplateId = cvReview.templateId || "awesomecv";
     const activeThemeColor = resolveTemplateThemeColor(activeTemplateId);
     const templateChanged = Boolean(pdfPreviewTemplateRef.current) && pdfPreviewTemplateRef.current !== activeTemplateId;
@@ -932,7 +937,7 @@ export default function App() {
         pdfPreviewTimerRef.current = null;
       }
     };
-  }, [cvPreviewPayload, cvReview?.templateId, cvThemeColors, applicationContext?.show_profile_image, applicationContext?.theme_color, applicationContext?.header_text_align, applicationContext?.header_title_size, applicationContext?.header_subtitle_size]);
+  }, [cvPreviewPayload, cvReview?.templateId, cvThemeColors, applicationContext?.show_profile_image, applicationContext?.theme_color, applicationContext?.header_text_align, applicationContext?.header_title_size, applicationContext?.header_subtitle_size, shouldAutoRenderPdfPreview]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -1443,6 +1448,29 @@ export default function App() {
     pdfPreviewStructureRef.current = "";
   };
 
+  const handleNewbieDraftReady = ({ canonical, templateId, outputLanguage, jobContext }) => {
+    pdfPreviewRequestVersionRef.current += 1;
+    setCvReview({
+      canonical,
+      job: {
+        title: jobContext?.job_title || "",
+        company: jobContext?.company || "",
+        description: jobContext?.job_description || "",
+        job_url: jobContext?.job_url || ""
+      },
+      templateId: templateId || "awesomecv",
+      docType: "resume",
+      outputLanguage: outputLanguage || "english",
+      initialProfileId: canonical?.profile_id || "default"
+    });
+    setIsJobReviewReadOnly(false);
+    setCvPreviewPayload(null);
+    setPdfPreviewUrl(null);
+    hasRenderedPdfPreviewRef.current = false;
+    pdfPreviewTemplateRef.current = templateId || "awesomecv";
+    pdfPreviewStructureRef.current = "";
+  };
+
   const sanitizeProfileId = (value) => {
     const normalized = (value || "").trim().toLowerCase();
     const safe = normalized
@@ -1450,6 +1478,7 @@ export default function App() {
       .replace(/(^-|-$)/g, "");
     return safe || `profile-${Date.now()}`;
   };
+
 
   const escapeRegexLiteral = (value) => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -2164,6 +2193,10 @@ export default function App() {
     }
   };
 
+  const handleClearProfileImage = () => {
+    handleApplicationContextChange((prev) => ({ ...prev, profile_image: "" }));
+  };
+
   const handleCvDraftStateChange = (nextDraftState) => {
     if (!nextDraftState) return;
     const nextHash = JSON.stringify({
@@ -2799,7 +2832,6 @@ export default function App() {
                   isLoadingProfile={isLoadingProfile}
                   isUpdatingProfileCvText={isUpdatingProfileCvText}
                   isRemappingProfileCvText={isRemappingProfileCvText}
-                  isUploadingProfileImage={isUploadingProfileImage}
                   remapProgress={cvRemapProgress}
                   cvEntryError={cvEntryError}
                   isProfileBulkActionBusy={isProfileBulkActionBusy}
@@ -2809,7 +2841,6 @@ export default function App() {
                   onCvOutputLanguageChange={setCvOutputLanguage}
                   applicationContext={applicationContext}
                   onApplicationContextChange={handleApplicationContextChange}
-                  onUploadProfileImage={handleUploadProfileImage}
                   resumeText={resumeText}
                   onResumeTextChange={setResumeText}
                   newProfileId={newProfileId}
@@ -2900,6 +2931,9 @@ export default function App() {
                       readOnly={isJobReviewReadOnly}
                       showTailorAction={showW1TailorAction}
                       onEditProfile={isJobReviewReadOnly ? openJobEditDecisionDialog : undefined}
+                      onUploadProfileImage={handleUploadProfileImage}
+                      onClearProfileImage={handleClearProfileImage}
+                      isUploadingProfileImage={isUploadingProfileImage}
                     />
                   </div>
                 </div>
@@ -2965,7 +2999,6 @@ export default function App() {
                       isLoadingProfile={isLoadingProfile}
                       isUpdatingProfileCvText={isUpdatingProfileCvText}
                       isRemappingProfileCvText={isRemappingProfileCvText}
-                      isUploadingProfileImage={isUploadingProfileImage}
                       remapProgress={cvRemapProgress}
                       cvEntryError={cvEntryError}
                       isProfileBulkActionBusy={isProfileBulkActionBusy}
@@ -2975,7 +3008,6 @@ export default function App() {
                       onCvOutputLanguageChange={setCvOutputLanguage}
                       applicationContext={applicationContext}
                       onApplicationContextChange={handleApplicationContextChange}
-                      onUploadProfileImage={handleUploadProfileImage}
                       resumeText={resumeText}
                       onResumeTextChange={setResumeText}
                       newProfileId={newProfileId}
@@ -3051,11 +3083,25 @@ export default function App() {
           </button>
           <button
             type="button"
-            className={`rail-button ${!isFindView ? "is-active" : ""}`}
-            onClick={() => handleSetView("create")}
+            className={`rail-button ${!isFindView && createMode === "newbie" ? "is-active" : ""}`}
+            onClick={() => {
+              handleSetView("create");
+              setCreateMode("newbie");
+            }}
           >
             <span className="rail-icon">📝</span>
             <span>Create CV</span>
+          </button>
+          <button
+            type="button"
+            className={`rail-button ${!isFindView && createMode === "advanced" ? "is-active" : ""}`}
+            onClick={() => {
+              handleSetView("create");
+              setCreateMode("advanced");
+            }}
+          >
+            <span className="rail-icon">🗂️</span>
+            <span>Manage profiles</span>
           </button>
           {isFindView && (
             <button
@@ -3118,149 +3164,77 @@ export default function App() {
 
         <GridItem className="app-main">
           {isFindView ? (
-            <>
-              <header className="main-header">
-                <p className="eyebrow">Local-only prototype</p>
-                <h1>Job Agent</h1>
-                <p className="subtitle">
-                  Find a job and generate an AI-tailored CV or cover letter. 
-                </p>
-              </header>
-              <section className="card">
-                <ResultsList
-                  jobs={jobs}
-                  rerankRequested={response?.rerank_requested}
-                  rerankApplied={response?.rerank_applied}
-                  rerankTopN={response?.rerank_top_n}
-                  rerankSkipReason={response?.rerank_skip_reason}
-                  queryProfileId={response?.query_profile_id}
-                  bm25Query={response?.bm25_query}
-                  bm25Language={response?.bm25_language}
-                  bm25Tokenizer={response?.bm25_tokenizer}
-                  searchPhaseMessage={searchPhaseMessage}
-                  onSelectJob={handleSelectJob}
-                  isLoading={isLoading}
-                  hasResponse={Boolean(response)}
-                  refinementProgress={refinementProgress}
-                />
-              </section>
-            </>
+            <FindJobsView
+              jobs={jobs}
+              response={response}
+              searchPhaseMessage={searchPhaseMessage}
+              onSelectJob={handleSelectJob}
+              isLoading={isLoading}
+              hasResponse={Boolean(response)}
+              refinementProgress={refinementProgress}
+            />
           ) : (
-            <>
-              <header className="main-header">
-                <p className="eyebrow">CV workspace</p>
-                <h1>Create CV</h1>
-                <p className="subtitle">
-                  Create a new CV or load and work on an existing one.
-                </p>
-              </header>
-              <div className="create-layout">
-                <section className="card">
-                  <CvEntry
-                    cvProfiles={cvProfiles}
-                    profilesLoading={profilesLoading}
-                    profilesError={profilesError}
-                    selectedProfileId={selectedProfileId}
-                    onSelectedProfileIdChange={setSelectedProfileId}
-                    onProfileRowSelect={handleProfileRowSelect}
-                    onRefreshProfiles={loadProfiles}
-                    onDeleteProfiles={handleDeleteProfiles}
-                    onExportProfiles={handleExportProfiles}
-                    onImportProfiles={handleImportProfiles}
-                    onUpdateProfileCvText={handleUpdateApplicationProfileData}
-                    onRemapProfileCvText={handleRemapProfileCvText}
-                    onCreateNewEntry={handleCreateNewEntry}
-                    onBeginNewEntry={handleBeginNewEntry}
-                    isCreatingProfileEntry={isCreatingProfileEntry}
-                    isLoadingProfile={isLoadingProfile}
-                    isUpdatingProfileCvText={isUpdatingProfileCvText}
-                    isRemappingProfileCvText={isRemappingProfileCvText}
-                    isUploadingProfileImage={isUploadingProfileImage}
-                    isProfileBulkActionBusy={isProfileBulkActionBusy}
-                    remapProgress={cvRemapProgress}
-                    cvEntryError={cvEntryError}
-                    cvTemplateId={cvTemplateId}
-                    onCvTemplateIdChange={handleTemplateIdChange}
-                    cvOutputLanguage={cvOutputLanguage}
-                    onCvOutputLanguageChange={setCvOutputLanguage}
-                    applicationContext={applicationContext}
-                    onApplicationContextChange={handleApplicationContextChange}
-                    onUploadProfileImage={handleUploadProfileImage}
-                    resumeText={resumeText}
-                    onResumeTextChange={setResumeText}
-                    newProfileId={newProfileId}
-                    onNewProfileIdChange={setNewProfileId}
-                    draftProfileId={draftProfileId}
-                    isDraftProfileActive={isDraftProfileActive}
-                    profileTableCollapsedByDefault
-                    applicationContextDefaultCollapsed
-                    collapsible={Boolean(cvReview)}
-                    defaultCollapsed={Boolean(cvReview)}
-                    autoCollapseOnScroll={Boolean(cvReview)}
-                  />
-                </section>
-                <div
-                  ref={createReviewLayoutRef}
-                  className="create-review-layout is-resizable"
-                  style={createReviewLayoutStyle}
-                >
-                  <div ref={createReviewSectionRef} className="create-review-pane create-review-pane-preview">
-                    <PdfPreviewCard
-                      pdfUrl={pdfPreviewUrl}
-                      isGenerating={isPdfGenerating}
-                      isDownloading={isPdfDownloading}
-                      templateId={cvReview?.templateId || cvTemplateId}
-                      onTemplateIdChange={handleTemplateIdChange}
-                      themeColor={resolveTemplateThemeColor(cvReview?.templateId || cvTemplateId || "awesomecv")}
-                      onThemeColorChange={handleThemeColorChange}
-                      showProfileImage={applicationContext.show_profile_image !== false}
-                      onShowProfileImageChange={handleShowProfileImageChange}
-                      hipsterHeaderAlign={applicationContext.header_text_align || "right"}
-                      onHipsterHeaderAlignChange={handleHipsterHeaderAlignChange}
-                      hipsterHeaderTitleSize={applicationContext.header_title_size || "Huge"}
-                      onHipsterHeaderTitleSizeChange={handleHipsterHeaderTitleSizeChange}
-                      hipsterHeaderSubtitleSize={applicationContext.header_subtitle_size || "Large"}
-                      onHipsterHeaderSubtitleSizeChange={handleHipsterHeaderSubtitleSizeChange}
-                      onUpdate={handleUpdatePdfPreview}
-                      onDownload={handleDownloadPdf}
-                      disabled={!cvReview}
-                      disabledReason="Tailor the CV first to enable preview."
-                    />
-                  </div>
-                  <div
-                    className="panel-review-divider"
-                    role="separator"
-                    aria-orientation="vertical"
-                    aria-label="Resize preview and editor panels"
-                    title="Drag to resize preview and editor"
-                    onMouseDown={handleCreateReviewResizeStart}
-                  />
-                  <div className="create-review-pane create-review-pane-editor">
-                    {cvReview ? (
-                      <CvReview
-                        canonical={cvReview.canonical}
-                        job={cvReview.job}
-                        templateId={cvReview.templateId}
-                        docType={cvReview.docType}
-                        outputLanguage={cvReview.outputLanguage}
-                        model={selectedModel}
-                        lmTimeout={lmTimeout}
-                        resumeText={resumeText}
-                        applicationContext={applicationContext}
-                        initialProfileId={cvReview.initialProfileId}
-                        onDraftStateChange={handleCvDraftStateChange}
-                        onPreviewPayloadChange={setCvPreviewPayload}
-                        onProfileSaved={handleCvReviewProfileSaved}
-                      />
-                    ) : (
-                      <div className="panel-card panel-empty panel-disabled">
-                        <p className="helper">Tailor the CV first to unlock CV preview and editing.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </>
+            <CreateCvView
+              isNewbieCreateMode={isNewbieCreateMode}
+              cvTemplateId={cvTemplateId}
+              onTemplateIdChange={handleTemplateIdChange}
+              cvOutputLanguage={cvOutputLanguage}
+              onCvOutputLanguageChange={setCvOutputLanguage}
+              resumeText={resumeText}
+              onResumeTextChange={setResumeText}
+              applicationContext={applicationContext}
+              onApplicationContextChange={handleApplicationContextChange}
+              onNewbieDraftReady={handleNewbieDraftReady}
+              cvReview={cvReview}
+              createReviewLayoutRef={createReviewLayoutRef}
+              createReviewLayoutStyle={createReviewLayoutStyle}
+              createReviewSectionRef={createReviewSectionRef}
+              pdfPreviewUrl={pdfPreviewUrl}
+              isPdfGenerating={isPdfGenerating}
+              isPdfDownloading={isPdfDownloading}
+              resolveTemplateThemeColor={resolveTemplateThemeColor}
+              onThemeColorChange={handleThemeColorChange}
+              onShowProfileImageChange={handleShowProfileImageChange}
+              onHipsterHeaderAlignChange={handleHipsterHeaderAlignChange}
+              onHipsterHeaderTitleSizeChange={handleHipsterHeaderTitleSizeChange}
+              onHipsterHeaderSubtitleSizeChange={handleHipsterHeaderSubtitleSizeChange}
+              onUpdatePdfPreview={handleUpdatePdfPreview}
+              onDownloadPdf={handleDownloadPdf}
+              onCreateReviewResizeStart={handleCreateReviewResizeStart}
+              selectedModel={selectedModel}
+              lmTimeout={lmTimeout}
+              onCvDraftStateChange={handleCvDraftStateChange}
+              onPreviewPayloadChange={setCvPreviewPayload}
+              onCvReviewProfileSaved={handleCvReviewProfileSaved}
+              onUploadProfileImage={handleUploadProfileImage}
+              onClearProfileImage={handleClearProfileImage}
+              isUploadingProfileImage={isUploadingProfileImage}
+              cvProfiles={cvProfiles}
+              profilesLoading={profilesLoading}
+              profilesError={profilesError}
+              selectedProfileId={selectedProfileId}
+              onSelectedProfileIdChange={setSelectedProfileId}
+              onProfileRowSelect={handleProfileRowSelect}
+              onRefreshProfiles={loadProfiles}
+              onDeleteProfiles={handleDeleteProfiles}
+              onExportProfiles={handleExportProfiles}
+              onImportProfiles={handleImportProfiles}
+              onUpdateProfileCvText={handleUpdateApplicationProfileData}
+              onRemapProfileCvText={handleRemapProfileCvText}
+              onCreateNewEntry={handleCreateNewEntry}
+              onBeginNewEntry={handleBeginNewEntry}
+              isCreatingProfileEntry={isCreatingProfileEntry}
+              isLoadingProfile={isLoadingProfile}
+              isUpdatingProfileCvText={isUpdatingProfileCvText}
+              isRemappingProfileCvText={isRemappingProfileCvText}
+              isProfileBulkActionBusy={isProfileBulkActionBusy}
+              remapProgress={cvRemapProgress}
+              cvEntryError={cvEntryError}
+              newProfileId={newProfileId}
+              onNewProfileIdChange={setNewProfileId}
+              draftProfileId={draftProfileId}
+              isDraftProfileActive={isDraftProfileActive}
+            />
           )}
         </GridItem>
       </Grid>
