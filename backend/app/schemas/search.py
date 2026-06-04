@@ -109,6 +109,7 @@ class LinkedInEnrichItem(BaseModel):
     job_url: str
     job_id: str | None = None
     description: str | None = None
+    description_html: str | None = None
     status: str
     error: str | None = None
 

@@ -156,11 +156,12 @@ const mergeLinkedInEnrichedJobs = (previous, enrichItems) => {
     const hadDescription = String(job.description || job.job_description || "").trim().length > 0;
     const nextDescription = String(item.description || "").trim();
 
-    if (item.status === "ok" && nextDescription) {
+    if (item.status === "ok" && (nextDescription || item.description_html)) {
       return {
         ...job,
         description: nextDescription,
         job_description: nextDescription,
+        description_html: item.description_html || null,
         _detailsFetched: true,
         _detailsStatus: "ok",
         _detailsError: null,
@@ -3122,7 +3123,7 @@ export default function App() {
                 <p className="eyebrow">Local-only prototype</p>
                 <h1>Job Agent</h1>
                 <p className="subtitle">
-                  Paste your resume text to start a search and ranking flow.
+                  Find a job and generate an AI-tailored CV or cover letter. 
                 </p>
               </header>
               <section className="card">
