@@ -1123,6 +1123,7 @@ export default function CvEntry({
                             type="button"
                             className="primary cv-create-button"
                             onClick={() => openNewEntryDialog(isJobMode ? "assign-id" : "create-and-save")}
+                            title="Create new CV Profile"
                             onKeyDown={(e) => {
                               if (e.key === "Tab" && e.shiftKey) {
                                 e.preventDefault();
@@ -1136,7 +1137,7 @@ export default function CvEntry({
                             }}
                           >
                             <Plus size={14} />
-                            Create new CV Profile
+                            New profile
                           </button>
                         ) : null}
                         {renderProfileBulkActions()}
@@ -1238,6 +1239,7 @@ export default function CvEntry({
                           type="button"
                           className="primary cv-create-button"
                           onClick={() => openNewEntryDialog(isJobMode ? "assign-id" : "create-and-save")}
+                          title="Create new CV Profile"
                           onKeyDown={(e) => {
                             if (e.key === "Tab" && !e.shiftKey) {
                               e.preventDefault();
@@ -1246,7 +1248,7 @@ export default function CvEntry({
                           }}
                         >
                           <Plus size={14} />
-                          Create new CV Profile
+                          New profile
                         </button>
                       ) : null}
                       {renderProfileBulkActions()}
