@@ -366,18 +366,19 @@ button:active:not(:disabled) {
 
 .panel-page.is-review-mode .panel-topbar-shell.is-hover-reveal {
   position: fixed;
-  inset: 0 0 auto 0;
+  inset: 0 0 auto;
   z-index: 40;
-  height: 160px;
+  height: 0;
   background: transparent;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .panel-page.is-review-mode .panel-topbar-hit-area {
   position: absolute;
   inset: 0 0 auto;
-  height: 160px;
+  height: 18px;
   z-index: 1;
+  pointer-events: auto;
 }
 
 .panel-topbar {
@@ -395,21 +396,16 @@ button:active:not(:disabled) {
 }
 
 .panel-page.is-review-mode .panel-topbar {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  inset: auto;
   z-index: 2;
   opacity: 0;
-  transform: translateY(-18px);
+  transform: translateY(calc(-100% - 10px));
   pointer-events: none;
   transition: opacity 0.18s ease, transform 0.18s ease;
   background: #ffffff;
-  height: 100%;
-  box-sizing: border-box;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
   border-bottom: 1px solid #dbe4ef;
-  padding-top: 18px;
-  padding-bottom: 18px;
-  align-content: flex-start;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -429,6 +425,7 @@ button:active:not(:disabled) {
   .panel-page.is-review-mode .panel-topbar-shell.is-hover-reveal {
     position: static;
     height: auto;
+    pointer-events: auto;
   }
 
   .panel-page.is-review-mode .panel-topbar-hit-area {
