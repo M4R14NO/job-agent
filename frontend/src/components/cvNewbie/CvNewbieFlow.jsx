@@ -22,6 +22,8 @@ export default function CvNewbieFlow({
   onApplicationContextChange,
   onGenerateDraft,
   isGeneratingDraft,
+  reviewActionLabel,
+  reviewActionDisabled,
   draftError,
   hasDraft,
   hasResumeTextChanges,
@@ -29,6 +31,8 @@ export default function CvNewbieFlow({
 }) {
   const stepIndex = Math.max(0, stepOrder.indexOf(step));
   const canGoNext = canAdvanceFromStep(step);
+  const resolvedReviewLabel = reviewActionLabel || "Generate draft";
+  const resolvedReviewDisabled = Boolean(reviewActionDisabled);
 
   const renderStepContent = () => {
     switch (step) {
@@ -120,7 +124,19 @@ export default function CvNewbieFlow({
             >
               Back
             </button>
-            {step !== "review" ? (
+            {step === "review" ? (
+              <button
+                type="button"
+                className="primary cv-step-next"
+                onClick={onGenerateDraft}
+                disabled={resolvedReviewDisabled}
+              >
+                {isGeneratingDraft ? (
+                  <span className="cv-step-spinner" aria-hidden="true" />
+                ) : null}
+                {isGeneratingDraft ? "Generating..." : resolvedReviewLabel}
+              </button>
+            ) : (
               <button
                 type="button"
                 className="primary cv-step-next"
@@ -129,7 +145,7 @@ export default function CvNewbieFlow({
               >
                 Next
               </button>
-            ) : null}
+            )}
           </div>
         </div>
         {renderStepContent()}

@@ -313,6 +313,7 @@ export default function App() {
   const pdfPreviewTimerRef = useRef(null);
   const pdfPreviewTemplateRef = useRef("");
   const hasRenderedPdfPreviewRef = useRef(false);
+  const shouldAutoRenderNewbiePreviewRef = useRef(false);
   const pdfPreviewStructureRef = useRef("");
   const pdfPreviewRequestVersionRef = useRef(0);
   const cvDraftHashRef = useRef("");
@@ -940,6 +941,14 @@ export default function App() {
   }, [cvPreviewPayload, cvReview?.templateId, cvThemeColors, applicationContext?.show_profile_image, applicationContext?.theme_color, applicationContext?.header_text_align, applicationContext?.header_title_size, applicationContext?.header_subtitle_size, shouldAutoRenderPdfPreview]);
 
   useEffect(() => {
+    if (!isNewbieCreateMode) return;
+    if (!shouldAutoRenderNewbiePreviewRef.current) return;
+    if (!cvReview || !cvPreviewPayload) return;
+    shouldAutoRenderNewbiePreviewRef.current = false;
+    handleUpdatePdfPreview();
+  }, [isNewbieCreateMode, cvReview, cvPreviewPayload]);
+
+  useEffect(() => {
     if (!isLoading) {
       setSearchElapsedMs(0);
       if (searchTimerRef.current) {
@@ -1446,10 +1455,12 @@ export default function App() {
     hasRenderedPdfPreviewRef.current = false;
     pdfPreviewTemplateRef.current = "";
     pdfPreviewStructureRef.current = "";
+    shouldAutoRenderNewbiePreviewRef.current = false;
   };
 
   const handleNewbieDraftReady = ({ canonical, templateId, outputLanguage, jobContext }) => {
     pdfPreviewRequestVersionRef.current += 1;
+    shouldAutoRenderNewbiePreviewRef.current = true;
     setCvReview({
       canonical,
       job: {

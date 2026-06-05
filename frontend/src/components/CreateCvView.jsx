@@ -11,7 +11,7 @@ const STEP_LABELS = {
   language: "Pick the output language",
   resume: "Paste your CV text",
   job: "Optional job context",
-  review: "Review and render"
+  review: "Edit CV"
 };
 
 export default function CreateCvView({
@@ -82,6 +82,12 @@ export default function CreateCvView({
   const stepIndex = useMemo(() => Math.max(0, STEP_ORDER.indexOf(cvCreateStep)), [cvCreateStep]);
   const hasResumeTextChanges = Boolean(cvReview)
     && resumeText.trim() !== lastGeneratedResumeText;
+  const canGenerateDraft = Boolean(resumeText.trim()) && !isGeneratingDraft;
+  const canAutoFillDraft = Boolean(cvReview) && hasResumeTextChanges && canGenerateDraft;
+  const reviewActionLabel = Boolean(cvReview) && hasResumeTextChanges
+    ? "Automagically fill CV given the updated CV text data"
+    : "Fill CV with AI magic";
+  const reviewActionDisabled = Boolean(cvReview) ? !canAutoFillDraft : !canGenerateDraft;
   const canAdvanceFromStep = (stepId) => {
     return true;
   };
@@ -186,6 +192,8 @@ export default function CreateCvView({
             onApplicationContextChange={onApplicationContextChange}
             onGenerateDraft={handleGenerateDraft}
             isGeneratingDraft={isGeneratingDraft}
+            reviewActionLabel={reviewActionLabel}
+            reviewActionDisabled={reviewActionDisabled}
             draftError={draftError}
             hasDraft={Boolean(cvReview)}
             hasResumeTextChanges={hasResumeTextChanges}

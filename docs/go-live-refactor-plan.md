@@ -77,6 +77,27 @@ This plan focuses on two streamlined user journeys (newbie and power user), redu
 3. Run GitHub Actions on a branch to validate CI/CD.
 4. Deploy to staging VPS and validate auth, CV generation, and job search.
 
+## Progress Update (2026-06-05)
+
+### Completed
+- Information architecture file created with entry points and newbie/power-user paths.
+- Newbie step flow implemented (template → language → CV text → job context → review).
+- App split into `CreateCvView` and `FindJobsView` with step state moved into `CreateCvView`.
+- Profile image upload moved into the CV editor; added thumbnail preview + change/remove controls.
+- Profile image serving added in backend (`GET /cv/profile-image/{image_name}`).
+- Newbie review action gated on CV text changes; action moved to header next to Back.
+- Newbie stepper and layout tightened to reduce vertical noise and align content.
+
+### In Progress
+- Newbie review step: progress bar + auto PDF render after first draft (recent updates; still validating UX).
+- Stepper/card vertical alignment tweaks (fine-tuning spacing to fully eliminate perceived gaps).
+
+### Not Started
+- Power user flow refactor to match newbie step structure.
+- Backend refactor into routers + CV service splits.
+- Backend-only tests for CV render/guard, search, and profile storage.
+- CI/CD pipeline and DSGVO-compliant auth.
+
 ## Open Decisions
 - Auth provider selection (Keycloak vs Authentik vs managed).
 - VPS setup details (single server vs split LLM server).
