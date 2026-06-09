@@ -200,7 +200,8 @@ export function PdfPreviewCard({
   onUpdate,
   onDownload,
   disabled = false,
-  disabledReason = ""
+  disabledReason = "",
+  unsyncedSaveCount = 0
 }) {
   const previewSrc = (() => {
     if (!pdfUrl) return "";
@@ -286,7 +287,7 @@ export function PdfPreviewCard({
             <button
               id="pdf-update-preview-button"
               type="button"
-              className="secondary btn-sm pdf-icon-only-button"
+              className="secondary btn-sm pdf-icon-only-button pdf-update-button"
               onClick={onUpdate}
               disabled={disabled || isGenerating}
               onKeyDown={handleUpdateKeyDown}
@@ -294,6 +295,9 @@ export function PdfPreviewCard({
               title={isGenerating ? "Rendering preview" : "Render preview"}
             >
               <RefreshCw size={14} />
+              {unsyncedSaveCount > 0 ? (
+                <span className="pdf-update-badge" aria-hidden="true">{unsyncedSaveCount}</span>
+              ) : null}
             </button>
             <button
               id="pdf-download-button"

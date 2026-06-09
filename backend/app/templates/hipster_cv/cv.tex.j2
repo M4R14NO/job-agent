@@ -186,8 +186,12 @@
 ((* if sections.languages *))((* include "sections/languages.tex.j2" *))((* endif *))
 ((* if sections.interests *))((* include "sections/interests.tex.j2" *))((* endif *))
 ((* endif *))
+% Strengths/Hobbies rendering intentionally disabled.
+% Keep section templates in the repository for optional future re-enable.
+((* if false *))
 ((* if strengths and strengths | length > 0 *))((* include "sections/strengths.tex.j2" *))((* endif *))
 ((* if hobbies and hobbies | length > 0 *))((* include "sections/hobbies.tex.j2" *))((* endif *))
+((* endif *))
 \vspace*{\fill}\null
 }
 

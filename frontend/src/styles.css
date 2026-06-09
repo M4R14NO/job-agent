@@ -2856,6 +2856,26 @@ body.modal-open .pdf-preview-iframe {
   box-shadow: 0 10px 18px rgba(37, 99, 235, 0.18);
 }
 
+.pdf-update-button {
+  position: relative;
+}
+
+.pdf-update-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #e11d48;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
 .ghost:hover,
 .secondary:hover,
 .primary:hover {

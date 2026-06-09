@@ -24,7 +24,7 @@ export default function CreateCvView({
   onResumeTextChange,
   applicationContext,
   onApplicationContextChange,
-  onNewbieDraftReady,
+  onNewbieDraftGenerated,
   cvReview,
   createReviewLayoutRef,
   createReviewLayoutStyle,
@@ -40,6 +40,7 @@ export default function CreateCvView({
   onHipsterHeaderSubtitleSizeChange,
   onUpdatePdfPreview,
   onDownloadPdf,
+  unsyncedSaveCount,
   onCreateReviewResizeStart,
   selectedModel,
   lmTimeout,
@@ -73,7 +74,8 @@ export default function CreateCvView({
   newProfileId,
   onNewProfileIdChange,
   draftProfileId,
-  isDraftProfileActive
+  isDraftProfileActive,
+  onBeforeStepLeave
 }) {
   const [cvCreateStep, setCvCreateStep] = useState("template");
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
@@ -92,19 +94,31 @@ export default function CreateCvView({
     return true;
   };
 
+  const notifyStepLeave = (nextStep) => {
+    if (typeof onBeforeStepLeave !== "function") return;
+    onBeforeStepLeave({ from: cvCreateStep, to: nextStep });
+  };
+
   const handleCreateStepNext = () => {
     if (!canAdvanceFromStep(cvCreateStep)) return;
     const nextIndex = Math.min(stepIndex + 1, STEP_ORDER.length - 1);
-    setCvCreateStep(STEP_ORDER[nextIndex]);
+    const nextStep = STEP_ORDER[nextIndex];
+    notifyStepLeave(nextStep);
+    setCvCreateStep(nextStep);
   };
 
   const handleCreateStepBack = () => {
     const nextIndex = Math.max(stepIndex - 1, 0);
-    setCvCreateStep(STEP_ORDER[nextIndex]);
+    const nextStep = STEP_ORDER[nextIndex];
+    notifyStepLeave(nextStep);
+    setCvCreateStep(nextStep);
   };
 
   const handleCreateStepJump = (stepId) => {
     if (!STEP_ORDER.includes(stepId)) return;
+    if (stepId !== cvCreateStep) {
+      notifyStepLeave(stepId);
+    }
     setCvCreateStep(stepId);
   };
 
@@ -156,7 +170,7 @@ export default function CreateCvView({
         }
       };
 
-      onNewbieDraftReady?.({
+      onNewbieDraftGenerated?.({
         canonical,
         templateId: cvTemplateId,
         outputLanguage: cvOutputLanguage,
@@ -222,6 +236,7 @@ export default function CreateCvView({
                     onHipsterHeaderSubtitleSizeChange={onHipsterHeaderSubtitleSizeChange}
                     onUpdate={onUpdatePdfPreview}
                     onDownload={onDownloadPdf}
+                    unsyncedSaveCount={unsyncedSaveCount}
                     disabled={!cvReview}
                     disabledReason="Generate a draft to enable preview."
                   />

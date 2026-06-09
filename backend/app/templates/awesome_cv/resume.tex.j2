@@ -29,7 +29,10 @@
 % Color for highlights
 % Awesome Colors: awesome-emerald, awesome-skyblue, awesome-red, awesome-pink, awesome-orange
 %                 awesome-nephritis, awesome-concrete, awesome-darknight
-((* if awesome_color *))
+((* if awesome_color_hex *))
+\definecolor{awesome-custom}{HTML}{((( awesome_color_hex )))}
+\colorlet{awesome}{awesome-custom}
+((* elif awesome_color *))
 \colorlet{awesome}{((( awesome_color )))}
 ((* else *))
 \colorlet{awesome}{awesome-red}
