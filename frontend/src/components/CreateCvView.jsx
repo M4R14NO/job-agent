@@ -7,7 +7,7 @@ import { parseCvCanonical } from "../api/llm";
 
 const STEP_ORDER = ["template", "language", "resume", "job", "review"];
 const STEP_LABELS = {
-  template: "Choose a template",
+  template: "Choose a CV template",
   language: "Pick the output language",
   resume: "Paste your CV text",
   job: "Optional job context",
