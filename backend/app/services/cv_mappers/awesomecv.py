@@ -22,6 +22,14 @@ MAX_BULLET_CHARS = 180
 MAX_SUMMARY_CHARS = 600
 MAX_SKILL_ITEM_CHARS = 120
 
+OUTPUT_LANGUAGE_PROMPTS = {
+    "english": "English",
+    "german": "German",
+    "french": "French",
+    "chinese": "Chinese",
+    "spanish": "Spanish",
+}
+
 
 def _derive_link_fields(links: list[str]) -> tuple[str | None, str | None, str | None]:
     homepage = None
@@ -216,11 +224,12 @@ def _build_template_prompt(
 ) -> str:
     company_text = company or ""
     canonical_json = canonical.model_dump()
-    language_line = ""
-    if output_language == "english":
-        language_line = "Write all free-text output in English. Translate if needed. "
-    elif output_language == "german":
-        language_line = "Write all free-text output in German. Translate if needed. "
+    language_name = OUTPUT_LANGUAGE_PROMPTS.get(output_language or "")
+    language_line = (
+        f"Write all free-text output in {language_name}. Translate if needed. "
+        if language_name
+        else ""
+    )
     return (
         "Map canonical CV data into the AwesomeCV template JSON. "
         f"{language_line}"

@@ -52,7 +52,15 @@ from .services.ranking_service import build_query_debug, score_jobs
 
 app = FastAPI(title="Job Agent API")
 
-ALLOWED_OUTPUT_LANGUAGES = {"english", "german"}
+ALLOWED_OUTPUT_LANGUAGES = {"english", "german", "french", "chinese", "spanish"}
+
+OUTPUT_LANGUAGE_PROMPTS = {
+    "english": "English",
+    "german": "German",
+    "french": "French",
+    "chinese": "Chinese",
+    "spanish": "Spanish",
+}
 
 app.add_middleware(
     CORSMiddleware,
@@ -80,9 +88,10 @@ def _normalize_output_language(value: str | None) -> str | None:
         return None
     normalized = value.strip().lower()
     if normalized not in ALLOWED_OUTPUT_LANGUAGES:
+        allowed = ", ".join(f"'{item}'" for item in sorted(ALLOWED_OUTPUT_LANGUAGES))
         raise HTTPException(
             status_code=400,
-            detail="Unsupported output_language. Use 'english' or 'german'.",
+            detail=f"Unsupported output_language. Use one of: {allowed}.",
         )
     return normalized
 
@@ -341,11 +350,8 @@ def generate_cover_letter(payload: CoverLetterRequest) -> CoverLetterResponse:
         raise HTTPException(status_code=400, detail="Model is required")
 
     output_language = _normalize_output_language(payload.output_language)
-    language_line = ""
-    if output_language == "english":
-        language_line = " Write the letter in English."
-    elif output_language == "german":
-        language_line = " Write the letter in German."
+    language_name = OUTPUT_LANGUAGE_PROMPTS.get(output_language or "")
+    language_line = f" Write the letter in {language_name}." if language_name else ""
 
     system = (
         "You are a hiring assistant who writes concise, tailored cover letters. "

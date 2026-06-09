@@ -7,10 +7,31 @@
 \documentclass[pastel]{hipstercv}
 \usepackage[utf8]{inputenc}
 \usepackage[default]{raleway}
+\usepackage{fontspec}
 \usepackage[left=1cm,right=1cm,bottom=1cm,top=0cm,a4paper]{geometry}
 \usepackage[english]{babel}
 \usepackage{enumitem}
 \usepackage{eso-pic}
+\IfFileExists{xeCJK.sty}{
+\usepackage{xeCJK}
+\newcommand{\hipstersetcjkfont}[1]{
+	\setCJKmainfont{#1}
+	\setCJKsansfont{#1}
+}
+\IfFontExistsTF{Noto Sans CJK SC}{\hipstersetcjkfont{Noto Sans CJK SC}}{
+	\IfFontExistsTF{Source Han Sans SC}{\hipstersetcjkfont{Source Han Sans SC}}{
+		\IfFontExistsTF{PingFang SC}{\hipstersetcjkfont{PingFang SC}}{
+			\IfFontExistsTF{Hiragino Sans GB}{\hipstersetcjkfont{Hiragino Sans GB}}{
+				\IfFontExistsTF{Microsoft YaHei}{\hipstersetcjkfont{Microsoft YaHei}}{
+					\IfFontExistsTF{SimHei}{\hipstersetcjkfont{SimHei}}{
+						\IfFontExistsTF{WenQuanYi Zen Hei}{\hipstersetcjkfont{WenQuanYi Zen Hei}}{}
+					}
+				}
+			}
+		}
+	}
+}
+}{}
 
 \newlength{\rightcolwidth}
 \newlength{\leftcolwidth}

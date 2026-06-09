@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronRight, Download, PencilLine, Plus, Search, RotateCcw, Sparkles, Tag, Trash2, Upload } from "lucide-react";
 import { Progress, Spinner } from "@chakra-ui/react";
 import CvIdModal from "./CvIdModal";
+import { CV_OUTPUT_LANGUAGES } from "../constants/outputLanguages";
 
 const EXAMPLE_CV_TEXT = `PROFILE
 Name: Alex Rivers
@@ -1441,8 +1442,9 @@ export default function CvEntry({
                   value={cvOutputLanguage}
                   onChange={(e) => onCvOutputLanguageChange(e.target.value)}
                 >
-                  <option value="english">English</option>
-                  <option value="german">German</option>
+                  {CV_OUTPUT_LANGUAGES.map((language) => (
+                    <option key={language.value} value={language.value}>{language.label}</option>
+                  ))}
                 </select>
               </div>
             </div>

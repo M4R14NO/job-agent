@@ -70,6 +70,9 @@
 \RequirePackage{setspace}
 % Needed to manage fonts
 \RequirePackage[quiet]{fontspec}
+\ifxetex
+  \IfFileExists{xeCJK.sty}{\RequirePackage{xeCJK}}{}
+\fi
 % To support LaTeX quoting style
 \defaultfontfeatures{Ligatures=TeX}
 % Needed to manage math fonts
@@ -78,6 +81,28 @@
 \RequirePackage{fontawesome6}
 \RequirePackage{roboto}
 \RequirePackage[default,opentype]{sourcesanspro}
+
+\ifxetex
+  \IfFileExists{xeCJK.sty}{%
+    \newcommand*{\acvsetcjkfont}[1]{%
+      \setCJKmainfont{#1}%
+      \setCJKsansfont{#1}%
+    }%
+    \IfFontExistsTF{Noto Sans CJK SC}{\acvsetcjkfont{Noto Sans CJK SC}}{%
+      \IfFontExistsTF{Source Han Sans SC}{\acvsetcjkfont{Source Han Sans SC}}{%
+        \IfFontExistsTF{PingFang SC}{\acvsetcjkfont{PingFang SC}}{%
+          \IfFontExistsTF{Hiragino Sans GB}{\acvsetcjkfont{Hiragino Sans GB}}{%
+            \IfFontExistsTF{Microsoft YaHei}{\acvsetcjkfont{Microsoft YaHei}}{%
+              \IfFontExistsTF{SimHei}{\acvsetcjkfont{SimHei}}{%
+                \IfFontExistsTF{WenQuanYi Zen Hei}{\acvsetcjkfont{WenQuanYi Zen Hei}}{}%
+              }%
+            }%
+          }%
+        }%
+      }%
+    }%
+  }{}
+\fi
 % Needed for the photo ID
 \RequirePackage[skins]{tcolorbox}
 % Needed to deal a paragraphs

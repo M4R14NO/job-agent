@@ -424,6 +424,24 @@ body {
   min-height: 160px;
 }
 
+.cv-language-step {
+  max-width: 620px;
+  display: grid;
+  gap: 10px;
+}
+
+.cv-language-select {
+  width: 100%;
+}
+
+.cv-language-select [data-part="trigger"] {
+  min-height: 44px;
+}
+
+.cv-language-select [data-part="content"] {
+  max-height: 320px;
+}
+
 .cv-review-primary {
   display: grid;
   gap: 6px;

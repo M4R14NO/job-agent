@@ -2,6 +2,7 @@ import { Spinner } from "@chakra-ui/react";
 import { ChevronDown, ChevronRight, Download, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { generateCoverLetter, parseCvCanonical } from "../api/llm";
+import { CV_OUTPUT_LANGUAGES } from "../constants/outputLanguages";
 
 const RERANK_REASON_EXPLANATIONS = {
   rag: "Strong alignment with retrieval-augmented generation experience and related tooling.",
@@ -496,8 +497,9 @@ export function JobActionsCard({
                   value={coverOutputLanguage}
                   onChange={(e) => setCoverOutputLanguage(e.target.value)}
                 >
-                  <option value="english">English</option>
-                  <option value="german">German</option>
+                  {CV_OUTPUT_LANGUAGES.map((language) => (
+                    <option key={language.value} value={language.value}>{language.label}</option>
+                  ))}
                 </select>
               </div>
               <button
@@ -557,8 +559,9 @@ export function JobActionsCard({
                     value={outputLanguage}
                     onChange={(e) => setOutputLanguage(e.target.value)}
                   >
-                    <option value="english">English</option>
-                    <option value="german">German</option>
+                    {CV_OUTPUT_LANGUAGES.map((language) => (
+                      <option key={language.value} value={language.value}>{language.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>
