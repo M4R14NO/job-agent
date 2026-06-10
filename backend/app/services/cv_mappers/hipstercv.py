@@ -4,6 +4,7 @@ from .awesomecv import (
     CvTemplateProvenance,
     map_canonical_to_template as map_awesomecv_to_template,
     map_canonical_to_template_deterministic as map_awesomecv_to_template_deterministic,
+    _resolve_section_labels,
 )
 from ...schemas.search import CvCanonicalData
 
@@ -29,19 +30,9 @@ HIPSTER_MAIN_SECTIONS = ["experience", "education", "skills", "volunteer", "writ
 HIPSTER_DEFAULT_SIDEBAR_SECTION_ORDER = ["summary", "languages", "interests"]
 HIPSTER_DEFAULT_MAIN_SECTION_ORDER = ["experience", "education", "skills", "volunteer", "writing", "certificates", "honors"]
 
-HIPSTER_SECTION_LABELS = {
-    "summary": "Summary",
-    "experience": "Experience",
-    "education": "Education",
-    "certificates": "Certificates",
-    "writing": "Publications",
-    "skills": "IT Skills",
-    "languages": "Languages",
-    "interests": "Interests",
+HIPSTER_SECTION_LABEL_OVERRIDES = {
     "strengths": "Strengths",
     "hobbies": "Hobbies",
-    "volunteer": "Volunteer",
-    "honors": "Awards",
 }
 
 ALLOWED_HOBBY_ICONS = {
@@ -80,6 +71,8 @@ def _pick_valid_icon(icon: str | None, candidates: list[str] | None) -> str | No
 def _with_hipster_defaults(
     payload: CvAwesomePayload,
     canonical: CvCanonicalData,
+    output_language: str | None = None,
+    section_labels: dict[str, str] | None = None,
     section_order: list[str] | None = None,
     sidebar_section_order: list[str] | None = None,
     main_section_order: list[str] | None = None,
@@ -119,8 +112,14 @@ def _with_hipster_defaults(
     if not data.get("section_order"):
         data["section_order"] = HIPSTER_DEFAULT_SECTION_ORDER
 
-    existing_labels = data.get("section_labels") or {}
-    data["section_labels"] = {**HIPSTER_SECTION_LABELS, **existing_labels}
+    merged_labels = {
+        **(data.get("section_labels") or {}),
+        **(section_labels or {}),
+    }
+    data["section_labels"] = {
+        **_resolve_section_labels(output_language, merged_labels),
+        **HIPSTER_SECTION_LABEL_OVERRIDES,
+    }
     data["strengths"] = [
         entry.name.strip()
         for entry in canonical.strengths
@@ -140,19 +139,25 @@ def _with_hipster_defaults(
 def map_canonical_to_template_deterministic(
     *,
     canonical: CvCanonicalData,
+    output_language: str | None = None,
     section_order: list[str] | None = None,
+    section_labels: dict[str, str] | None = None,
     sidebar_section_order: list[str] | None = None,
     main_section_order: list[str] | None = None,
 ) -> tuple[CvAwesomePayload, list[CvTemplateProvenance]]:
     payload, provenance = map_awesomecv_to_template_deterministic(
         canonical=canonical,
+        output_language=output_language,
         section_order=section_order,
+        section_labels=section_labels,
         sidebar_section_order=sidebar_section_order,
         main_section_order=main_section_order,
     )
     return _with_hipster_defaults(
         payload,
         canonical=canonical,
+        output_language=output_language,
+        section_labels=section_labels,
         section_order=section_order,
         sidebar_section_order=sidebar_section_order,
         main_section_order=main_section_order,
@@ -169,6 +174,7 @@ def map_canonical_to_template(
     lm_timeout: float | None = None,
     output_language: str | None = None,
     section_order: list[str] | None = None,
+    section_labels: dict[str, str] | None = None,
     sidebar_section_order: list[str] | None = None,
     main_section_order: list[str] | None = None,
 ) -> tuple[CvAwesomePayload, list[CvTemplateProvenance]]:
@@ -181,12 +187,15 @@ def map_canonical_to_template(
         lm_timeout=lm_timeout,
         output_language=output_language,
         section_order=section_order,
+        section_labels=section_labels,
         sidebar_section_order=sidebar_section_order,
         main_section_order=main_section_order,
     )
     return _with_hipster_defaults(
         payload,
         canonical=canonical,
+        output_language=output_language,
+        section_labels=section_labels,
         section_order=section_order,
         sidebar_section_order=sidebar_section_order,
         main_section_order=main_section_order,

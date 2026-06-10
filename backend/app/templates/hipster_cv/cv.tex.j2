@@ -173,7 +173,8 @@
 \vspace{0.2em}
 
 ((* if email or mobile or homepage or github or linkedin *))
-\hspace{-0.7cm}\bgUpper{backBlue}{white}{Contact}\\
+((* set _contact_label = (section_labels or {}).get('contact', 'Contact') *))
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{((( _contact_label | latex_escape )))}\\
 \hspace{\hipstersidebarcontentoffset}\begin{minipage}[t]{\hipstersidebarcontentwidth}
 {\footnotesize\begin{tabular}{@{}>{\raggedright\arraybackslash\hspace{0pt}}p{0.09\linewidth}@{\hspace{0.2em}}>{\raggedright\arraybackslash\hspace{0pt}}p{0.86\linewidth}@{}}
 ((* if email *))

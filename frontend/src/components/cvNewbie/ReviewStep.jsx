@@ -14,7 +14,7 @@ export default function ReviewStep({
       {isGeneratingDraft ? (
         <div className="cv-review-progress">
           <div className="progress-header">
-            <span>Automatically filling CV formular fields using AI</span>
+            <span>Writing CV ...</span>
             <span>Local LLM call can take a few moments, please wait...</span>
           </div>
           <div className="cv-review-progress-track">

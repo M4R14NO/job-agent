@@ -30,6 +30,95 @@ OUTPUT_LANGUAGE_PROMPTS = {
     "spanish": "Spanish",
 }
 
+SECTION_LABELS_BY_LANGUAGE: dict[str, dict[str, str]] = {
+    "english": {
+        "contact": "Contact",
+        "summary": "Summary",
+        "experience": "Work Experience",
+        "education": "Education",
+        "skills": "Skills",
+        "volunteer": "Volunteer",
+        "languages": "Languages",
+        "interests": "Interests",
+        "honors": "Awards",
+        "certificates": "Certificates",
+        "writing": "Publications",
+        "committees": "Committees",
+        "extracurricular": "Extracurricular",
+    },
+    "german": {
+        "contact": "Kontakt",
+        "summary": "Zusammenfassung",
+        "experience": "Berufserfahrung",
+        "education": "Studium",
+        "skills": "Kenntnisse",
+        "volunteer": "Ehrenamt",
+        "languages": "Sprachen",
+        "interests": "Interessen",
+        "honors": "Auszeichnungen",
+        "certificates": "Zertifikate",
+        "writing": "Publikationen",
+        "committees": "Gremien",
+        "extracurricular": "Außercurriculares",
+    },
+    "french": {
+        "contact": "Contact",
+        "summary": "Resume",
+        "experience": "Experience professionnelle",
+        "education": "Formation",
+        "skills": "Competences",
+        "volunteer": "Benevolat",
+        "languages": "Langues",
+        "interests": "Centres d'interet",
+        "honors": "Distinctions",
+        "certificates": "Certificats",
+        "writing": "Publications",
+        "committees": "Comites",
+        "extracurricular": "Activites extrascolaires",
+    },
+    "chinese": {
+        "contact": "联系方式",
+        "summary": "个人简介",
+        "experience": "工作经验",
+        "education": "教育经历",
+        "skills": "技能",
+        "volunteer": "志愿经历",
+        "languages": "语言",
+        "interests": "兴趣",
+        "honors": "荣誉",
+        "certificates": "证书",
+        "writing": "出版物",
+        "committees": "委员会",
+        "extracurricular": "课外活动",
+    },
+    "spanish": {
+        "contact": "Contacto",
+        "summary": "Resumen",
+        "experience": "Experiencia laboral",
+        "education": "Educacion",
+        "skills": "Habilidades",
+        "volunteer": "Voluntariado",
+        "languages": "Idiomas",
+        "interests": "Intereses",
+        "honors": "Premios",
+        "certificates": "Certificados",
+        "writing": "Publicaciones",
+        "committees": "Comites",
+        "extracurricular": "Extracurricular",
+    },
+}
+
+
+def _resolve_section_labels(output_language: str | None, existing: dict[str, str] | None = None) -> dict[str, str]:
+    normalized = (output_language or "english").strip().lower()
+    base = SECTION_LABELS_BY_LANGUAGE.get(normalized, SECTION_LABELS_BY_LANGUAGE["english"])
+    merged = dict(base)
+    if isinstance(existing, dict):
+        for key, value in existing.items():
+            if isinstance(key, str) and isinstance(value, str) and value.strip():
+                merged[key] = value.strip()
+    return merged
+
 
 def _derive_link_fields(links: list[str]) -> tuple[str | None, str | None, str | None]:
     homepage = None
@@ -457,7 +546,9 @@ def _fallback_payload_from_canonical(canonical: CvCanonicalData) -> dict:
 def map_canonical_to_template_deterministic(
     *,
     canonical: CvCanonicalData,
+    output_language: str | None = None,
     section_order: list[str] | None = None,
+    section_labels: dict[str, str] | None = None,
     sidebar_section_order: list[str] | None = None,
     main_section_order: list[str] | None = None,
 ) -> tuple[CvAwesomePayload, list[CvTemplateProvenance]]:
@@ -500,6 +591,7 @@ def map_canonical_to_template_deterministic(
             "committees": False,
             "extracurricular": False,
         },
+        "section_labels": _resolve_section_labels(output_language, section_labels),
     }
     if section_order:
         data["section_order"] = section_order
@@ -524,6 +616,7 @@ def map_canonical_to_template(
     lm_timeout: float | None = None,
     output_language: str | None = None,
     section_order: list[str] | None = None,
+    section_labels: dict[str, str] | None = None,
     sidebar_section_order: list[str] | None = None,
     main_section_order: list[str] | None = None,
 ) -> tuple[CvAwesomePayload, list[CvTemplateProvenance]]:
@@ -634,6 +727,12 @@ def map_canonical_to_template(
 
     if section_order:
         data["section_order"] = section_order
+
+    merged_section_labels = {
+        **(data.get("section_labels") or {}),
+        **(section_labels or {}),
+    }
+    data["section_labels"] = _resolve_section_labels(output_language, merged_section_labels)
 
     data["photo"] = canonical.profile_image or None
 

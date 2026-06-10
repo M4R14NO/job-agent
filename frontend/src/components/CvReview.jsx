@@ -36,6 +36,7 @@ const DEFAULT_SECTION_ORDER = [
 ];
 
 const SECTION_LABELS = {
+  contact: "Contact",
   summary: "Summary",
   skills: "Skills",
   languages: "Languages",
@@ -48,7 +49,25 @@ const SECTION_LABELS = {
   education: "Education"
 };
 
-const SECTION_KEYS = Object.keys(SECTION_LABELS);
+const sanitizeSectionLabelMap = (labels) => {
+  if (!labels || typeof labels !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(labels).filter(
+      ([key, value]) => typeof key === "string" && typeof value === "string" && value.trim()
+    )
+  );
+};
+
+const normalizeStoredSectionLabelOverrides = (labels) => {
+  const sanitized = sanitizeSectionLabelMap(labels);
+  const keys = Object.keys(sanitized);
+  const isLegacyEnglishDefaults =
+    keys.length > 0 &&
+    keys.every((key) => typeof SECTION_LABELS[key] === "string" && sanitized[key] === SECTION_LABELS[key]);
+  return isLegacyEnglishDefaults ? {} : sanitized;
+};
+
+const SECTION_KEYS = [...DEFAULT_SECTION_ORDER];
 
 const HIPSTER_SIDEBAR_SECTION_KEYS = ["summary", "languages", "interests"];
 const HIPSTER_MAIN_SECTION_KEYS = ["experience", "education", "skills", "volunteer", "writing", "certificates", "honors"];
@@ -800,8 +819,14 @@ export default function CvReview({
       mainSectionOrder: canonical?.main_section_order
     })
   );
-  const [sectionLabels, setSectionLabels] = useState(() => ({ ...SECTION_LABELS }));
-  const sectionLabelsRef = useRef({ ...SECTION_LABELS });
+  const [sectionLabelOverrides, setSectionLabelOverrides] = useState(() =>
+    normalizeStoredSectionLabelOverrides(canonical?.section_labels)
+  );
+  const sectionLabelOverridesRef = useRef(normalizeStoredSectionLabelOverrides(canonical?.section_labels));
+  const [sectionLabels, setSectionLabels] = useState(() => ({
+    ...SECTION_LABELS,
+    ...sectionLabelOverridesRef.current,
+  }));
   const [editingLabelKey, setEditingLabelKey] = useState(null);
   const [rewriteOpen, setRewriteOpen] = useState(false);
   const [saveProfileOpen, setSaveProfileOpen] = useState(false);
@@ -905,7 +930,7 @@ export default function CvReview({
     show_profile_image: applicationContext?.show_profile_image !== false,
     data: formData,
     section_order: currentSectionOrder,
-    section_labels: sectionLabels,
+    section_labels: sectionLabelOverrides,
     sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
     main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined
   };
@@ -973,9 +998,10 @@ export default function CvReview({
     setIsRewriting(false);
     setOpenPreviewEditors({});
     setHipsterPreviewTab("sidebar");
-    const nextSectionLabels = canonical?.section_labels ? { ...SECTION_LABELS, ...canonical.section_labels } : { ...SECTION_LABELS };
-    sectionLabelsRef.current = nextSectionLabels;
-    setSectionLabels(nextSectionLabels);
+    const nextSectionLabelOverrides = normalizeStoredSectionLabelOverrides(canonical?.section_labels);
+    sectionLabelOverridesRef.current = nextSectionLabelOverrides;
+    setSectionLabelOverrides(nextSectionLabelOverrides);
+    setSectionLabels({ ...SECTION_LABELS, ...nextSectionLabelOverrides });
     setEditingLabelKey(null);
     setHiddenPersonalFields(new Set());
     hiddenPersonalFieldValuesRef.current = {};
@@ -1326,12 +1352,20 @@ export default function CvReview({
 
   const updateSectionLabel = (key, value) => {
     cancelScheduledPreview();
-      setSectionLabels((prev) => {
-        const next = { ...prev, [key]: value };
-        sectionLabelsRef.current = next;
-        return next;
-      });
-    setPreviewPayload((prev) => prev ? { ...prev, section_labels: { ...(prev.section_labels || {}), [key]: value } } : prev);
+    const nextValue = value.trim() ? value : (SECTION_LABELS[key] || value);
+    setSectionLabels((prev) => ({ ...prev, [key]: nextValue }));
+    setSectionLabelOverrides((prev) => {
+      const next = { ...prev };
+      const normalized = value.trim();
+      if (!normalized || normalized === SECTION_LABELS[key]) {
+        delete next[key];
+      } else {
+        next[key] = normalized;
+      }
+      sectionLabelOverridesRef.current = next;
+      return next;
+    });
+    setPreviewPayload((prev) => prev ? { ...prev, section_labels: { ...(prev.section_labels || {}), [key]: nextValue } } : prev);
   };
 
   // Updates a canonical formData field AND the corresponding preview payload field simultaneously.
@@ -1497,7 +1531,7 @@ export default function CvReview({
       section_order: currentSectionOrder,
       sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
       main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined,
-      section_labels: sectionLabels
+      section_labels: sectionLabelOverridesRef.current
     };
 
     setIsSaving(true);
@@ -1667,11 +1701,16 @@ export default function CvReview({
         lm_timeout: lmTimeout,
         output_language: outputLanguage,
         section_order: currentSectionOrder,
+        section_labels: sectionLabelOverridesRef.current,
         sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
         main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined,
         mapping_mode: "deterministic"
       });
-      setPreviewPayload(result.payload ? { ...result.payload, section_labels: sectionLabelsRef.current } : null);
+      const nextSectionLabels = result.payload?.section_labels
+        ? { ...SECTION_LABELS, ...result.payload.section_labels }
+        : { ...SECTION_LABELS, ...sectionLabelOverridesRef.current };
+      setSectionLabels(nextSectionLabels);
+      setPreviewPayload(result.payload ? { ...result.payload, section_labels: nextSectionLabels } : null);
       setPreviewHash(nextHash);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Preview failed");
@@ -3362,6 +3401,53 @@ export default function CvReview({
     );
   };
 
+  const renderHipsterContactLabelCard = () => {
+    const key = "contact";
+    const contactValues = [
+      previewPayload?.email,
+      previewPayload?.mobile,
+      previewPayload?.linkedin,
+      previewPayload?.github,
+      previewPayload?.homepage,
+    ].filter(Boolean);
+
+    return (
+      <div key="preview-sidebar-contact" className="preview-card">
+        <div className="preview-card-header">
+          <div className="preview-card-title">
+            {editingLabelKey === key ? (
+              <input
+                className="section-label-input"
+                value={sectionLabels[key] ?? SECTION_LABELS[key]}
+                autoFocus
+                onChange={(e) => updateSectionLabel(key, e.target.value)}
+                onBlur={() => setEditingLabelKey(null)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingLabelKey(null); }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="section-label-btn"
+                title="Click to rename section"
+                onClick={() => setEditingLabelKey(key)}
+              >
+                {sectionLabels[key] ?? SECTION_LABELS[key]}
+                <Pencil size={12} className="section-label-edit-icon" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+        </div>
+        {contactValues.length ? (
+          <div className="preview-item">
+            {contactValues.map((value, idx) => <p key={`contact-${idx}`}>{value}</p>)}
+          </div>
+        ) : (
+          <p className="helper">No contact fields set.</p>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className={`panel-card cv-editor${readOnly ? " is-readonly" : ""}`}>
       <div className="panel-header">
@@ -3504,6 +3590,7 @@ export default function CvReview({
                       <h4 className="preview-column-title">
                         {hipsterPreviewTab === "sidebar" ? "Sidebar" : "Main content"}
                       </h4>
+                      {hipsterPreviewTab === "sidebar" ? renderHipsterContactLabelCard() : null}
                       {(hipsterPreviewTab === "sidebar" ? hipsterSectionOrders.sidebar : hipsterSectionOrders.main)
                         .map((key) => renderPreviewCard(key, hipsterPreviewTab))}
                       {hiddenSectionKeysForCurrentView.map((key) => renderPreviewCard(key, hipsterPreviewTab))}

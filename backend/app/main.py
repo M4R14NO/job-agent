@@ -565,6 +565,7 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
                 lm_timeout=payload.lm_timeout,
                 output_language=output_language,
                 section_order=payload.section_order,
+                section_labels=payload.section_labels,
                 sidebar_section_order=payload.sidebar_section_order,
                 main_section_order=payload.main_section_order,
             )
@@ -573,7 +574,9 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
                 raise HTTPException(status_code=400, detail="Template does not support deterministic mapping")
             template_payload, _ = deterministic_mapper(
                 canonical=payload.data,
+                output_language=output_language,
                 section_order=payload.section_order,
+                section_labels=payload.section_labels,
                 sidebar_section_order=payload.sidebar_section_order,
                 main_section_order=payload.main_section_order,
             )
@@ -618,6 +621,7 @@ def preview_cv_mapping(payload: CvPreviewRequest) -> CvPreviewResponse:
                 lm_timeout=payload.lm_timeout,
                 output_language=output_language,
                 section_order=payload.section_order,
+                section_labels=payload.section_labels,
                 sidebar_section_order=payload.sidebar_section_order,
                 main_section_order=payload.main_section_order,
             )
@@ -626,7 +630,9 @@ def preview_cv_mapping(payload: CvPreviewRequest) -> CvPreviewResponse:
                 raise HTTPException(status_code=400, detail="Template does not support deterministic mapping")
             template_payload, _ = deterministic_mapper(
                 canonical=payload.data,
+                output_language=output_language,
                 section_order=payload.section_order,
+                section_labels=payload.section_labels,
                 sidebar_section_order=payload.sidebar_section_order,
                 main_section_order=payload.main_section_order,
             )

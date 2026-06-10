@@ -522,7 +522,10 @@ def generate_cv_pdf(
             output_language=output_language,
         )
     else:
-        template_payload, _ = deterministic_mapper(canonical=canonical)
+        template_payload, _ = deterministic_mapper(
+            canonical=canonical,
+            output_language=output_language,
+        )
 
     data = template_payload.model_dump()
     if not data.get("summary"):
