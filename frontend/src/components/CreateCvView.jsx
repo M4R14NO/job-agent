@@ -87,8 +87,8 @@ export default function CreateCvView({
   const canGenerateDraft = Boolean(resumeText.trim()) && !isGeneratingDraft;
   const canAutoFillDraft = Boolean(cvReview) && hasResumeTextChanges && canGenerateDraft;
   const reviewActionLabel = Boolean(cvReview) && hasResumeTextChanges
-    ? "Automagically fill CV given the updated CV text data"
-    : "Fill CV with AI magic";
+    ? "Let AI update your CV with the latest changes"
+    : "Let AI write CV";
   const reviewActionDisabled = Boolean(cvReview) ? !canAutoFillDraft : !canGenerateDraft;
   const canAdvanceFromStep = (stepId) => {
     return true;
