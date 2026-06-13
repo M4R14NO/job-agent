@@ -18,8 +18,10 @@ import {
 import { useJobDescription } from "./hooks/useJobDescription";
 import SearchFilters from "./components/SearchFilters";
 import { JobActionsCard, JobDetailsCard, PdfPreviewCard } from "./components/JobModal";
+import CvEntry from "./components/CvEntry";
 import CvReview from "./components/CvReview";
 import CreateCvView from "./components/CreateCvView";
+import CvDraftWizard from "./components/cvNewbie/CvDraftWizard";
 import FindJobsView from "./components/FindJobsView";
 import CvIdModal from "./components/CvIdModal";
 import OverwriteConfirmationModal from "./components/OverwriteConfirmationModal";
@@ -354,9 +356,10 @@ export default function App() {
   const isFindView = activeView === "find";
   const isNewbieCreateMode = activeView === "create" && createMode === "newbie";
   const isW1CvWorkflow = Boolean(selectedJob) && activeJobAction === "cv";
-  const isJobCvChoiceStep = isW1CvWorkflow && !cvReview && jobCvEntryStep === "choice";
-  const isJobCvCreateStep = isW1CvWorkflow && !cvReview && jobCvEntryStep === "create";
-  const isJobCvBranchStep = isW1CvWorkflow && !cvReview && jobCvEntryStep === "branch";
+  const isJobCvChoiceStep = isW1CvWorkflow && jobCvEntryStep === "choice";
+  const isJobCvCreateStep = isW1CvWorkflow && jobCvEntryStep === "create";
+  const isJobCvBranchStep = isW1CvWorkflow && jobCvEntryStep === "branch";
+  const shouldRenderW1StandaloneReview = Boolean(cvReview) && !isJobCvCreateStep;
   const w1HasFormData = isW1CvWorkflow && Boolean(cvReview?.canonical);
   const w1HasCvText = isW1CvWorkflow && Boolean(resumeText.trim());
   const w1UiState = !w1HasFormData && !w1HasCvText
@@ -1384,6 +1387,42 @@ export default function App() {
     setPdfPreviewUrl(null);
     hasRenderedPdfPreviewRef.current = false;
     pdfPreviewTemplateRef.current = templateId || "awesomecv";
+    pdfPreviewStructureRef.current = "";
+  };
+
+  const handleW1CreateDraftGenerated = ({ canonical, templateId, outputLanguage, jobContext }) => {
+    const resolvedJob = selectedJob || {
+      title: jobContext?.job_title || "",
+      company: jobContext?.company || "",
+      description: jobContext?.job_description || "",
+      job_url: jobContext?.job_url || ""
+    };
+
+    pdfPreviewRequestVersionRef.current += 1;
+    setCvReview({
+      canonical,
+      job: resolvedJob,
+      templateId: templateId || cvTemplateId || "awesomecv",
+      docType: "resume",
+      outputLanguage: outputLanguage || cvOutputLanguage || "english",
+      initialProfileId: canonical?.profile_id || "default"
+    });
+    setJobCvEntryStep("create");
+    setIsJobReviewReadOnly(false);
+    setCvTemplateId(templateId || cvTemplateId || "awesomecv");
+    setApplicationContext((prev) => ({
+      ...prev,
+      company: jobContext?.company || resolvedJob.company || "",
+      application_status: "",
+      application_date: "",
+      job_title: jobContext?.job_title || resolvedJob.title || "",
+      job_description: jobContext?.job_description || resolvedJob.description || "",
+      job_url: jobContext?.job_url || resolvedJob.job_url || ""
+    }));
+    setCvPreviewPayload(null);
+    setPdfPreviewUrl(null);
+    hasRenderedPdfPreviewRef.current = false;
+    pdfPreviewTemplateRef.current = templateId || cvTemplateId || "awesomecv";
     pdfPreviewStructureRef.current = "";
   };
 
@@ -2512,12 +2551,30 @@ export default function App() {
   };
 
   const handleChooseCreateJobCv = () => {
+    const mergedContext = {
+      ...EMPTY_APPLICATION_CONTEXT,
+      company: selectedJob?.company || "",
+      application_status: "",
+      application_date: "",
+      job_title: selectedJob?.title || "",
+      job_description: selectedJob?.description || "",
+      job_url: selectedJob?.job_url || ""
+    };
+
     setJobCvEntryStep("create");
     setSelectedProfileId("");
     setNewProfileId("");
     setResumeText("");
     setIsDraftProfileActive(false);
     setDraftProfileId("");
+    setApplicationContext(mergedContext);
+    setLoadedProfileSnapshot({
+      profile_id: "",
+      revision: 0,
+      updated_at: null,
+      raw_resume_text: "",
+      ...EMPTY_APPLICATION_CONTEXT
+    });
     setCvReview(null);
     setIsJobReviewReadOnly(false);
   };
@@ -2796,7 +2853,7 @@ export default function App() {
   const showActionsPanel = activeJobAction !== "none";
   const showJobCvEntryPanel = activeJobAction === "cv";
   const showJobCoverPanel = activeJobAction === "cover";
-  const showJobCvSetupPanel = showJobCvEntryPanel && !cvReview;
+  const showJobCvSetupPanel = showJobCvEntryPanel && !shouldRenderW1StandaloneReview;
   const isW1ReviewLayout = Boolean(cvReview) && showW1ReviewCards;
   const showActionSwitcher = activeJobAction !== "none";
   const reviewLayoutStyle = reviewPreviewWidth
@@ -2976,9 +3033,9 @@ export default function App() {
 
   if (showPanel) {
     return (
-      <div className={`panel-page${cvReview ? " is-review-mode" : ""}`}>
-        <div className={`panel-topbar-shell${cvReview ? " is-hover-reveal" : ""}`}>
-          {cvReview ? <div className="panel-topbar-hit-area" aria-hidden="true" /> : null}
+      <div className={`panel-page${shouldRenderW1StandaloneReview ? " is-review-mode" : ""}`}>
+        <div className={`panel-topbar-shell${shouldRenderW1StandaloneReview ? " is-hover-reveal" : ""}`}>
+          {shouldRenderW1StandaloneReview ? <div className="panel-topbar-hit-area" aria-hidden="true" /> : null}
           <header className="panel-topbar">
             <button className="secondary" onClick={handleBackToResults}>
               {selectedJob ? "Back to results" : "Back to start"}
@@ -3010,7 +3067,7 @@ export default function App() {
                 </>
               ) : (
                 <>
-                  {cvReview ? (
+                  {shouldRenderW1StandaloneReview ? (
                     <button
                       type="button"
                       className={`secondary panel-nav-toggle${activeReviewNav === "review" ? " is-active" : ""}`}
@@ -3021,7 +3078,7 @@ export default function App() {
                   ) : (
                     <span className="action-pill">{actionLabel}</span>
                   )}
-                  {cvReview ? (
+                  {shouldRenderW1StandaloneReview ? (
                     <>
                       <button
                         type="button"
@@ -3052,8 +3109,8 @@ export default function App() {
             </div>
           </header>
         </div>
-        <div className={`panel-body ${showActionsPanel || cvReview ? "" : "is-single"} ${cvReview ? "is-review-layout" : ""} ${showJobCvSetupPanel ? "is-single" : ""}`}>
-          {cvReview ? (
+        <div className={`panel-body ${showActionsPanel || cvReview ? "" : "is-single"} ${shouldRenderW1StandaloneReview ? "is-review-layout" : ""} ${showJobCvSetupPanel ? "is-single" : ""}`}>
+          {shouldRenderW1StandaloneReview ? (
             <div className="panel-review-stack">
               <div ref={jobDetailsSectionRef} className="panel-inline-section">
                 <JobDetailsCard
@@ -3230,6 +3287,91 @@ export default function App() {
                           Branch from existing CV
                         </button>
                       </div>
+                    </div>
+                  ) : isJobCvCreateStep ? (
+                    <div className="panel-card cv-flow-choice-card">
+                      <CvDraftWizard
+                        cvTemplateId={cvTemplateId}
+                        onTemplateIdChange={handleTemplateIdChange}
+                        cvOutputLanguage={cvOutputLanguage}
+                        onCvOutputLanguageChange={setCvOutputLanguage}
+                        resumeText={resumeText}
+                        onResumeTextChange={setResumeText}
+                        applicationContext={applicationContext}
+                        onApplicationContextChange={handleApplicationContextChange}
+                        newProfileId={newProfileId}
+                        onDraftGenerated={handleW1CreateDraftGenerated}
+                        cvReview={cvReview}
+                        selectedModel={selectedModel}
+                        lmTimeout={lmTimeout}
+                        reviewContent={(
+                          <div
+                            ref={reviewLayoutRef}
+                            className="panel-review-layout is-resizable"
+                            style={reviewLayoutStyle}
+                          >
+                            <div ref={reviewSectionRef} className="panel-review-pane panel-review-pane-preview">
+                              <PdfPreviewCard
+                                pdfUrl={pdfPreviewUrl}
+                                isGenerating={isPdfGenerating}
+                                isDownloading={isPdfDownloading}
+                                templateId={cvReview?.templateId || cvTemplateId}
+                                onTemplateIdChange={handleTemplateIdChange}
+                                themeColor={resolveTemplateThemeColor(cvReview?.templateId || cvTemplateId || "awesomecv")}
+                                onThemeColorChange={handleThemeColorChange}
+                                showProfileImage={applicationContext.show_profile_image !== false}
+                                onShowProfileImageChange={handleShowProfileImageChange}
+                                hipsterHeaderAlign={applicationContext.header_text_align || "right"}
+                                onHipsterHeaderAlignChange={handleHipsterHeaderAlignChange}
+                                hipsterHeaderTitleSize={applicationContext.header_title_size || "Huge"}
+                                onHipsterHeaderTitleSizeChange={handleHipsterHeaderTitleSizeChange}
+                                hipsterHeaderSubtitleSize={applicationContext.header_subtitle_size || "Large"}
+                                onHipsterHeaderSubtitleSizeChange={handleHipsterHeaderSubtitleSizeChange}
+                                onUpdate={handleUpdatePdfPreview}
+                                onDownload={handleDownloadPdf}
+                                unsyncedSaveCount={pendingPreviewSaveCount}
+                                disabled={!cvReview}
+                                disabledReason="Generate a draft to enable preview."
+                              />
+                            </div>
+                            <div
+                              className="panel-review-divider"
+                              role="separator"
+                              aria-orientation="vertical"
+                              aria-label="Resize preview and editor panels"
+                              title="Drag to resize preview and editor"
+                              onMouseDown={handleReviewResizeStart}
+                            />
+                            <div className="panel-review-pane panel-review-pane-editor">
+                              {cvReview ? (
+                                <CvReview
+                                  canonical={cvReview.canonical}
+                                  job={cvReview.job}
+                                  templateId={cvReview.templateId}
+                                  docType={cvReview.docType}
+                                  outputLanguage={cvReview.outputLanguage}
+                                  model={selectedModel}
+                                  lmTimeout={lmTimeout}
+                                  resumeText={resumeText}
+                                  applicationContext={applicationContext}
+                                  initialProfileId={cvReview.initialProfileId}
+                                  onDraftStateChange={handleCvDraftStateChange}
+                                  onPreviewPayloadChange={setCvPreviewPayload}
+                                  onProfileSaved={handleCvReviewProfileSaved}
+                                  onUploadProfileImage={handleUploadProfileImage}
+                                  onClearProfileImage={handleClearProfileImage}
+                                  isUploadingProfileImage={isUploadingProfileImage}
+                                />
+                              ) : (
+                                <div className="panel-card panel-empty panel-disabled">
+                                  <p className="helper">Generate a draft to unlock CV preview and editing.</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        initialStep="template"
+                      />
                     </div>
                   ) : (
                     <CvEntry

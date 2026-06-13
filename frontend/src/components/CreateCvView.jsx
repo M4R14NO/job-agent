@@ -1,18 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import CvDraftWizard from "./cvNewbie/CvDraftWizard";
 import CvEntry from "./CvEntry";
-import CvNewbieFlow from "./cvNewbie/CvNewbieFlow";
 import CvReview from "./CvReview";
 import { PdfPreviewCard } from "./JobModal";
-import { parseCvCanonical } from "../api/llm";
-
-const STEP_ORDER = ["template", "language", "resume", "job", "review"];
-const STEP_LABELS = {
-  template: "Choose a CV template",
-  language: "Pick the output language",
-  resume: "Paste your CV text",
-  job: "Optional job context",
-  review: "Edit CV"
-};
 
 export default function CreateCvView({
   isNewbieCreateMode,
@@ -77,140 +66,24 @@ export default function CreateCvView({
   isDraftProfileActive,
   onBeforeStepLeave
 }) {
-  const [cvCreateStep, setCvCreateStep] = useState("template");
-  const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
-  const [draftError, setDraftError] = useState("");
-  const [lastGeneratedResumeText, setLastGeneratedResumeText] = useState("");
-  const stepIndex = useMemo(() => Math.max(0, STEP_ORDER.indexOf(cvCreateStep)), [cvCreateStep]);
-  const hasResumeTextChanges = Boolean(cvReview)
-    && resumeText.trim() !== lastGeneratedResumeText;
-  const canGenerateDraft = Boolean(resumeText.trim()) && !isGeneratingDraft;
-  const canAutoFillDraft = Boolean(cvReview) && hasResumeTextChanges && canGenerateDraft;
-  const reviewActionLabel = Boolean(cvReview) && hasResumeTextChanges
-    ? "Let AI update your CV with the latest changes"
-    : "Let AI write CV";
-  const reviewActionDisabled = Boolean(cvReview) ? !canAutoFillDraft : !canGenerateDraft;
-  const canAdvanceFromStep = (stepId) => {
-    return true;
-  };
-
-  const notifyStepLeave = (nextStep) => {
-    if (typeof onBeforeStepLeave !== "function") return;
-    onBeforeStepLeave({ from: cvCreateStep, to: nextStep });
-  };
-
-  const handleCreateStepNext = () => {
-    if (!canAdvanceFromStep(cvCreateStep)) return;
-    const nextIndex = Math.min(stepIndex + 1, STEP_ORDER.length - 1);
-    const nextStep = STEP_ORDER[nextIndex];
-    notifyStepLeave(nextStep);
-    setCvCreateStep(nextStep);
-  };
-
-  const handleCreateStepBack = () => {
-    const nextIndex = Math.max(stepIndex - 1, 0);
-    const nextStep = STEP_ORDER[nextIndex];
-    notifyStepLeave(nextStep);
-    setCvCreateStep(nextStep);
-  };
-
-  const handleCreateStepJump = (stepId) => {
-    if (!STEP_ORDER.includes(stepId)) return;
-    if (stepId !== cvCreateStep) {
-      notifyStepLeave(stepId);
-    }
-    setCvCreateStep(stepId);
-  };
-
-  useEffect(() => {
-    if (!cvReview || lastGeneratedResumeText) return;
-    setLastGeneratedResumeText(resumeText);
-  }, [cvReview, lastGeneratedResumeText, resumeText]);
-
-  const sanitizeProfileId = (value) => {
-    const normalized = (value || "").trim().toLowerCase();
-    const safe = normalized
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-    return safe || `profile-${Date.now()}`;
-  };
-
-  const handleGenerateDraft = async () => {
-    if (!resumeText.trim()) {
-      setDraftError("Paste your CV text to continue.");
-      return;
-    }
-    if (!selectedModel) {
-      setDraftError("Select a model to generate the CV draft.");
-      return;
-    }
-
-    setDraftError("");
-    setIsGeneratingDraft(true);
-    try {
-      const parsed = await parseCvCanonical({
-        resume_text: resumeText,
-        model: selectedModel,
-        lm_timeout: lmTimeout,
-        output_language: cvOutputLanguage,
-        job_title: applicationContext.job_title || undefined,
-        company: applicationContext.company || undefined,
-        job_description: applicationContext.job_description || undefined,
-        job_url: applicationContext.job_url || undefined
-      });
-
-      const safeProfileId = sanitizeProfileId(newProfileId || "newbie-cv");
-      const canonical = {
-        ...parsed,
-        profile_id: parsed?.profile_id || safeProfileId,
-        template_id: cvTemplateId || "awesomecv",
-        audit: {
-          ...(parsed?.audit || {}),
-          raw_resume_text: resumeText
-        }
-      };
-
-      onNewbieDraftGenerated?.({
-        canonical,
-        templateId: cvTemplateId,
-        outputLanguage: cvOutputLanguage,
-        jobContext: applicationContext
-      });
-      setLastGeneratedResumeText(resumeText);
-      setCvCreateStep("review");
-    } catch (err) {
-      setDraftError(err instanceof Error ? err.message : "Failed to generate the CV draft.");
-    } finally {
-      setIsGeneratingDraft(false);
-    }
-  };
-
   return (
     <div className="create-layout">
         {isNewbieCreateMode ? (
-          <CvNewbieFlow
-            step={cvCreateStep}
-            stepOrder={STEP_ORDER}
-            stepLabelMap={STEP_LABELS}
-            onStepChange={handleCreateStepJump}
-            onNext={handleCreateStepNext}
-            onBack={handleCreateStepBack}
-            canAdvanceFromStep={canAdvanceFromStep}
+          <CvDraftWizard
             cvTemplateId={cvTemplateId}
-            onCvTemplateIdChange={onTemplateIdChange}
+            onTemplateIdChange={onTemplateIdChange}
             cvOutputLanguage={cvOutputLanguage}
             onCvOutputLanguageChange={onCvOutputLanguageChange}
             resumeText={resumeText}
             onResumeTextChange={onResumeTextChange}
             applicationContext={applicationContext}
             onApplicationContextChange={onApplicationContextChange}
-            onGenerateDraft={handleGenerateDraft}
-            isGeneratingDraft={isGeneratingDraft}
-            reviewActionLabel={reviewActionLabel}
-            reviewActionDisabled={reviewActionDisabled}
-            draftError={draftError}
-            hasDraft={Boolean(cvReview)}
-            hasResumeTextChanges={hasResumeTextChanges}
+            newProfileId={newProfileId}
+            onDraftGenerated={onNewbieDraftGenerated}
+            cvReview={cvReview}
+            selectedModel={selectedModel}
+            lmTimeout={lmTimeout}
+            onBeforeStepLeave={onBeforeStepLeave}
             reviewContent={(
               <div
                 ref={createReviewLayoutRef}
