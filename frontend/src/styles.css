@@ -206,7 +206,7 @@ body {
 .cv-newbie-flow {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 10px;
 }
 
 .cv-stepper-shell {
@@ -233,19 +233,19 @@ body {
 
 .cv-newbie-flow .cv-stepper.is-compact .cv-step {
   min-width: 160px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   gap: 4px;
   scroll-snap-align: start;
 }
 
 .cv-newbie-flow .cv-stepper.is-compact .cv-step-index {
-  width: 22px;
-  height: 22px;
-  font-size: 12px;
+  width: 24px;
+  height: 24px;
+  font-size: 13px;
 }
 
 .cv-newbie-flow .cv-stepper.is-compact .cv-step-title {
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .cv-stepper {
@@ -263,16 +263,41 @@ body {
   gap: 6px;
   text-align: left;
   cursor: pointer;
+  position: relative;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.cv-step:hover {
+  border-color: #93c5fd;
+  border-top-color: #93c5fd;
+  background: #f8fbff;
+  box-shadow: 0 0 0 1px #bfdbfe;
 }
 
 .cv-step.is-active {
   border-color: #2563eb;
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.18);
+  border-top-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 0 0 1px #60a5fa, 0 8px 20px rgba(37, 99, 235, 0.16);
+}
+
+.cv-step.is-active:hover {
+  border-color: #2563eb;
+  border-top-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 0 0 1px #60a5fa, 0 8px 20px rgba(37, 99, 235, 0.16);
 }
 
 .cv-step.is-complete {
+  border-color: #d1d5db;
+  background: #ffffff;
+}
+
+.cv-step.is-complete:hover {
   border-color: #93c5fd;
-  background: #eff6ff;
+  border-top-color: #93c5fd;
+  background: #f8fbff;
+  box-shadow: 0 0 0 1px #bfdbfe;
 }
 
 .cv-step-index {
@@ -283,13 +308,24 @@ body {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  background: #f1f5f9;
-  color: #1f2937;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.cv-step.is-active .cv-step-index {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.cv-step.is-complete .cv-step-index {
+  background: #e2e8f0;
+  color: #334155;
 }
 
 .cv-step-title {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
+  color: #1f2937;
 }
 
 .cv-step-card {
@@ -313,6 +349,15 @@ body {
 .cv-step-content {
   display: grid;
   gap: 16px;
+  font-size: 15px;
+}
+
+.cv-step-content .label {
+  font-size: 16px;
+}
+
+.cv-step-content .helper {
+  font-size: 14px;
 }
 
 .cv-step-header-note {
@@ -1902,7 +1947,7 @@ button:active:not(:disabled) {
   display: flex;
   align-items: center;
   gap: 12px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #e5e7eb;
   border-radius: 14px;
   padding: 12px 14px;
   background: #ffffff;
@@ -1912,21 +1957,22 @@ button:active:not(:disabled) {
 }
 
 .cv-step.is-active {
-  border-color: #ff9f1c;
-  box-shadow: 0 8px 20px rgba(255, 159, 28, 0.2);
+  border-color: #2563eb;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.16);
 }
 
 .cv-step-index {
-  background: #ff9f1c;
-  color: #1a1a1a;
+  background: #dbeafe;
+  color: #1d4ed8;
   font-weight: 700;
   border-radius: 999px;
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .cv-step-title {
   font-weight: 600;
+  font-size: 14px;
 }
 
 .cv-step-panel {
