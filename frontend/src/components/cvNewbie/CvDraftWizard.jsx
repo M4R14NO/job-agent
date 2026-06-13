@@ -34,6 +34,7 @@ export default function CvDraftWizard({
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
   const [draftError, setDraftError] = useState("");
   const [lastGeneratedResumeText, setLastGeneratedResumeText] = useState("");
+  const [showResumeExample, setShowResumeExample] = useState(false);
 
   const stepIndex = useMemo(
     () => Math.max(0, STEP_ORDER.indexOf(cvCreateStep)),
@@ -173,6 +174,8 @@ export default function CvDraftWizard({
       hasResumeTextChanges={hasResumeTextChanges}
       branchReviewMode={branchReviewMode}
       reviewContent={reviewContent}
+      showResumeExample={showResumeExample}
+      onToggleResumeExample={() => setShowResumeExample((prev) => !prev)}
     />
   );
 }

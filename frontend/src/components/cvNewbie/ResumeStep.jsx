@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef } from "react";
 
 const EXAMPLE_CV_TEXT = `PROFILE
 Name: Alex Rivers
@@ -62,30 +62,54 @@ PROJECTS
 Open-source feature drift monitor for tabular models (github.com/alexrivers/drift-watch)
 `;
 
-export default function ResumeStep({ resumeText, onResumeTextChange }) {
-  const [showExample, setShowExample] = useState(false);
+export default function ResumeStep({ resumeText, onResumeTextChange, showExample }) {
+  const canCopyExample = !resumeText.trim();
+  const exampleColumnRef = useRef(null);
+
+  useEffect(() => {
+    if (!showExample) return;
+    if (typeof window === "undefined") return;
+    if (!window.matchMedia("(max-width: 1080px)").matches) return;
+
+    requestAnimationFrame(() => {
+      exampleColumnRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    });
+  }, [showExample]);
 
   return (
     <div className="cv-step-content">
-      <div className="cv-step-field">
-        <label htmlFor="cvNewbieText" className="label">CV text</label>
-        <textarea
-          id="cvNewbieText"
-          rows={16}
-          value={resumeText}
-          onChange={(event) => onResumeTextChange(event.target.value)}
-          placeholder="Paste your resume text here. Include dates and time spans."
-        />
-        <p className="helper">Keep sections labeled so the parser can map your content reliably.</p>
-        <button
-          type="button"
-          className="secondary cv-example-toggle"
-          onClick={() => setShowExample((prev) => !prev)}
-        >
-          {showExample ? "Hide example" : "Show example"}
-        </button>
+      <div className={`cv-resume-layout${showExample ? " is-example-open" : ""}`}>
+        <div className="cv-step-field">
+          <label htmlFor="cvNewbieText" className="label">CV text</label>
+          <textarea
+            id="cvNewbieText"
+            rows={16}
+            value={resumeText}
+            onChange={(event) => onResumeTextChange(event.target.value)}
+            placeholder="Paste your resume text here. Include dates and time spans."
+          />
+          <p className="helper">Keep sections labeled so the parser can map your content reliably.</p>
+        </div>
+
         {showExample ? (
-          <div className="example-box">{EXAMPLE_CV_TEXT}</div>
+          <aside className="cv-example-column" aria-label="CV text example" ref={exampleColumnRef}>
+            <div className="cv-example-column-header">
+              <h3>Example CV text</h3>
+              {canCopyExample ? (
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => onResumeTextChange(EXAMPLE_CV_TEXT)}
+                >
+                  Copy to CV text
+                </button>
+              ) : null}
+            </div>
+            <pre className="cv-example-box">{EXAMPLE_CV_TEXT}</pre>
+          </aside>
         ) : null}
       </div>
     </div>

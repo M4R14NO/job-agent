@@ -28,7 +28,9 @@ export default function CvNewbieFlow({
   hasDraft,
   hasResumeTextChanges,
   branchReviewMode,
-  reviewContent
+  reviewContent,
+  showResumeExample,
+  onToggleResumeExample
 }) {
   const stepIndex = Math.max(0, stepOrder.indexOf(step));
   const canGoNext = canAdvanceFromStep(step);
@@ -82,6 +84,7 @@ export default function CvNewbieFlow({
           <ResumeStep
             resumeText={resumeText}
             onResumeTextChange={onResumeTextChange}
+            showExample={Boolean(showResumeExample)}
           />
         );
       case "job":
@@ -144,6 +147,15 @@ export default function CvNewbieFlow({
             </div>
           ) : null}
           <div className="cv-step-actions">
+            {step === "resume" ? (
+              <button
+                type="button"
+                className="secondary"
+                onClick={onToggleResumeExample}
+              >
+                {showResumeExample ? "Hide example" : "Show example"}
+              </button>
+            ) : null}
             <button
               type="button"
               className="secondary"
