@@ -1,3 +1,4 @@
+import { ArrowLeft, ArrowRight, Eye, EyeOff, WandSparkles } from "lucide-react";
 import TemplateStep from "./TemplateStep";
 import LanguageStep from "./LanguageStep";
 import ResumeStep from "./ResumeStep";
@@ -153,6 +154,7 @@ export default function CvNewbieFlow({
                 className="secondary"
                 onClick={onToggleResumeExample}
               >
+                {showResumeExample ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}
                 {showResumeExample ? "Hide example" : "Show example"}
               </button>
             ) : null}
@@ -162,6 +164,7 @@ export default function CvNewbieFlow({
               onClick={onBack}
               disabled={stepIndex === 0}
             >
+              <ArrowLeft size={14} aria-hidden="true" />
               Back
             </button>
             {step === "review" ? (
@@ -174,6 +177,7 @@ export default function CvNewbieFlow({
                 {isGeneratingDraft ? (
                   <span className="cv-step-spinner" aria-hidden="true" />
                 ) : null}
+                {!isGeneratingDraft ? <WandSparkles size={14} aria-hidden="true" /> : null}
                 {isGeneratingDraft ? "Generating..." : resolvedReviewLabel}
               </button>
             ) : (
@@ -184,6 +188,7 @@ export default function CvNewbieFlow({
                 disabled={!canGoNext}
               >
                 Next
+                <ArrowRight size={14} aria-hidden="true" />
               </button>
             )}
           </div>
