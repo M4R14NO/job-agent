@@ -62,16 +62,11 @@ PROJECTS
 Open-source feature drift monitor for tabular models (github.com/alexrivers/drift-watch)
 `;
 
-export default function ResumeStep({ resumeText, onResumeTextChange, hasDraft }) {
+export default function ResumeStep({ resumeText, onResumeTextChange }) {
   const [showExample, setShowExample] = useState(false);
 
   return (
     <div className="cv-step-content">
-      {hasDraft ? (
-        <div className="cv-step-note">
-          Draft already generated. Update this text and regenerate to refresh the draft.
-        </div>
-      ) : null}
       <div className="cv-step-field">
         <label htmlFor="cvNewbieText" className="label">CV text</label>
         <textarea

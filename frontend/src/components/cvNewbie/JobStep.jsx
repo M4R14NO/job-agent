@@ -1,11 +1,6 @@
-export default function JobStep({ applicationContext, onApplicationContextChange, hasDraft }) {
+export default function JobStep({ applicationContext, onApplicationContextChange }) {
   return (
     <div className="cv-step-content">
-      {hasDraft ? (
-        <div className="cv-step-note">
-          Draft already generated. Update job context and regenerate to refresh the draft.
-        </div>
-      ) : null}
       <div className="cv-step-grid">
         <div>
           <label htmlFor="cvNewbieJobTitle" className="label">Job title (optional)</label>

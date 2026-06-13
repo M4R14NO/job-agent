@@ -304,19 +304,22 @@ body {
 
 .cv-step-card-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
 }
 
-.cv-step-card-header h2 {
-  margin: 0;
-}
-
 .cv-step-content {
   display: grid;
   gap: 16px;
+}
+
+.cv-step-header-note {
+  margin-right: auto;
+  margin-bottom: 0;
+  max-width: min(760px, calc(100% - 220px));
+  line-height: 1.35;
 }
 
 .cv-step-actions {

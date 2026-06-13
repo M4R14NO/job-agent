@@ -10,14 +10,9 @@ const LANGUAGE_ITEMS = CV_OUTPUT_LANGUAGES.map((language) => ({
 
 const LANGUAGE_COLLECTION = createListCollection({ items: LANGUAGE_ITEMS });
 
-export default function LanguageStep({ cvOutputLanguage, onCvOutputLanguageChange, hasDraft }) {
+export default function LanguageStep({ cvOutputLanguage, onCvOutputLanguageChange }) {
   return (
     <div className="cv-step-content">
-      {hasDraft ? (
-        <div className="cv-step-note">
-          Draft already generated. Regenerate after changing the output language.
-        </div>
-      ) : null}
       <div className="cv-step-field cv-language-step">
         <Select.Root
           collection={LANGUAGE_COLLECTION}

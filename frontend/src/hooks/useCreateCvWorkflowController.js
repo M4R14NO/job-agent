@@ -24,7 +24,7 @@ export default function useCreateCvWorkflowController({
   contextSnapshotFromProfile,
   setCvDraftState,
   previewDebounceMs = 5000,
-  autosaveIntervalMs = 30000
+  autosaveIntervalMs = 20000
 }) {
   const pdfPreviewTimerRef = useRef(null);
   const pdfPreviewTemplateRef = useRef("");

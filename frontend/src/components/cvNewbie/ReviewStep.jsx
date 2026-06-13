@@ -6,7 +6,7 @@ export default function ReviewStep({
   hasResumeTextChanges,
   isGeneratingDraft,
   draftError,
-  onGenerateDraft,
+  branchReviewMode,
   reviewContent
 }) {
   return (
@@ -22,10 +22,6 @@ export default function ReviewStep({
           </div>
         </div>
       ) : null}
-      {hasDraft && hasResumeTextChanges && !isGeneratingDraft ? (
-        <p className="helper">After generating, click "Update preview" to refresh the PDF.</p>
-      ) : null}
-
       {draftError ? <p className="error">{draftError}</p> : null}
 
       <div className="cv-review-content">

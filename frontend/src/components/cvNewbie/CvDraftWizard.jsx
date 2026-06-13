@@ -27,6 +27,7 @@ export default function CvDraftWizard({
   lmTimeout,
   onBeforeStepLeave,
   reviewContent,
+  branchReviewMode = false,
   initialStep = "template"
 }) {
   const [cvCreateStep, setCvCreateStep] = useState(initialStep);
@@ -43,10 +44,14 @@ export default function CvDraftWizard({
     && resumeText.trim() !== lastGeneratedResumeText;
   const canGenerateDraft = Boolean(resumeText.trim()) && !isGeneratingDraft;
   const canAutoFillDraft = Boolean(cvReview) && hasResumeTextChanges && canGenerateDraft;
-  const reviewActionLabel = Boolean(cvReview) && hasResumeTextChanges
-    ? "Let AI update your CV with the latest changes"
-    : "Let AI write CV";
-  const reviewActionDisabled = Boolean(cvReview) ? !canAutoFillDraft : !canGenerateDraft;
+  const reviewActionLabel = branchReviewMode
+    ? "Adapt CV to new job"
+    : (Boolean(cvReview) && hasResumeTextChanges
+      ? "Let AI update your CV with the latest changes"
+      : "Let AI write CV");
+  const reviewActionDisabled = branchReviewMode
+    ? (!canGenerateDraft || !selectedModel)
+    : (Boolean(cvReview) ? !canAutoFillDraft : !canGenerateDraft);
 
   useEffect(() => {
     setCvCreateStep(initialStep);
@@ -166,6 +171,7 @@ export default function CvDraftWizard({
       draftError={draftError}
       hasDraft={Boolean(cvReview)}
       hasResumeTextChanges={hasResumeTextChanges}
+      branchReviewMode={branchReviewMode}
       reviewContent={reviewContent}
     />
   );

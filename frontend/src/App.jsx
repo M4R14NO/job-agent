@@ -354,9 +354,10 @@ export default function App() {
   const isW1CvWorkflow = Boolean(selectedJob) && activeJobAction === "cv";
   const isJobCvChoiceStep = isW1CvWorkflow && jobCvEntryStep === "choice";
   const isJobCvCreateStep = isW1CvWorkflow && jobCvEntryStep === "create";
-  const isCreateWorkflowMode = isNewbieCreateMode || isJobCvCreateStep;
+  const isJobCvBranchReviewStep = isW1CvWorkflow && jobCvEntryStep === "branch-review";
+  const isCreateWorkflowMode = isNewbieCreateMode || isJobCvCreateStep || isJobCvBranchReviewStep;
   const isJobCvBranchStep = isW1CvWorkflow && jobCvEntryStep === "branch";
-  const shouldRenderW1StandaloneReview = Boolean(cvReview) && !isJobCvCreateStep;
+  const shouldRenderW1StandaloneReview = Boolean(cvReview) && !isJobCvCreateStep && !isJobCvBranchReviewStep;
   const w1HasFormData = isW1CvWorkflow && Boolean(cvReview?.canonical);
   const w1HasCvText = isW1CvWorkflow && Boolean(resumeText.trim());
   const w1UiState = !w1HasFormData && !w1HasCvText
@@ -1436,6 +1437,12 @@ export default function App() {
     openCvIdModal({ canonical, templateId, outputLanguage, jobContext });
   };
 
+  const handleBranchDraftGenerated = ({ canonical, templateId, outputLanguage, jobContext }) => {
+    handleNewbieDraftReady({ canonical, templateId, outputLanguage, jobContext });
+    setJobCvEntryStep("branch-review");
+    setIsJobReviewReadOnly(false);
+  };
+
   const sanitizeProfileId = (value) => {
     const normalized = (value || "").trim().toLowerCase();
     const safe = normalized
@@ -2159,7 +2166,7 @@ export default function App() {
           docType: "resume",
           outputLanguage: cvOutputLanguage
         });
-        setJobCvEntryStep("review");
+        setJobCvEntryStep(isJobCvBranchReviewStep ? "branch-review" : "review");
         setIsJobReviewReadOnly(false);
         setActiveJobAction("cv");
         setCvPreviewPayload(null);
@@ -2391,7 +2398,6 @@ export default function App() {
 
   const loadProfileIntoJobCvContext = async (profileId) => {
     if (!profileId || !selectedJob) return;
-    const shouldFocusReviewSection = jobCvEntryStep !== "review";
     setCvEntryError("");
     setIsLoadingProfile(true);
     try {
@@ -2423,12 +2429,8 @@ export default function App() {
         docType: "resume",
         outputLanguage: cvOutputLanguage
       });
-      setJobCvEntryStep("review");
-      setIsJobReviewReadOnly(true);
-      if (shouldFocusReviewSection) {
-        setActiveReviewNav("review");
-        shouldFocusReviewAfterProfileLoadRef.current = true;
-      }
+      setJobCvEntryStep("branch-review");
+      setIsJobReviewReadOnly(false);
     } catch (err) {
       setCvEntryError(err instanceof Error ? err.message : "Failed to load profile");
     } finally {
@@ -2923,7 +2925,9 @@ export default function App() {
           handleChooseCreateJobCv={handleChooseCreateJobCv}
           handleChooseBranchJobCv={handleChooseBranchJobCv}
           isJobCvCreateStep={isJobCvCreateStep}
+          isJobCvBranchReviewStep={isJobCvBranchReviewStep}
           handleNewbieDraftGenerated={handleNewbieDraftGenerated}
+          handleBranchDraftGenerated={handleBranchDraftGenerated}
           onBeforeStepLeave={handleCreateStepLeave}
           isJobCvBranchStep={isJobCvBranchStep}
           handleStartCvReview={handleStartCvReview}

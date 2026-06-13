@@ -27,12 +27,39 @@ export default function CvNewbieFlow({
   draftError,
   hasDraft,
   hasResumeTextChanges,
+  branchReviewMode,
   reviewContent
 }) {
   const stepIndex = Math.max(0, stepOrder.indexOf(step));
   const canGoNext = canAdvanceFromStep(step);
   const resolvedReviewLabel = reviewActionLabel || "Generate draft";
   const resolvedReviewDisabled = Boolean(reviewActionDisabled);
+
+  const headerNote = (() => {
+    if (step === "review") {
+      if (branchReviewMode) {
+        return "Edit directly below, or click \"Adapt CV to new job\" for a fresh AI adaptation.";
+      }
+      if (hasDraft && hasResumeTextChanges && !isGeneratingDraft) {
+        return "After generating, click \"Update preview\" to refresh the PDF.";
+      }
+      return null;
+    }
+    if (!hasDraft) return null;
+    if (step === "template") {
+      return "You already generated a draft. Change the template and regenerate to update the CV.";
+    }
+    if (step === "language") {
+      return "Draft already generated. Regenerate after changing the output language.";
+    }
+    if (step === "resume") {
+      return "Draft already generated. Update this text and regenerate to refresh the draft.";
+    }
+    if (step === "job") {
+      return "Draft already generated. Update job context and regenerate to refresh the draft.";
+    }
+    return null;
+  })();
 
   const renderStepContent = () => {
     switch (step) {
@@ -41,7 +68,6 @@ export default function CvNewbieFlow({
           <TemplateStep
             cvTemplateId={cvTemplateId}
             onCvTemplateIdChange={onCvTemplateIdChange}
-            hasDraft={hasDraft}
           />
         );
       case "language":
@@ -49,7 +75,6 @@ export default function CvNewbieFlow({
           <LanguageStep
             cvOutputLanguage={cvOutputLanguage}
             onCvOutputLanguageChange={onCvOutputLanguageChange}
-            hasDraft={hasDraft}
           />
         );
       case "resume":
@@ -57,7 +82,6 @@ export default function CvNewbieFlow({
           <ResumeStep
             resumeText={resumeText}
             onResumeTextChange={onResumeTextChange}
-            hasDraft={hasDraft}
           />
         );
       case "job":
@@ -65,7 +89,6 @@ export default function CvNewbieFlow({
           <JobStep
             applicationContext={applicationContext}
             onApplicationContextChange={onApplicationContextChange}
-            hasDraft={hasDraft}
           />
         );
       case "review":
@@ -80,6 +103,7 @@ export default function CvNewbieFlow({
             isGeneratingDraft={isGeneratingDraft}
             draftError={draftError}
             onGenerateDraft={onGenerateDraft}
+            branchReviewMode={Boolean(branchReviewMode)}
             reviewContent={reviewContent}
           />
         );
@@ -113,8 +137,12 @@ export default function CvNewbieFlow({
       </div>
 
       <div className="cv-step-card">
-        <div className="cv-step-card-header">
-          <h2>{stepLabelMap[step]}</h2>
+        <div className={`cv-step-card-header${headerNote ? " has-note" : ""}`}>
+          {headerNote ? (
+            <div className="cv-step-note cv-step-header-note" role="note" aria-label="Step guidance">
+              {headerNote}
+            </div>
+          ) : null}
           <div className="cv-step-actions">
             <button
               type="button"

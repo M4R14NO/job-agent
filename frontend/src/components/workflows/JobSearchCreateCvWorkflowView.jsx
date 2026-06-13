@@ -96,7 +96,9 @@ export default function JobSearchCreateCvWorkflowView({
   handleChooseCreateJobCv,
   handleChooseBranchJobCv,
   isJobCvCreateStep,
+  isJobCvBranchReviewStep,
   handleNewbieDraftGenerated,
+  handleBranchDraftGenerated,
   onBeforeStepLeave,
   isJobCvBranchStep,
   handleStartCvReview,
@@ -358,7 +360,7 @@ export default function JobSearchCreateCvWorkflowView({
                       </button>
                     </div>
                   </div>
-                ) : isJobCvCreateStep ? (
+                ) : (isJobCvCreateStep || isJobCvBranchReviewStep) ? (
                   <div className="panel-card cv-flow-choice-card">
                     <CvDraftWizard
                       cvTemplateId={cvTemplateId}
@@ -370,11 +372,12 @@ export default function JobSearchCreateCvWorkflowView({
                       applicationContext={applicationContext}
                       onApplicationContextChange={handleApplicationContextChange}
                       newProfileId={newProfileId}
-                      onDraftGenerated={handleNewbieDraftGenerated}
+                      onDraftGenerated={isJobCvBranchReviewStep ? handleBranchDraftGenerated : handleNewbieDraftGenerated}
                       cvReview={cvReview}
                       selectedModel={selectedModel}
                       lmTimeout={lmTimeout}
                       onBeforeStepLeave={onBeforeStepLeave}
+                      branchReviewMode={isJobCvBranchReviewStep}
                       reviewContent={(
                         <div
                           ref={reviewLayoutRef}
@@ -441,7 +444,7 @@ export default function JobSearchCreateCvWorkflowView({
                           </div>
                         </div>
                       )}
-                      initialStep="template"
+                      initialStep={isJobCvBranchReviewStep ? "review" : "template"}
                     />
                   </div>
                 ) : (

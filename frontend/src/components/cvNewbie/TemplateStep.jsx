@@ -13,14 +13,9 @@ const TEMPLATE_OPTIONS = [
   }
 ];
 
-export default function TemplateStep({ cvTemplateId, onCvTemplateIdChange, hasDraft }) {
+export default function TemplateStep({ cvTemplateId, onCvTemplateIdChange }) {
   return (
     <div className="cv-step-content">
-      {hasDraft ? (
-        <div className="cv-step-note">
-          You already generated a draft. Change the template and regenerate to update the CV.
-        </div>
-      ) : null}
       <div className="cv-template-grid">
         {TEMPLATE_OPTIONS.map((option) => {
           const isSelected = cvTemplateId === option.id;
