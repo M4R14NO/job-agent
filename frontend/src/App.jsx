@@ -14,24 +14,19 @@ import useW1CvWorkflowStateMachine from "./hooks/useW1CvWorkflowStateMachine";
 import {
   buildCompanySuffixProfileId,
   buildCvIdSuggestion,
-  buildJobDraftProfileId,
-  buildNextAvailableDraftProfileId,
   buildNextVersionedProfileId,
   sanitizeProfileId
 } from "./workflow/profiles/profileIdUtils";
 import {
   buildProfileApplicationContextDiff,
   contextFromProfile,
-  contextSnapshotFromProfile,
-  doesProfileMatchJobContext
+  contextSnapshotFromProfile
 } from "./workflow/profiles/profileContextUtils";
 import {
   buildCreateNewEntryPayload,
-  buildJobEditDraftPayload,
   buildRemapProfilePayload,
   buildSaveAndSwitchPayload,
   buildUpdateApplicationProfilePayload,
-  buildLineageFields,
   resolveRemapLineageFields
 } from "./workflow/profiles/profilePayloadUtils";
 import SearchFilters from "./components/SearchFilters";
@@ -98,7 +93,6 @@ export default function App() {
   const [wishes, setWishes] = useState("");
   const [selectedJob, setSelectedJob] = useState(null);
   const [cvReview, setCvReview] = useState(null);
-  const [isJobReviewReadOnly, setIsJobReviewReadOnly] = useState(false);
   const [pendingNewbieDraft, setPendingNewbieDraft] = useState(null);
   const [isCvIdModalOpen, setIsCvIdModalOpen] = useState(false);
   const [cvIdInput, setCvIdInput] = useState("");
@@ -136,12 +130,6 @@ export default function App() {
     error: "",
     diff: null
   });
-  const [jobEditDecisionDialog, setJobEditDecisionDialog] = useState({
-    isOpen: false,
-    isBusy: false,
-    error: "",
-    draftProfileName: ""
-  });
   const [activeView, setActiveView] = useState("find");
   const [createMode, setCreateMode] = useState("newbie");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -154,8 +142,6 @@ export default function App() {
   const [isPdfDownloading, setIsPdfDownloading] = useState(false);
   const [pendingPreviewSaveCount, setPendingPreviewSaveCount] = useState(0);
   const [cvThemeColors, setCvThemeColors] = useState(DEFAULT_TEMPLATE_THEME_COLORS);
-  const [isJobDetailsPanelVisible, setIsJobDetailsPanelVisible] = useState(false);
-  const [isProfileBrowserPanelVisible, setIsProfileBrowserPanelVisible] = useState(false);
 
   const cvRemapTimerRef = useRef(null);
   const pdfPreviewRequestVersionRef = useRef(0);
@@ -174,16 +160,12 @@ export default function App() {
   const sidebarWidthRef = useRef(SIDEBAR_MIN_WIDTH);
   const reviewLayoutRef = useRef(null);
   const createReviewLayoutRef = useRef(null);
-  const jobDetailsSectionRef = useRef(null);
-  const profileBrowserSectionRef = useRef(null);
   const reviewSectionRef = useRef(null);
   const createReviewSectionRef = useRef(null);
-  const shouldFocusReviewAfterProfileLoadRef = useRef(false);
 
   const {
     activeJobAction,
     jobCvEntryStep,
-    activeReviewNav,
     setActiveJobAction,
     initializeJobCvContext,
     handleSelectJob,
@@ -192,14 +174,7 @@ export default function App() {
     handleBackToResults,
     handleSetView,
     handleSwitchJobAction,
-    handleOpenJobDetailsPanel,
-    handleOpenProfileBrowserPanel,
-    handleOpenCvReviewSection,
-    selectReviewNav,
-    selectDetailsNav,
-    selectProfilesNav,
     activateCvReviewStep,
-    activateCvReview,
     activateCvBranchReview
   } = useW1CvWorkflowStateMachine({
     selectedJob,
@@ -210,7 +185,6 @@ export default function App() {
     clearCreatePreviewStateRef,
     setSelectedJob,
     setCvReview,
-    setIsJobReviewReadOnly,
     setActiveView,
     setCvPreviewPayload,
     setPdfPreviewUrl,
@@ -222,22 +196,7 @@ export default function App() {
     setResumeText,
     setIsDraftProfileActive,
     setDraftProfileId,
-    setIsSidebarOpen,
-    scrollToJobDetails: () => {
-      requestAnimationFrame(() => {
-        jobDetailsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    },
-    scrollToProfiles: () => {
-      requestAnimationFrame(() => {
-        profileBrowserSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    },
-    scrollToReview: () => {
-      requestAnimationFrame(() => {
-        reviewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    }
+    setIsSidebarOpen
   });
 
   const {
@@ -306,17 +265,8 @@ export default function App() {
   const isJobCvBranchReviewStep = isW1CvWorkflow && jobCvEntryStep === "branch-review";
   const isCreateWorkflowMode = isNewbieCreateMode || isJobCvCreateStep || isJobCvBranchReviewStep;
   const isJobCvBranchStep = isW1CvWorkflow && jobCvEntryStep === "branch";
-  const shouldRenderW1StandaloneReview = Boolean(cvReview) && !isJobCvCreateStep && !isJobCvBranchReviewStep;
-  const w1HasFormData = isW1CvWorkflow && Boolean(cvReview?.canonical);
   const w1HasCvText = isW1CvWorkflow && Boolean(resumeText.trim());
-  const w1UiState = !w1HasFormData && !w1HasCvText
-    ? "S1"
-    : (!w1HasFormData && w1HasCvText)
-      ? "S2"
-      : (w1HasFormData && !w1HasCvText)
-        ? "S3"
-        : "S4";
-  const showW1ReviewCards = !isW1CvWorkflow || w1HasFormData;
+  const isW1WizardReviewLayout = Boolean(selectedJob) && (isJobCvCreateStep || isJobCvBranchReviewStep);
   const showW1TailorAction = !isW1CvWorkflow || w1HasCvText;
 
   const resolveTemplateThemeColor = (templateId) => {
@@ -596,8 +546,7 @@ export default function App() {
   const handleStartCvReview = ({ canonical, job, templateId, docType, outputLanguage }) => {
     pdfPreviewRequestVersionRef.current += 1;
     setCvReview({ canonical, job, templateId, docType, outputLanguage });
-    activateCvReview();
-    setIsJobReviewReadOnly(false);
+    activateCvBranchReview();
     setApplicationContext({
       company: job?.company || "",
       application_status: "",
@@ -694,7 +643,6 @@ export default function App() {
       outputLanguage: cvOutputLanguage,
       initialProfileId: initialProfileId || canonical?.profile_id || "default"
     });
-    setIsJobReviewReadOnly(false);
     setSelectedJob(null);
     setActiveView("create");
     setCvPreviewPayload(null);
@@ -705,7 +653,6 @@ export default function App() {
   const clearCreatePreviewState = () => {
     pdfPreviewRequestVersionRef.current += 1;
     setCvReview(null);
-    setIsJobReviewReadOnly(false);
     setCvPreviewPayload(null);
     setPdfPreviewUrl(null);
     setPendingPreviewSaveCount(0);
@@ -729,7 +676,6 @@ export default function App() {
       outputLanguage: outputLanguage || "english",
       initialProfileId: canonical?.profile_id || "default"
     });
-    setIsJobReviewReadOnly(false);
     setCvPreviewPayload(null);
     setPdfPreviewUrl(null);
     preparePreviewForReview(templateId);
@@ -743,15 +689,7 @@ export default function App() {
   const handleBranchDraftGenerated = ({ canonical, templateId, outputLanguage, jobContext }) => {
     handleNewbieDraftReady({ canonical, templateId, outputLanguage, jobContext });
     activateCvBranchReview();
-    setIsJobReviewReadOnly(false);
   };
-
-  const doesLoadedProfileMatchCurrentJob = () => doesProfileMatchJobContext({
-    selectedJob,
-    selectedProfileId,
-    loadedProfileSnapshot,
-    applicationContext
-  });
 
   const openCvIdModal = ({ canonical, templateId, outputLanguage, jobContext }) => {
     const existingIds = cvProfiles.map((profile) => profile.profile_id);
@@ -1275,8 +1213,7 @@ export default function App() {
           docType: "resume",
           outputLanguage: cvOutputLanguage
         });
-        activateCvReviewStep(isJobCvBranchReviewStep ? "branch-review" : "review");
-        setIsJobReviewReadOnly(false);
+        activateCvReviewStep("branch-review");
         setCvPreviewPayload(null);
         setPdfPreviewUrl(null);
         preparePreviewForReview(saved.template_id || "awesomecv");
@@ -1455,127 +1392,10 @@ export default function App() {
         outputLanguage: cvOutputLanguage
       });
       activateCvBranchReview();
-      setIsJobReviewReadOnly(false);
     } catch (err) {
       setCvEntryError(err instanceof Error ? err.message : "Failed to load profile");
     } finally {
       setIsLoadingProfile(false);
-    }
-  };
-
-  const openJobEditDecisionDialog = () => {
-    const suggestedDraftId = buildNextAvailableDraftProfileId(
-      {
-        draftBaseId: buildJobDraftProfileId({
-          baseId: selectedProfileId || newProfileId || "profile",
-          company: selectedJob?.company || applicationContext.company || "company"
-        }),
-        existingIds: cvProfiles.map((profile) => profile.profile_id)
-      }
-    );
-    setJobEditDecisionDialog({
-      isOpen: true,
-      isBusy: false,
-      error: "",
-      draftProfileName: suggestedDraftId
-    });
-  };
-
-  const closeJobEditDecisionDialog = () => {
-    setJobEditDecisionDialog({
-      isOpen: false,
-      isBusy: false,
-      error: "",
-      draftProfileName: ""
-    });
-  };
-
-  const handleEditContinueWithLoadedProfile = () => {
-    if (!doesLoadedProfileMatchCurrentJob()) {
-      setJobEditDecisionDialog((prev) => ({
-        ...prev,
-        error: "Current job differs from the loaded profile context. Create a new draft for this job to continue safely."
-      }));
-      return;
-    }
-    setIsJobReviewReadOnly(false);
-    closeJobEditDecisionDialog();
-  };
-
-  const handleEditCreateDraftForJob = async () => {
-    if (!selectedProfileId || !selectedJob) {
-      setJobEditDecisionDialog((prev) => ({
-        ...prev,
-        error: "Select a source profile and job before creating a draft."
-      }));
-      return;
-    }
-
-    const requestedDraftName = String(jobEditDecisionDialog.draftProfileName || "").trim();
-    if (!requestedDraftName) {
-      setJobEditDecisionDialog((prev) => ({
-        ...prev,
-        error: "Draft profile name is required."
-      }));
-      return;
-    }
-
-    const nextDraftId = sanitizeProfileId(requestedDraftName);
-    const draftExists = cvProfiles.some((profile) => profile.profile_id === nextDraftId);
-    if (draftExists) {
-      setJobEditDecisionDialog((prev) => ({
-        ...prev,
-        error: "Draft profile name already exists. Choose another name."
-      }));
-      return;
-    }
-
-    setJobEditDecisionDialog((prev) => ({ ...prev, isBusy: true, error: "" }));
-    setCvEntryError("");
-    try {
-      const sourceProfile = await getCvProfile(selectedProfileId);
-
-      const payload = buildJobEditDraftPayload({
-        sourceProfile,
-        nextDraftId,
-        selectedJob,
-        applicationContext,
-        resumeText,
-        normalizeHexColorFn: normalizeHexColor,
-        lineageFields: buildLineageFields({
-          sourceProfile,
-          nextProfileId: nextDraftId,
-          branchReason: "job-edit-draft",
-          sanitizeProfileIdFn: sanitizeProfileId
-        })
-      });
-
-      const saved = await saveCvProfile(nextDraftId, payload);
-      upsertCvProfileInList(saved);
-      setSelectedProfileId(saved.profile_id);
-      setNewProfileId(saved.profile_id);
-      setCvTemplateId(saved.template_id || "awesomecv");
-      setApplicationContext(contextFromProfile(saved));
-      setLoadedProfileSnapshot(contextSnapshotFromProfile(saved));
-      setCvReview({
-        canonical: saved,
-        job: selectedJob,
-        templateId: saved.template_id || "awesomecv",
-        docType: "resume",
-        outputLanguage: cvOutputLanguage
-      });
-      setIsJobReviewReadOnly(false);
-      setCvPreviewPayload(null);
-      setPdfPreviewUrl(null);
-      preparePreviewForReview(saved.template_id || "awesomecv");
-      closeJobEditDecisionDialog();
-      setCvEntryError(`Created draft '${saved.profile_id}' for editing in this job context.`);
-    } catch (err) {
-      setJobEditDecisionDialog((prev) => ({
-        ...prev,
-        isBusy: false,
-        error: err instanceof Error ? err.message : "Failed to create job draft profile."
-      }));
     }
   };
 
@@ -1589,7 +1409,7 @@ export default function App() {
   };
 
   const handleReviewResizeStart = (event) => {
-    if (!isW1ReviewLayout || window.matchMedia("(max-width: 960px)").matches) return;
+    if (!isW1WizardReviewLayout || window.matchMedia("(max-width: 960px)").matches) return;
     const layoutRect = reviewLayoutRef.current?.getBoundingClientRect();
     if (!layoutRect) return;
 
@@ -1632,8 +1452,6 @@ export default function App() {
   const showActionsPanel = activeJobAction !== "none";
   const showJobCvEntryPanel = activeJobAction === "cv";
   const showJobCoverPanel = activeJobAction === "cover";
-  const showJobCvSetupPanel = showJobCvEntryPanel && !shouldRenderW1StandaloneReview;
-  const isW1ReviewLayout = Boolean(cvReview) && showW1ReviewCards;
   const showActionSwitcher = activeJobAction !== "none";
   const reviewLayoutStyle = reviewPreviewWidth
     ? { "--review-preview-width": `${Math.round(reviewPreviewWidth)}px` }
@@ -1646,154 +1464,10 @@ export default function App() {
     : (activeJobAction === "cover" ? "Cover letter" : "CV generation");
   const switchActionLabel = activeJobAction === "cover" ? "Switch to CV generation" : "Switch to Cover letter";
 
-  useEffect(() => {
-    if (!cvReview) {
-      setIsJobDetailsPanelVisible(false);
-      setIsProfileBrowserPanelVisible(false);
-      selectReviewNav();
-    }
-  }, [cvReview, selectReviewNav]);
-
-  useEffect(() => {
-    if (!cvReview) return;
-
-    const updateActiveNavFromScroll = () => {
-      const stickyOffset = 140;
-      const reviewRect = reviewSectionRef.current?.getBoundingClientRect();
-      const reviewTop = reviewRect?.top ?? Number.POSITIVE_INFINITY;
-      const profileTop = profileBrowserSectionRef.current?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
-      const detailTop = jobDetailsSectionRef.current?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
-      if (reviewTop <= stickyOffset + 80) {
-        selectReviewNav();
-        return;
-      }
-
-      if (profileTop <= stickyOffset + 80) {
-        selectProfilesNav();
-        return;
-      }
-
-      if (detailTop <= stickyOffset + 80) {
-        selectDetailsNav();
-        return;
-      }
-
-      selectDetailsNav();
-    };
-
-    updateActiveNavFromScroll();
-    window.addEventListener("scroll", updateActiveNavFromScroll, { passive: true });
-    return () => window.removeEventListener("scroll", updateActiveNavFromScroll);
-  }, [cvReview, selectDetailsNav, selectProfilesNav, selectReviewNav]);
-
-  useEffect(() => {
-    if (!cvReview || jobCvEntryStep !== "review") return;
-    if (!shouldFocusReviewAfterProfileLoadRef.current) return;
-    shouldFocusReviewAfterProfileLoadRef.current = false;
-
-    requestAnimationFrame(() => {
-      reviewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      selectReviewNav();
-    });
-  }, [cvReview, jobCvEntryStep, selectReviewNav]);
-
-  const jobEditDecisionModal = jobEditDecisionDialog.isOpen ? (
-    <div className="modal" role="dialog" aria-modal="true" aria-labelledby="job-edit-decision-title">
-      <div className="modal-backdrop" onClick={closeJobEditDecisionDialog} />
-      <div className="modal-card">
-        <div className="modal-header">
-          <h2 id="job-edit-decision-title">Choose how to edit this profile</h2>
-        </div>
-        <p className="helper">
-          Recommended: create a draft for this job. This protects your loaded profile from accidental overwrite.
-        </p>
-        {(() => {
-          const jobMatchesLoadedProfile = doesLoadedProfileMatchCurrentJob();
-          return !jobMatchesLoadedProfile ? (
-            <div className="sub-card" style={{ margin: 0 }}>
-              <p className="helper" style={{ margin: 0 }}>
-                Job context mismatch detected.
-              </p>
-              <p className="helper" style={{ margin: 0 }}>
-                You cannot edit the loaded profile directly here. Create a new draft branch for this job.
-              </p>
-            </div>
-          ) : (
-            <div className="sub-card" style={{ margin: 0 }}>
-              <p className="helper" style={{ margin: 0 }}>
-                Context matches this job.
-              </p>
-              <p className="helper" style={{ margin: 0 }}>
-                You may edit the loaded profile directly. Saving can overwrite that profile.
-              </p>
-            </div>
-          );
-        })()}
-        <div>
-          <label htmlFor="jobDraftProfileName" className="label">Draft profile name</label>
-          <input
-            id="jobDraftProfileName"
-            type="text"
-            value={jobEditDecisionDialog.draftProfileName}
-            onChange={(event) => {
-              const nextValue = event.target.value;
-              setJobEditDecisionDialog((prev) => ({
-                ...prev,
-                draftProfileName: nextValue,
-                error: ""
-              }));
-            }}
-            disabled={jobEditDecisionDialog.isBusy}
-          />
-          {(() => {
-            const requestedName = String(jobEditDecisionDialog.draftProfileName || "").trim();
-            if (!requestedName) return null;
-            const normalizedName = sanitizeProfileId(requestedName);
-            const conflict = cvProfiles.some((profile) => profile.profile_id === normalizedName);
-            if (!conflict) return null;
-            return (
-              <p className="error" style={{ marginTop: 8 }}>
-                Profile name '{normalizedName}' already exists.
-              </p>
-            );
-          })()}
-        </div>
-        {jobEditDecisionDialog.error ? <p className="error">{jobEditDecisionDialog.error}</p> : null}
-        <div className="inline-actions">
-          <button
-            type="button"
-            className="secondary cv-action-remap"
-            onClick={handleEditCreateDraftForJob}
-            disabled={jobEditDecisionDialog.isBusy}
-          >
-            {jobEditDecisionDialog.isBusy ? "Creating draft..." : "Create new draft for this job (recommended)"}
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            onClick={handleEditContinueWithLoadedProfile}
-            disabled={jobEditDecisionDialog.isBusy || !doesLoadedProfileMatchCurrentJob()}
-          >
-            Edit loaded profile (overwrite path)
-          </button>
-          <button
-            type="button"
-            className="ghost"
-            onClick={closeJobEditDecisionDialog}
-            disabled={jobEditDecisionDialog.isBusy}
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  ) : null;
-
   if (showPanel) {
     return (
       <>
         <JobSearchCreateCvWorkflowView
-          shouldRenderW1StandaloneReview={shouldRenderW1StandaloneReview}
           handleBackToResults={handleBackToResults}
           selectedJob={selectedJob}
           panelEyebrow={panelEyebrow}
@@ -1802,19 +1476,12 @@ export default function App() {
           cvReview={cvReview}
           setActiveJobAction={setActiveJobAction}
           initializeJobCvContext={initializeJobCvContext}
-          activeReviewNav={activeReviewNav}
-          handleOpenCvReviewSection={handleOpenCvReviewSection}
           actionLabel={actionLabel}
-          handleOpenJobDetailsPanel={handleOpenJobDetailsPanel}
-          handleOpenProfileBrowserPanel={handleOpenProfileBrowserPanel}
           showActionSwitcher={showActionSwitcher}
           handleSwitchJobAction={handleSwitchJobAction}
           switchActionLabel={switchActionLabel}
           showActionsPanel={showActionsPanel}
-          showJobCvSetupPanel={showJobCvSetupPanel}
-          jobDetailsSectionRef={jobDetailsSectionRef}
           descriptionHtml={descriptionHtml}
-          profileBrowserSectionRef={profileBrowserSectionRef}
           cvProfiles={cvProfiles}
           profilesLoading={profilesLoading}
           profilesError={profilesError}
@@ -1849,7 +1516,6 @@ export default function App() {
           draftProfileId={draftProfileId}
           isDraftProfileActive={isDraftProfileActive}
           showW1TailorAction={showW1TailorAction}
-          showW1ReviewCards={showW1ReviewCards}
           buildCompanySuffixProfileId={buildCompanySuffixProfileId}
           reviewLayoutRef={reviewLayoutRef}
           reviewLayoutStyle={reviewLayoutStyle}
@@ -1872,13 +1538,9 @@ export default function App() {
           handleCvDraftStateChange={handleCvDraftStateChange}
           setCvPreviewPayload={setCvPreviewPayload}
           handleCvReviewProfileSaved={handleCvReviewProfileSaved}
-          isJobReviewReadOnly={isJobReviewReadOnly}
-          openJobEditDecisionDialog={openJobEditDecisionDialog}
           handleUploadProfileImage={handleUploadProfileImage}
           handleClearProfileImage={handleClearProfileImage}
           isUploadingProfileImage={isUploadingProfileImage}
-          isW1CvWorkflow={isW1CvWorkflow}
-          w1UiState={w1UiState}
           showJobCoverPanel={showJobCoverPanel}
           showJobCvEntryPanel={showJobCvEntryPanel}
           isJobCvChoiceStep={isJobCvChoiceStep}
@@ -1891,7 +1553,6 @@ export default function App() {
           onBeforeStepLeave={handleCreateStepLeave}
           isJobCvBranchStep={isJobCvBranchStep}
           handleStartCvReview={handleStartCvReview}
-          jobEditDecisionModal={jobEditDecisionModal}
         />
         <CvIdModal
           isOpen={isCvIdModalOpen}
@@ -2132,8 +1793,6 @@ export default function App() {
         isBusy={profileSwitchDialog.isBusy}
         error={profileSwitchDialog.error}
       />
-
-      {jobEditDecisionModal}
     </Box>
   );
 }

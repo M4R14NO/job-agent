@@ -742,29 +742,8 @@ button:active:not(:disabled) {
   grid-template-rows: auto 1fr;
 }
 
-.panel-page.is-review-mode {
-  grid-template-rows: 0 1fr;
-}
-
 .panel-topbar-shell {
   position: relative;
-}
-
-.panel-page.is-review-mode .panel-topbar-shell.is-hover-reveal {
-  position: fixed;
-  inset: 0 0 auto;
-  z-index: 40;
-  height: 0;
-  background: transparent;
-  pointer-events: none;
-}
-
-.panel-page.is-review-mode .panel-topbar-hit-area {
-  position: absolute;
-  inset: 0 0 auto;
-  height: 18px;
-  z-index: 1;
-  pointer-events: auto;
 }
 
 .panel-topbar {
@@ -779,52 +758,6 @@ button:active:not(:disabled) {
   gap: 16px;
   align-items: center;
   flex-wrap: wrap;
-}
-
-.panel-page.is-review-mode .panel-topbar {
-  position: relative;
-  inset: auto;
-  z-index: 2;
-  opacity: 0;
-  transform: translateY(calc(-100% - 10px));
-  pointer-events: none;
-  transition: opacity 0.18s ease, transform 0.18s ease;
-  background: #ffffff;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-  border-bottom: 1px solid #dbe4ef;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .panel-page.is-review-mode .panel-topbar-shell.is-hover-reveal:hover .panel-topbar,
-  .panel-page.is-review-mode .panel-topbar-shell.is-hover-reveal:focus-within .panel-topbar {
-    opacity: 1;
-    transform: translateY(0);
-    pointer-events: auto;
-  }
-}
-
-@media (hover: none), (pointer: coarse) {
-  .panel-page.is-review-mode {
-    grid-template-rows: auto 1fr;
-  }
-
-  .panel-page.is-review-mode .panel-topbar-shell.is-hover-reveal {
-    position: static;
-    height: auto;
-    pointer-events: auto;
-  }
-
-  .panel-page.is-review-mode .panel-topbar-hit-area {
-    display: none;
-  }
-
-  .panel-page.is-review-mode .panel-topbar {
-    position: sticky;
-    inset: auto;
-    opacity: 1;
-    transform: none;
-    pointer-events: auto;
-  }
 }
 
 .panel-heading h2 {
@@ -849,25 +782,6 @@ button:active:not(:disabled) {
   align-items: start;
 }
 
-.panel-page.is-review-mode .panel-body {
-  padding-top: 12px;
-}
-
-.panel-inline-section {
-  padding: 0 24px;
-  display: grid;
-  gap: 14px;
-}
-
-.panel-page.is-review-mode .panel-inline-section {
-  padding-top: 0;
-}
-
-.panel-body.is-review-layout {
-  grid-template-columns: 1fr;
-  align-items: start;
-}
-
 .panel-body.is-single {
   grid-template-columns: 1fr;
 }
@@ -875,16 +789,6 @@ button:active:not(:disabled) {
 .panel-column {
   display: grid;
   gap: 20px;
-}
-
-.panel-review-stack {
-  display: grid;
-  gap: 24px;
-  min-width: 0;
-}
-
-.panel-page.is-review-mode .panel-review-stack {
-  gap: 18px;
 }
 
 .panel-review-layout {
@@ -989,37 +893,6 @@ button:active:not(:disabled) {
 
 .panel-review-pane-preview .pdf-preview-iframe,
 .panel-review-pane-preview .pdf-preview-placeholder {
-  height: 100%;
-  min-height: 0;
-}
-
-.panel-review-main {
-  display: grid;
-  min-height: clamp(720px, calc(100vh - 160px), 980px);
-  height: clamp(720px, calc(100vh - 160px), 980px);
-  max-height: clamp(720px, calc(100vh - 160px), 980px);
-}
-
-.panel-review-main-preview .pdf-preview-card,
-.panel-review-main-editor .cv-editor {
-  height: 100%;
-  min-height: 0;
-}
-
-.panel-review-main-editor .cv-editor {
-  overflow-y: auto;
-}
-
-.panel-review-main-preview .pdf-preview-card {
-  grid-template-rows: auto 1fr;
-}
-
-.panel-review-main-preview .pdf-preview-container {
-  min-height: 0;
-}
-
-.panel-review-main-preview .pdf-preview-iframe,
-.panel-review-main-preview .pdf-preview-placeholder {
   height: 100%;
   min-height: 0;
 }
@@ -4055,27 +3928,6 @@ body.modal-open .pdf-preview-iframe {
     font-size: 36px;
   }
 
-  .panel-page.is-review-mode {
-    grid-template-rows: auto 1fr;
-  }
-
-  .panel-page.is-review-mode .panel-topbar-shell.is-hover-reveal {
-    position: static;
-    height: auto;
-  }
-
-  .panel-page.is-review-mode .panel-topbar-hit-area {
-    display: none;
-  }
-
-  .panel-page.is-review-mode .panel-topbar {
-    position: sticky;
-    inset: auto;
-    opacity: 1;
-    transform: none;
-    pointer-events: auto;
-  }
-
   .app-shell > .chakra-grid {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
@@ -4141,11 +3993,6 @@ body.modal-open .pdf-preview-iframe {
     padding: 16px;
   }
 
-  .panel-body.is-review-layout {
-    height: auto;
-    overflow: visible;
-  }
-
   .panel-review-layout {
     grid-template-columns: 1fr;
   }
@@ -4175,28 +4022,6 @@ body.modal-open .pdf-preview-iframe {
   }
 
   .panel-review-pane-editor .cv-editor {
-    overflow: visible;
-  }
-
-  .panel-review-main {
-    height: auto;
-    min-height: 0;
-    max-height: none;
-  }
-
-  .panel-column.is-review-layout:first-child,
-  .panel-review-main-preview,
-  .panel-review-main-editor {
-    position: static;
-    top: auto;
-  }
-
-  .panel-review-main-preview .pdf-preview-card,
-  .panel-review-main-editor .cv-editor {
-    height: auto;
-  }
-
-  .panel-review-main-editor .cv-editor {
     overflow: visible;
   }
 

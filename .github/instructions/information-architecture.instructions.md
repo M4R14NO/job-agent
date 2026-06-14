@@ -39,7 +39,6 @@ Notes:
   - `create` -> shared step wizard from step 1
   - `branch` -> select source profile
   - `branch-review` -> shared wizard opened at step 5
-  - `review` -> standalone review stack
 - `branch-review` behavior:
   - Starts at step 5 directly.
   - Keeps adaptation optional and user-triggered.
@@ -49,7 +48,6 @@ Notes:
 - Create workflows (standalone + W1 create/branch-review):
   - Manual preview update policy.
   - One-time preview render after draft generation.
-- Non-create review flows can use auto/debounced preview.
 - Autosave:
   - Interval: 20 seconds.
   - Also triggers on step leave.

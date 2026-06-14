@@ -2,11 +2,9 @@ import { useCallback, useMemo, useState } from "react";
 import {
   W1_CV_ENTRY_STEP,
   W1_JOB_ACTION,
-  W1_REVIEW_NAV,
   canTransitionW1CvEntryStep,
   isValidW1CvEntryStep,
-  isValidW1JobAction,
-  isValidW1ReviewNav
+  isValidW1JobAction
 } from "../workflow/contracts/w1CvWorkflowContract";
 
 export default function useW1CvWorkflowStateMachine(options = {}) {
@@ -17,7 +15,6 @@ export default function useW1CvWorkflowStateMachine(options = {}) {
     pdfPreviewRequestVersionRef,
     setSelectedJob,
     setCvReview,
-    setIsJobReviewReadOnly,
     setActiveView,
     setCvPreviewPayload,
     setPdfPreviewUrl,
@@ -32,15 +29,11 @@ export default function useW1CvWorkflowStateMachine(options = {}) {
     setResumeText,
     setIsDraftProfileActive,
     setDraftProfileId,
-    setIsSidebarOpen,
-    scrollToJobDetails,
-    scrollToProfiles,
-    scrollToReview
+    setIsSidebarOpen
   } = options;
 
   const [activeJobAction, setActiveJobActionState] = useState(W1_JOB_ACTION.NONE);
   const [jobCvEntryStep, setJobCvEntryStepState] = useState(W1_CV_ENTRY_STEP.CHOICE);
-  const [activeReviewNav, setActiveReviewNavState] = useState(W1_REVIEW_NAV.REVIEW);
 
   const setActiveJobAction = useCallback((nextAction) => {
     if (!isValidW1JobAction(nextAction)) return;
@@ -62,15 +55,9 @@ export default function useW1CvWorkflowStateMachine(options = {}) {
     setJobCvEntryStepState(nextStep);
   }, []);
 
-  const setActiveReviewNav = useCallback((nextNav) => {
-    if (!isValidW1ReviewNav(nextNav)) return;
-    setActiveReviewNavState(nextNav);
-  }, []);
-
   const resetW1CvWorkflow = useCallback(() => {
     setActiveJobActionState(W1_JOB_ACTION.NONE);
     setJobCvEntryStepState(W1_CV_ENTRY_STEP.CHOICE);
-    setActiveReviewNavState(W1_REVIEW_NAV.REVIEW);
   }, []);
 
   const clearReviewArtifacts = useCallback(() => {
@@ -78,7 +65,6 @@ export default function useW1CvWorkflowStateMachine(options = {}) {
       pdfPreviewRequestVersionRef.current += 1;
     }
     setCvReview?.(null);
-    setIsJobReviewReadOnly?.(false);
     setCvPreviewPayload?.(null);
     setPdfPreviewUrl?.(null);
     if (typeof clearPreviewTracking === "function") {
@@ -89,7 +75,6 @@ export default function useW1CvWorkflowStateMachine(options = {}) {
   }, [
     pdfPreviewRequestVersionRef,
     setCvReview,
-    setIsJobReviewReadOnly,
     setCvPreviewPayload,
     setPdfPreviewUrl,
     clearPreviewTracking,
@@ -119,7 +104,6 @@ export default function useW1CvWorkflowStateMachine(options = {}) {
     setSelectedProfileId?.("");
     setLoadedProfileSnapshot?.(createEmptyLoadedProfileSnapshot?.() || null);
     setCvReview?.(null);
-    setIsJobReviewReadOnly?.(false);
   }, [
     createEmptyLoadedProfileSnapshot,
     emptyApplicationContext,
@@ -127,7 +111,6 @@ export default function useW1CvWorkflowStateMachine(options = {}) {
     setApplicationContext,
     setCvEntryError,
     setCvReview,
-    setIsJobReviewReadOnly,
     setLoadedProfileSnapshot,
     setNewProfileId,
     setSelectedProfileId,
@@ -162,7 +145,6 @@ export default function useW1CvWorkflowStateMachine(options = {}) {
     setApplicationContext?.(mergedContext);
     setLoadedProfileSnapshot?.(createEmptyLoadedProfileSnapshot?.() || null);
     setCvReview?.(null);
-    setIsJobReviewReadOnly?.(false);
   }, [
     createEmptyLoadedProfileSnapshot,
     emptyApplicationContext,
@@ -171,7 +153,6 @@ export default function useW1CvWorkflowStateMachine(options = {}) {
     setCvReview,
     setDraftProfileId,
     setIsDraftProfileActive,
-    setIsJobReviewReadOnly,
     setLoadedProfileSnapshot,
     setNewProfileId,
     setResumeText,
@@ -183,8 +164,7 @@ export default function useW1CvWorkflowStateMachine(options = {}) {
     setIsDraftProfileActive?.(false);
     setDraftProfileId?.("");
     setCvReview?.(null);
-    setIsJobReviewReadOnly?.(false);
-  }, [setCvReview, setDraftProfileId, setIsDraftProfileActive, setIsJobReviewReadOnly]);
+  }, [setCvReview, setDraftProfileId, setIsDraftProfileActive]);
 
   const handleBackToResults = useCallback(() => {
     clearReviewArtifacts();
@@ -212,44 +192,13 @@ export default function useW1CvWorkflowStateMachine(options = {}) {
     setActiveJobActionState(W1_JOB_ACTION.COVER);
   }, [activeJobAction, clearReviewArtifacts, initializeJobCvContext, selectedJob]);
 
-  const handleOpenJobDetailsPanel = useCallback(() => {
-    setActiveReviewNavState(W1_REVIEW_NAV.DETAILS);
-    scrollToJobDetails?.();
-  }, [scrollToJobDetails]);
-
-  const handleOpenProfileBrowserPanel = useCallback(() => {
-    setActiveReviewNavState(W1_REVIEW_NAV.PROFILES);
-    scrollToProfiles?.();
-  }, [scrollToProfiles]);
-
-  const handleOpenCvReviewSection = useCallback(() => {
-    setActiveReviewNavState(W1_REVIEW_NAV.REVIEW);
-    scrollToReview?.();
-  }, [scrollToReview]);
-
-  const selectReviewNav = useCallback(() => {
-    setActiveReviewNavState(W1_REVIEW_NAV.REVIEW);
-  }, []);
-
-  const selectDetailsNav = useCallback(() => {
-    setActiveReviewNavState(W1_REVIEW_NAV.DETAILS);
-  }, []);
-
-  const selectProfilesNav = useCallback(() => {
-    setActiveReviewNavState(W1_REVIEW_NAV.PROFILES);
-  }, []);
-
-  const activateCvReviewStep = useCallback((entryStep = W1_CV_ENTRY_STEP.REVIEW) => {
+  const activateCvReviewStep = useCallback((entryStep = W1_CV_ENTRY_STEP.BRANCH_REVIEW) => {
     const targetStep = isValidW1CvEntryStep(entryStep)
       ? entryStep
-      : W1_CV_ENTRY_STEP.REVIEW;
+      : W1_CV_ENTRY_STEP.BRANCH_REVIEW;
     setActiveJobActionState(W1_JOB_ACTION.CV);
     setJobCvEntryStepState(targetStep);
   }, []);
-
-  const activateCvReview = useCallback(() => {
-    activateCvReviewStep(W1_CV_ENTRY_STEP.REVIEW);
-  }, [activateCvReviewStep]);
 
   const activateCvBranchReview = useCallback(() => {
     activateCvReviewStep(W1_CV_ENTRY_STEP.BRANCH_REVIEW);
@@ -258,11 +207,9 @@ export default function useW1CvWorkflowStateMachine(options = {}) {
   const value = useMemo(() => ({
     activeJobAction,
     jobCvEntryStep,
-    activeReviewNav,
     setActiveJobAction,
     setJobCvEntryStep,
     forceJobCvEntryStep,
-    setActiveReviewNav,
     resetW1CvWorkflow,
     clearReviewArtifacts,
     initializeJobCvContext,
@@ -272,23 +219,14 @@ export default function useW1CvWorkflowStateMachine(options = {}) {
     handleBackToResults,
     handleSetView,
     handleSwitchJobAction,
-    handleOpenJobDetailsPanel,
-    handleOpenProfileBrowserPanel,
-    handleOpenCvReviewSection,
-    selectReviewNav,
-    selectDetailsNav,
-    selectProfilesNav,
     activateCvReviewStep,
-    activateCvReview,
     activateCvBranchReview
   }), [
     activeJobAction,
     jobCvEntryStep,
-    activeReviewNav,
     setActiveJobAction,
     setJobCvEntryStep,
     forceJobCvEntryStep,
-    setActiveReviewNav,
     resetW1CvWorkflow,
     clearReviewArtifacts,
     initializeJobCvContext,
@@ -298,14 +236,7 @@ export default function useW1CvWorkflowStateMachine(options = {}) {
     handleBackToResults,
     handleSetView,
     handleSwitchJobAction,
-    handleOpenJobDetailsPanel,
-    handleOpenProfileBrowserPanel,
-    handleOpenCvReviewSection,
-    selectReviewNav,
-    selectDetailsNav,
-    selectProfilesNav,
     activateCvReviewStep,
-    activateCvReview,
     activateCvBranchReview
   ]);
 

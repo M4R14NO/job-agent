@@ -17,14 +17,14 @@ It reflects:
 
 ## W1 CV workflow domain
 - `frontend/src/hooks/useW1CvWorkflowStateMachine.js`
-  - Owns W1 transitions and semantic navigation handlers.
+  - Owns W1 transitions for integrated CV wizard flow.
 - `frontend/src/workflow/contracts/w1CvWorkflowContract.js`
   - Owns canonical states and invariant/transition helpers.
 - `frontend/src/components/workflows/JobSearchCreateCvWorkflowView.jsx`
   - UI orchestration view consuming W1 domain outputs.
 
 Canonical W1 states:
-- `choice`, `create`, `branch`, `branch-review`, `review`
+- `choice`, `create`, `branch`, `branch-review`
 
 Required invariants:
 - `branch-review` opens shared wizard at review step.
