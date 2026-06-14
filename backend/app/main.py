@@ -1,5 +1,6 @@
 import math
 import os
+import re
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
@@ -70,6 +71,15 @@ OUTPUT_LANGUAGE_PROMPTS = {
     "spanish": "Spanish",
 }
 
+GENERIC_UPSTREAM_ERROR_DETAIL = "Upstream processing failed."
+
+_ERROR_DETAIL_REDACTIONS = (
+    (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[redacted-email]"),
+    (re.compile(r"https?://\S+", flags=re.IGNORECASE), "[redacted-url]"),
+    # Broad number-pattern masking to avoid leaking phone-like identifiers.
+    (re.compile(r"\+?\d[\d\s()./-]{6,}\d"), "[redacted-number]"),
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -129,6 +139,24 @@ def _is_scraping_enabled() -> bool:
 def _ensure_scraping_enabled() -> None:
     if not _is_scraping_enabled():
         raise HTTPException(status_code=503, detail=SCRAPING_DISABLED_DETAIL)
+
+
+def _redact_error_detail(message: str) -> str:
+    redacted = message
+    for pattern, replacement in _ERROR_DETAIL_REDACTIONS:
+        redacted = pattern.sub(replacement, redacted)
+    redacted = redacted.strip()
+    if not redacted:
+        return GENERIC_UPSTREAM_ERROR_DETAIL
+    return redacted
+
+
+def _runtime_error_response(exc: RuntimeError) -> HTTPException:
+    message = str(exc)
+    redacted_detail = _redact_error_detail(message)
+    if "timed out" in message.lower():
+        return HTTPException(status_code=504, detail=redacted_detail)
+    return HTTPException(status_code=502, detail=redacted_detail)
 
 
 def _build_profile_query_context(profile: CvCanonicalProfile) -> str:
@@ -436,10 +464,7 @@ def generate_cv(payload: CvRequest) -> Response:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
-        message = str(exc)
-        if "timed out" in message:
-            raise HTTPException(status_code=504, detail=message) from exc
-        raise HTTPException(status_code=502, detail=message) from exc
+        raise _runtime_error_response(exc) from exc
 
     filename = f"cv-{payload.doc_type}.pdf"
     return Response(
@@ -466,10 +491,7 @@ def parse_cv(payload: CvParseRequest) -> CvParseResponse:
             job_url=payload.job_url,
         )
     except RuntimeError as exc:
-        message = str(exc)
-        if "timed out" in message:
-            raise HTTPException(status_code=504, detail=message) from exc
-        raise HTTPException(status_code=502, detail=message) from exc
+        raise _runtime_error_response(exc) from exc
     return CvParseResponse(schema_version=CANONICAL_SCHEMA_VERSION, data=data)
 
 
@@ -610,10 +632,7 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
             )
         pdf_bytes = render_cv_pdf_from_payload(payload=template_payload.model_dump(), doc_type=payload.doc_type)
     except RuntimeError as exc:
-        message = str(exc)
-        if "timed out" in message:
-            raise HTTPException(status_code=504, detail=message) from exc
-        raise HTTPException(status_code=502, detail=message) from exc
+        raise _runtime_error_response(exc) from exc
 
     filename = f"cv-{payload.doc_type}.pdf"
     return Response(
@@ -665,10 +684,7 @@ def preview_cv_mapping(payload: CvPreviewRequest) -> CvPreviewResponse:
                 main_section_order=payload.main_section_order,
             )
     except RuntimeError as exc:
-        message = str(exc)
-        if "timed out" in message:
-            raise HTTPException(status_code=504, detail=message) from exc
-        raise HTTPException(status_code=502, detail=message) from exc
+        raise _runtime_error_response(exc) from exc
 
     return CvPreviewResponse(payload=template_payload.model_dump())
 
@@ -694,10 +710,7 @@ def rewrite_cv(payload: CvRewriteRequest) -> CvRewriteResponse:
             job_url=payload.job_url,
         )
     except RuntimeError as exc:
-        message = str(exc)
-        if "timed out" in message:
-            raise HTTPException(status_code=504, detail=message) from exc
-        raise HTTPException(status_code=502, detail=message) from exc
+        raise _runtime_error_response(exc) from exc
 
     return CvRewriteResponse(schema_version=CANONICAL_SCHEMA_VERSION, data=data)
 
@@ -716,10 +729,7 @@ def render_cv_from_template(payload: CvRenderTemplateRequest) -> Response:
             template_id=payload.template_id,
         )
     except RuntimeError as exc:
-        message = str(exc)
-        if "timed out" in message:
-            raise HTTPException(status_code=504, detail=message) from exc
-        raise HTTPException(status_code=502, detail=message) from exc
+        raise _runtime_error_response(exc) from exc
 
     filename = f"cv-{payload.doc_type}.pdf"
     return Response(

@@ -12,6 +12,7 @@ from .cv_storage import DEFAULT_PROFILE_STORE
 from .cv_mappers import get_deterministic_mapper, get_llm_mapper
 from .cv_mappers.awesomecv import ALLOWED_DOC_TYPES, DEFAULT_TEMPLATE_ID
 from .cv_utils import extract_json
+from .logging_utils import build_pii_safe_log_extra
 from .lmstudio_client import chat_completion, safe_request
 
 try:
@@ -394,8 +395,12 @@ def parse_resume_to_canonical(
     data = payload.get("data")
     try:
         return CvCanonicalData.model_validate(data)
-    except Exception:
-        logger.exception("CV canonical validation failed", extra={"canonical_payload": data})
+    except Exception as exc:
+        # Avoid traceback/payload dumps because canonical data may contain PII.
+        logger.error(
+            "CV canonical validation failed",
+            extra=build_pii_safe_log_extra(error=exc, payload=data),
+        )
         raise
 
 
