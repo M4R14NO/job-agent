@@ -1,70 +1,86 @@
 ---
-description: "Use when: defining information architecture, entry points, and newbie/power-user workflows for job-agent. Includes step-by-step UI paths and manage-existing-CVs entry point."
+description: "Use when: defining or updating job-agent information architecture, entry points, and CV workflow paths. Covers shared CvDraftWizard flows, W1 job-detail state machine, and manage-profiles entry point."
 applyTo:
   - "docs/**"
   - "frontend/**"
 ---
 
-# Information Architecture (Go-Live Refactor)
+# Information Architecture (Current)
 
-## Entry Points (Shared)
-1) Job search
+## Primary Entry Points
+1) Find a job
 2) Create CV
-3) Create cover letter
-4) Manage existing CVs (power users)
+3) Manage profiles
 
-## Newbie vs Power User: High-Level Intent
-- Newbie: guided, step-by-step views with minimal cognitive load; no dense tables or advanced settings visible by default.
-- Power user: access to advanced controls, profiles, and branching while keeping the same step structure.
+Notes:
+- Cover-letter generation is a job-detail action (switchable from CV action), not a top-level rail entry.
+- Manage profiles corresponds to advanced/power-user profile management.
 
-## Job Search: Step-by-Step Views (Newbie Priority)
-Goal: Make the path visually easier with explicit steps and focused screens. Main changes are UI and flow guidance.
+## Newbie vs Power User Intent
+- Newbie: guided step flow, minimal choices per screen, explicit navigation.
+- Power user: profile browser, branching/remap operations, and review/editor controls.
+- Prefer shared components over separate duplicated flows.
 
-Steps:
-1) Start search: term, location, remote toggle.
-2) Optional refinement: job wishes + CV text (if using LLM), simple toggles only.
-3) Review results: clear status/progress, simple filters only.
-4) Select job: open detail with clear CTAs.
+## CV Creation Architecture (Shared)
+- Shared wizard chain (used in standalone and W1 create paths):
+  1) Template
+  2) Output language
+  3) CV text
+  4) Optional job context
+  5) Review
+- Canonical components:
+  - `CvDraftWizard` for step orchestration and draft generation.
+  - `CvNewbieFlow` for stepper/header/actions UX.
+  - `useCreateCvWorkflowController` for preview/autosave orchestration.
 
-Power user additions:
-- Advanced filters (time range, sites, results wanted).
-- LLM rerank settings and model selection.
-- Save/load preferences (later).
+## W1 Job-Detail CV Workflow
+- Explicit state machine in `App.jsx`:
+  - `choice` -> choose create or branch
+  - `create` -> shared step wizard from step 1
+  - `branch` -> select source profile
+  - `branch-review` -> shared wizard opened at step 5
+  - `review` -> standalone review stack
+- `branch-review` behavior:
+  - Starts at step 5 directly.
+  - Keeps adaptation optional and user-triggered.
+  - Uses CTA label `Adapt CV to new job`.
 
-## Create CV: Step-by-Step Views
-Newbie:
-1) Template gallery (with preview image).
-2) Language selection.
-3) Paste CV text (upload disabled placeholder).
-4) Optional job description (if not coming from job search).
-5) Review with explicit "Update preview" action.
+## Preview and Autosave Rules
+- Create workflows (standalone + W1 create/branch-review):
+  - Manual preview update policy.
+  - One-time preview render after draft generation.
+- Non-create review flows can use auto/debounced preview.
+- Autosave:
+  - Interval: 20 seconds.
+  - Also triggers on step leave.
+  - Badge increments after successful autosave only.
 
-Power user additions:
-- CV profile selection/branching.
-- Section-level visibility toggles.
-- Template details and advanced settings.
-
-## Create Cover Letter: Step-by-Step Views
-Newbie:
-1) Select job (from search or paste description).
-2) Paste resume text.
-3) Generate and review.
-
-Power user additions:
-- Model selection.
-- Saved prompts or reusable snippets.
-
-## Manage Existing CVs (Power User Entry)
-Purpose: Maintain and tailor saved CV profiles outside the newbie flow.
+## Manage Profiles (Power User Entry)
+Purpose: maintain saved CVs outside the guided newbie-only path.
 
 Core actions:
-- Browse profiles.
-- Open and edit.
-- Duplicate/branch for a specific job.
-- Delete with confirmation.
+- Browse/search/select profile rows.
+- Create new profile entry.
+- Update profile CV text and application context.
+- Branch/tailor for a specific job context.
+- Bulk operations: delete, import, export.
 
-## Guidance Rules
-- Step views should be explicit and linear; avoid scrolling the user between sections.
-- Newbie views should hide advanced tables and dense controls.
-- Power user mode should reuse the same step structure with expanded controls.
-- PDF preview updates only on explicit action (no auto-refresh).
+## UI Guidance Rules
+- Keep step state obvious with clear active-step emphasis.
+- Keep guidance notes in header action row; avoid duplicate helper blocks in step body.
+- Use minimal, consistent color semantics (avoid mixed competing highlight colors).
+- On narrow screens, secondary step-3 example content should stack below CV text and scroll into focus when opened.
+
+## Implementation Rules for Architecture Changes
+- When editing flow behavior, update both:
+  - Shared wizard path (standalone Create CV).
+  - W1 job-detail path in `JobSearchCreateCvWorkflowView` + `App.jsx` state transitions.
+- Prefer extending shared flow components/hooks over adding parallel one-off logic.
+- If a UX contract changes, update docs under `docs/**` in the same change set.
+
+## Related Files
+- `frontend/src/App.jsx`
+- `frontend/src/components/workflows/JobSearchCreateCvWorkflowView.jsx`
+- `frontend/src/components/cvNewbie/CvDraftWizard.jsx`
+- `frontend/src/components/cvNewbie/CvNewbieFlow.jsx`
+- `frontend/src/hooks/useCreateCvWorkflowController.js`
