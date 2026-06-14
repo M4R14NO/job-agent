@@ -2,16 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import {
   getCvProfile,
   renderCvFromTemplate,
-  saveCvProfile,
   uploadCvProfileImage
 } from "./api/llm";
 import useCvProfilesController from "./hooks/useCvProfilesController";
 import { useJobDescription } from "./hooks/useJobDescription";
 import useCreateCvWorkflowController from "./hooks/useCreateCvWorkflowController";
-import useCvIdModalController from "./hooks/useCvIdModalController";
+import useCvDialogsController from "./hooks/useCvDialogsController";
 import useLayoutInteractionsController from "./hooks/useLayoutInteractionsController";
 import useProfileWorkflowController from "./hooks/useProfileWorkflowController";
-import useProfileSwitchDialogController from "./hooks/useProfileSwitchDialogController";
 import useSearchWorkflowController from "./hooks/useSearchWorkflowController";
 import useW1CvWorkflowStateMachine from "./hooks/useW1CvWorkflowStateMachine";
 import {
@@ -583,10 +581,14 @@ export default function App() {
     openCvIdModal,
     closeCvIdModal,
     handleCvIdInputChange,
-    handleConfirmCvId
-  } = useCvIdModalController({
+    handleConfirmCvId,
+    profileSwitchDialog,
+    openProfileSwitchDialog,
+    closeProfileSwitchDialog,
+    handleSwitchWithoutSaving,
+    handleSaveAndSwitchProfile
+  } = useCvDialogsController({
     cvProfiles,
-    saveCvProfile,
     sanitizeProfileId,
     buildCvIdSuggestion,
     buildNewbieDraftPayload,
@@ -599,7 +601,17 @@ export default function App() {
     setPendingPreviewSaveCount,
     contextFromProfile,
     contextSnapshotFromProfile,
-    handleNewbieDraftReadyRef
+    handleNewbieDraftReadyRef,
+    selectedProfileId,
+    cvDraftState,
+    resumeText,
+    applicationContext,
+    normalizeHexColor,
+    mergeProfileImageIntoData,
+    buildSaveAndSwitchPayload,
+    loadProfileIntoEditor: async (profileId) => {
+      await loadProfileIntoEditorRef.current(profileId);
+    }
   });
 
   const {
@@ -634,30 +646,6 @@ export default function App() {
   });
   clearPreviewTrackingRef.current = clearPreviewTracking;
   setAutosaveSnapshotFromPayloadRef.current = setAutosaveSnapshotFromPayload;
-
-  const {
-    profileSwitchDialog,
-    openProfileSwitchDialog,
-    closeProfileSwitchDialog,
-    handleSwitchWithoutSaving,
-    handleSaveAndSwitchProfile
-  } = useProfileSwitchDialogController({
-    selectedProfileId,
-    cvDraftState,
-    resumeText,
-    applicationContext,
-    normalizeHexColor,
-    mergeProfileImageIntoData,
-    getCvProfile,
-    saveCvProfile,
-    buildSaveAndSwitchPayload,
-    contextSnapshotFromProfile,
-    setLoadedProfileSnapshot,
-    upsertCvProfileInList,
-    loadProfileIntoEditor: async (profileId) => {
-      await loadProfileIntoEditorRef.current(profileId);
-    }
-  });
 
   const {
     isLoadingProfile,
@@ -882,96 +870,162 @@ export default function App() {
     : (activeJobAction === "cover" ? "Cover letter" : "CV generation");
   const switchActionLabel = activeJobAction === "cover" ? "Switch to CV generation" : "Switch to Cover letter";
 
+  const jobSearchCreateCvWorkflowViewModel = {
+    handleBackToResults,
+    selectedJob,
+    panelEyebrow,
+    panelTitle,
+    activeJobAction,
+    cvReview,
+    setActiveJobAction,
+    initializeJobCvContext,
+    actionLabel,
+    showActionSwitcher,
+    handleSwitchJobAction,
+    switchActionLabel,
+    showActionsPanel,
+    descriptionHtml,
+    cvProfiles,
+    profilesLoading,
+    profilesError,
+    selectedProfileId,
+    setSelectedProfileId,
+    loadProfileIntoJobCvContext,
+    loadProfiles,
+    handleDeleteProfiles,
+    handleExportProfiles,
+    handleImportProfiles,
+    handleUpdateApplicationProfileData,
+    handleRemapProfileCvText,
+    handleCreateNewEntry,
+    handleBeginNewEntry,
+    isCreatingProfileEntry,
+    isLoadingProfile,
+    isUpdatingProfileCvText,
+    isRemappingProfileCvText,
+    cvRemapProgress,
+    cvEntryError,
+    isProfileBulkActionBusy,
+    cvTemplateId,
+    handleTemplateIdChange,
+    cvOutputLanguage,
+    setCvOutputLanguage,
+    applicationContext,
+    handleApplicationContextChange,
+    resumeText,
+    setResumeText,
+    newProfileId,
+    setNewProfileId,
+    draftProfileId,
+    isDraftProfileActive,
+    showW1TailorAction,
+    buildCompanySuffixProfileId,
+    reviewLayoutRef,
+    reviewLayoutStyle,
+    reviewSectionRef,
+    pdfPreviewUrl,
+    isPdfGenerating,
+    isPdfDownloading,
+    resolveTemplateThemeColor,
+    handleThemeColorChange,
+    handleShowProfileImageChange,
+    handleHipsterHeaderAlignChange,
+    handleHipsterHeaderTitleSizeChange,
+    handleHipsterHeaderSubtitleSizeChange,
+    handleUpdatePdfPreview,
+    handleDownloadPdf,
+    pendingPreviewSaveCount,
+    handleReviewResizeStart,
+    selectedModel,
+    lmTimeout,
+    handleCvDraftStateChange,
+    setCvPreviewPayload,
+    handleCvReviewProfileSaved,
+    handleUploadProfileImage,
+    handleClearProfileImage,
+    isUploadingProfileImage,
+    showJobCoverPanel,
+    showJobCvEntryPanel,
+    isJobCvChoiceStep,
+    handleChooseCreateJobCv,
+    handleChooseBranchJobCv,
+    isJobCvCreateStep,
+    isJobCvBranchReviewStep,
+    handleNewbieDraftGenerated,
+    handleBranchDraftGenerated,
+    onBeforeStepLeave: handleCreateStepLeave,
+    isJobCvBranchStep,
+    handleStartCvReview
+  };
+
+  const createCvViewModel = {
+    isNewbieCreateMode,
+    cvTemplateId,
+    onTemplateIdChange: handleTemplateIdChange,
+    cvOutputLanguage,
+    onCvOutputLanguageChange: setCvOutputLanguage,
+    resumeText,
+    onResumeTextChange: setResumeText,
+    applicationContext,
+    onApplicationContextChange: handleApplicationContextChange,
+    onNewbieDraftGenerated: handleNewbieDraftGenerated,
+    cvReview,
+    createReviewLayoutRef,
+    createReviewLayoutStyle,
+    createReviewSectionRef,
+    pdfPreviewUrl,
+    isPdfGenerating,
+    isPdfDownloading,
+    resolveTemplateThemeColor,
+    onThemeColorChange: handleThemeColorChange,
+    onShowProfileImageChange: handleShowProfileImageChange,
+    onHipsterHeaderAlignChange: handleHipsterHeaderAlignChange,
+    onHipsterHeaderTitleSizeChange: handleHipsterHeaderTitleSizeChange,
+    onHipsterHeaderSubtitleSizeChange: handleHipsterHeaderSubtitleSizeChange,
+    onUpdatePdfPreview: handleUpdatePdfPreview,
+    onDownloadPdf: handleDownloadPdf,
+    unsyncedSaveCount: pendingPreviewSaveCount,
+    onCreateReviewResizeStart: handleCreateReviewResizeStart,
+    selectedModel,
+    lmTimeout,
+    onCvDraftStateChange: handleCvDraftStateChange,
+    onPreviewPayloadChange: setCvPreviewPayload,
+    onCvReviewProfileSaved: handleCvReviewProfileSaved,
+    onUploadProfileImage: handleUploadProfileImage,
+    onClearProfileImage: handleClearProfileImage,
+    isUploadingProfileImage,
+    cvProfiles,
+    profilesLoading,
+    profilesError,
+    selectedProfileId,
+    onSelectedProfileIdChange: setSelectedProfileId,
+    onProfileRowSelect: handleProfileRowSelect,
+    onRefreshProfiles: loadProfiles,
+    onDeleteProfiles: handleDeleteProfiles,
+    onExportProfiles: handleExportProfiles,
+    onImportProfiles: handleImportProfiles,
+    onUpdateProfileCvText: handleUpdateApplicationProfileData,
+    onRemapProfileCvText: handleRemapProfileCvText,
+    onCreateNewEntry: handleCreateNewEntry,
+    onBeginNewEntry: handleBeginNewEntry,
+    isCreatingProfileEntry,
+    isLoadingProfile,
+    isUpdatingProfileCvText,
+    isRemappingProfileCvText,
+    isProfileBulkActionBusy,
+    remapProgress: cvRemapProgress,
+    cvEntryError,
+    newProfileId,
+    onNewProfileIdChange: setNewProfileId,
+    draftProfileId,
+    isDraftProfileActive,
+    onBeforeStepLeave: handleCreateStepLeave
+  };
+
   if (showPanel) {
     return (
       <>
-        <JobSearchCreateCvWorkflowView
-          handleBackToResults={handleBackToResults}
-          selectedJob={selectedJob}
-          panelEyebrow={panelEyebrow}
-          panelTitle={panelTitle}
-          activeJobAction={activeJobAction}
-          cvReview={cvReview}
-          setActiveJobAction={setActiveJobAction}
-          initializeJobCvContext={initializeJobCvContext}
-          actionLabel={actionLabel}
-          showActionSwitcher={showActionSwitcher}
-          handleSwitchJobAction={handleSwitchJobAction}
-          switchActionLabel={switchActionLabel}
-          showActionsPanel={showActionsPanel}
-          descriptionHtml={descriptionHtml}
-          cvProfiles={cvProfiles}
-          profilesLoading={profilesLoading}
-          profilesError={profilesError}
-          selectedProfileId={selectedProfileId}
-          setSelectedProfileId={setSelectedProfileId}
-          loadProfileIntoJobCvContext={loadProfileIntoJobCvContext}
-          loadProfiles={loadProfiles}
-          handleDeleteProfiles={handleDeleteProfiles}
-          handleExportProfiles={handleExportProfiles}
-          handleImportProfiles={handleImportProfiles}
-          handleUpdateApplicationProfileData={handleUpdateApplicationProfileData}
-          handleRemapProfileCvText={handleRemapProfileCvText}
-          handleCreateNewEntry={handleCreateNewEntry}
-          handleBeginNewEntry={handleBeginNewEntry}
-          isCreatingProfileEntry={isCreatingProfileEntry}
-          isLoadingProfile={isLoadingProfile}
-          isUpdatingProfileCvText={isUpdatingProfileCvText}
-          isRemappingProfileCvText={isRemappingProfileCvText}
-          cvRemapProgress={cvRemapProgress}
-          cvEntryError={cvEntryError}
-          isProfileBulkActionBusy={isProfileBulkActionBusy}
-          cvTemplateId={cvTemplateId}
-          handleTemplateIdChange={handleTemplateIdChange}
-          cvOutputLanguage={cvOutputLanguage}
-          setCvOutputLanguage={setCvOutputLanguage}
-          applicationContext={applicationContext}
-          handleApplicationContextChange={handleApplicationContextChange}
-          resumeText={resumeText}
-          setResumeText={setResumeText}
-          newProfileId={newProfileId}
-          setNewProfileId={setNewProfileId}
-          draftProfileId={draftProfileId}
-          isDraftProfileActive={isDraftProfileActive}
-          showW1TailorAction={showW1TailorAction}
-          buildCompanySuffixProfileId={buildCompanySuffixProfileId}
-          reviewLayoutRef={reviewLayoutRef}
-          reviewLayoutStyle={reviewLayoutStyle}
-          reviewSectionRef={reviewSectionRef}
-          pdfPreviewUrl={pdfPreviewUrl}
-          isPdfGenerating={isPdfGenerating}
-          isPdfDownloading={isPdfDownloading}
-          resolveTemplateThemeColor={resolveTemplateThemeColor}
-          handleThemeColorChange={handleThemeColorChange}
-          handleShowProfileImageChange={handleShowProfileImageChange}
-          handleHipsterHeaderAlignChange={handleHipsterHeaderAlignChange}
-          handleHipsterHeaderTitleSizeChange={handleHipsterHeaderTitleSizeChange}
-          handleHipsterHeaderSubtitleSizeChange={handleHipsterHeaderSubtitleSizeChange}
-          handleUpdatePdfPreview={handleUpdatePdfPreview}
-          handleDownloadPdf={handleDownloadPdf}
-          pendingPreviewSaveCount={pendingPreviewSaveCount}
-          handleReviewResizeStart={handleReviewResizeStart}
-          selectedModel={selectedModel}
-          lmTimeout={lmTimeout}
-          handleCvDraftStateChange={handleCvDraftStateChange}
-          setCvPreviewPayload={setCvPreviewPayload}
-          handleCvReviewProfileSaved={handleCvReviewProfileSaved}
-          handleUploadProfileImage={handleUploadProfileImage}
-          handleClearProfileImage={handleClearProfileImage}
-          isUploadingProfileImage={isUploadingProfileImage}
-          showJobCoverPanel={showJobCoverPanel}
-          showJobCvEntryPanel={showJobCvEntryPanel}
-          isJobCvChoiceStep={isJobCvChoiceStep}
-          handleChooseCreateJobCv={handleChooseCreateJobCv}
-          handleChooseBranchJobCv={handleChooseBranchJobCv}
-          isJobCvCreateStep={isJobCvCreateStep}
-          isJobCvBranchReviewStep={isJobCvBranchReviewStep}
-          handleNewbieDraftGenerated={handleNewbieDraftGenerated}
-          handleBranchDraftGenerated={handleBranchDraftGenerated}
-          onBeforeStepLeave={handleCreateStepLeave}
-          isJobCvBranchStep={isJobCvBranchStep}
-          handleStartCvReview={handleStartCvReview}
-        />
+        <JobSearchCreateCvWorkflowView viewModel={jobSearchCreateCvWorkflowViewModel} />
         <CvIdModal
           isOpen={isCvIdModalOpen}
           title="Choose CV id"
@@ -1098,69 +1152,7 @@ export default function App() {
               refinementProgress={refinementProgress}
             />
           ) : (
-            <CreateCvView
-              isNewbieCreateMode={isNewbieCreateMode}
-              cvTemplateId={cvTemplateId}
-              onTemplateIdChange={handleTemplateIdChange}
-              cvOutputLanguage={cvOutputLanguage}
-              onCvOutputLanguageChange={setCvOutputLanguage}
-              resumeText={resumeText}
-              onResumeTextChange={setResumeText}
-              applicationContext={applicationContext}
-              onApplicationContextChange={handleApplicationContextChange}
-              onNewbieDraftGenerated={handleNewbieDraftGenerated}
-              cvReview={cvReview}
-              createReviewLayoutRef={createReviewLayoutRef}
-              createReviewLayoutStyle={createReviewLayoutStyle}
-              createReviewSectionRef={createReviewSectionRef}
-              pdfPreviewUrl={pdfPreviewUrl}
-              isPdfGenerating={isPdfGenerating}
-              isPdfDownloading={isPdfDownloading}
-              resolveTemplateThemeColor={resolveTemplateThemeColor}
-              onThemeColorChange={handleThemeColorChange}
-              onShowProfileImageChange={handleShowProfileImageChange}
-              onHipsterHeaderAlignChange={handleHipsterHeaderAlignChange}
-              onHipsterHeaderTitleSizeChange={handleHipsterHeaderTitleSizeChange}
-              onHipsterHeaderSubtitleSizeChange={handleHipsterHeaderSubtitleSizeChange}
-              onUpdatePdfPreview={handleUpdatePdfPreview}
-              onDownloadPdf={handleDownloadPdf}
-              unsyncedSaveCount={pendingPreviewSaveCount}
-              onCreateReviewResizeStart={handleCreateReviewResizeStart}
-              selectedModel={selectedModel}
-              lmTimeout={lmTimeout}
-              onCvDraftStateChange={handleCvDraftStateChange}
-              onPreviewPayloadChange={setCvPreviewPayload}
-              onCvReviewProfileSaved={handleCvReviewProfileSaved}
-              onUploadProfileImage={handleUploadProfileImage}
-              onClearProfileImage={handleClearProfileImage}
-              isUploadingProfileImage={isUploadingProfileImage}
-              cvProfiles={cvProfiles}
-              profilesLoading={profilesLoading}
-              profilesError={profilesError}
-              selectedProfileId={selectedProfileId}
-              onSelectedProfileIdChange={setSelectedProfileId}
-              onProfileRowSelect={handleProfileRowSelect}
-              onRefreshProfiles={loadProfiles}
-              onDeleteProfiles={handleDeleteProfiles}
-              onExportProfiles={handleExportProfiles}
-              onImportProfiles={handleImportProfiles}
-              onUpdateProfileCvText={handleUpdateApplicationProfileData}
-              onRemapProfileCvText={handleRemapProfileCvText}
-              onCreateNewEntry={handleCreateNewEntry}
-              onBeginNewEntry={handleBeginNewEntry}
-              isCreatingProfileEntry={isCreatingProfileEntry}
-              isLoadingProfile={isLoadingProfile}
-              isUpdatingProfileCvText={isUpdatingProfileCvText}
-              isRemappingProfileCvText={isRemappingProfileCvText}
-              isProfileBulkActionBusy={isProfileBulkActionBusy}
-              remapProgress={cvRemapProgress}
-              cvEntryError={cvEntryError}
-              newProfileId={newProfileId}
-              onNewProfileIdChange={setNewProfileId}
-              draftProfileId={draftProfileId}
-              isDraftProfileActive={isDraftProfileActive}
-              onBeforeStepLeave={handleCreateStepLeave}
-            />
+            <CreateCvView viewModel={createCvViewModel} />
           )}
         </GridItem>
       </Grid>

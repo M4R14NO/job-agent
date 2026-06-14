@@ -14,7 +14,7 @@
 - Detailed domain ownership map: `docs/frontend-workflow-ownership-map.md`.
 
 ## W1 CV State-Machine Contract
-Canonical states are: choice, create, branch, branch-review, review.
+Canonical states are: choice, create, branch, branch-review.
 Transition rules must be centralized in the workflow module. 
 No duplicate ad-hoc state transitions in UI components.
 Primary owner is `useW1CvWorkflowStateMachine` and invariants are defined in `w1CvWorkflowContract`.

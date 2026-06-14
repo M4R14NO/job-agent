@@ -20,6 +20,7 @@ import {
   saveCvProfile,
   API_BASE_URL
 } from "../api/llm";
+import { useCvReviewOverwriteDialogController } from "../hooks/useCvDialogsController";
 import OverwriteConfirmationModal from "./OverwriteConfirmationModal";
 
 const DEFAULT_SECTION_ORDER = [
@@ -861,15 +862,6 @@ export default function CvReview({
     writing: false,
     education: false
   }));
-  const [overwriteDialog, setOverwriteDialog] = useState({
-    isOpen: false,
-    diff: null,
-    suggestedProfileId: "",
-    pendingPayload: null,
-    pendingTargetProfileId: "",
-    pendingTargetRevision: 0,
-    error: ""
-  });
   const previewDebounceRef = useRef(null);
   const previousTemplateIdRef = useRef(templateId);
   const forceImmediatePreviewRef = useRef(true);
@@ -957,6 +949,28 @@ export default function CvReview({
 
   const hasProfileIdChange = draftProfileId !== (canonical?.profile_id || "default");
   const hasUnsavedDraftChanges = hasProfileIdChange || draftDiff.hasChanges;
+
+  const syncSavedProfileState = (saved) => {
+    setProfileId(saved.profile_id);
+    setRevision(saved.revision);
+    setLoadedProfileId(saved.profile_id);
+    setLoadedRevision(saved.revision);
+  };
+
+  const {
+    overwriteDialog,
+    setSuggestedProfileId,
+    resolveSaveConflict,
+    closeOverwriteDialog,
+    handleConfirmOverwrite,
+    handleSaveAsNewFromDialog
+  } = useCvReviewOverwriteDialogController({
+    readOnly,
+    setIsSaving,
+    onProfileSaved,
+    buildOverwriteDiff,
+    nextProfileSuggestion
+  });
 
   const scheduleNextPreview = ({ immediate = false } = {}) => {
     if (immediate) {
@@ -1502,7 +1516,6 @@ export default function CvReview({
   const handleSave = async () => {
     if (readOnly) return;
     setError("");
-    setOverwriteDialog((prev) => ({ ...prev, error: "" }));
     const targetProfileId = profileId.trim();
     if (!targetProfileId) {
       setError("Profile ID is required.");
@@ -1536,137 +1549,18 @@ export default function CvReview({
 
     setIsSaving(true);
     try {
-      let existingTarget = null;
-      let targetRevision = 0;
-      try {
-        existingTarget = await getCvProfile(targetProfileId);
-        targetRevision = existingTarget?.revision ?? 0;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "";
-        if (!message.includes("status 404")) {
-          throw err;
-        }
-      }
-
-      if (existingTarget) {
-        const diff = buildOverwriteDiff({
-          existingProfile: existingTarget,
-          pendingPayload: payload,
-          targetProfileId
-        });
-
-        if (diff.hasChanges) {
-          setOverwriteDialog({
-            isOpen: true,
-            diff,
-            suggestedProfileId: nextProfileSuggestion(targetProfileId),
-            pendingPayload: payload,
-            pendingTargetProfileId: targetProfileId,
-            pendingTargetRevision: targetRevision,
-            error: ""
-          });
-          return;
-        }
-      }
+      const { blockedByDialog, targetRevision } = await resolveSaveConflict({
+        targetProfileId,
+        payload
+      });
+      if (blockedByDialog) return;
 
       payload.revision = targetRevision;
       const saved = await saveCvProfile(targetProfileId, payload);
-      setProfileId(saved.profile_id);
-      setRevision(saved.revision);
-      setLoadedProfileId(saved.profile_id);
-      setLoadedRevision(saved.revision);
+      syncSavedProfileState(saved);
       onProfileSaved?.(saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const closeOverwriteDialog = () => {
-    setOverwriteDialog({
-      isOpen: false,
-      diff: null,
-      suggestedProfileId: "",
-      pendingPayload: null,
-      pendingTargetProfileId: "",
-      pendingTargetRevision: 0,
-      error: ""
-    });
-  };
-
-  const handleConfirmOverwrite = async () => {
-    if (readOnly) return;
-    if (!overwriteDialog.pendingPayload || !overwriteDialog.pendingTargetProfileId) return;
-    setOverwriteDialog((prev) => ({ ...prev, error: "" }));
-    setIsSaving(true);
-    try {
-      const payload = {
-        ...overwriteDialog.pendingPayload,
-        revision: overwriteDialog.pendingTargetRevision,
-        profile_id: overwriteDialog.pendingTargetProfileId
-      };
-      const saved = await saveCvProfile(overwriteDialog.pendingTargetProfileId, payload);
-      setProfileId(saved.profile_id);
-      setRevision(saved.revision);
-      setLoadedProfileId(saved.profile_id);
-      setLoadedRevision(saved.revision);
-      onProfileSaved?.(saved);
-      closeOverwriteDialog();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Overwrite failed";
-      setOverwriteDialog((prev) => ({ ...prev, error: message }));
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleSaveAsNewFromDialog = async () => {
-    if (readOnly) return;
-    const nextId = overwriteDialog.suggestedProfileId.trim();
-    if (!nextId || !overwriteDialog.pendingPayload) {
-      setOverwriteDialog((prev) => ({ ...prev, error: "Enter a new profile name." }));
-      return;
-    }
-
-    setIsSaving(true);
-    setOverwriteDialog((prev) => ({ ...prev, error: "" }));
-    try {
-      try {
-        await getCvProfile(nextId);
-        setOverwriteDialog((prev) => ({
-          ...prev,
-          error: "That profile name already exists. Choose a different one."
-        }));
-        return;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "";
-        if (!message.includes("status 404")) {
-          throw err;
-        }
-      }
-
-      const payload = {
-        ...overwriteDialog.pendingPayload,
-        profile_id: nextId,
-        revision: 0,
-        parent_profile_id: overwriteDialog.pendingTargetProfileId || overwriteDialog.pendingPayload.profile_id || null,
-        lineage_root_profile_id: overwriteDialog.pendingPayload.lineage_root_profile_id || overwriteDialog.pendingTargetProfileId || nextId,
-        lineage_depth: (Number.isFinite(overwriteDialog.pendingPayload.lineage_depth)
-          ? Number(overwriteDialog.pendingPayload.lineage_depth)
-          : 0) + 1,
-        branch_reason: "manual-save-as"
-      };
-      const saved = await saveCvProfile(nextId, payload);
-      setProfileId(saved.profile_id);
-      setRevision(saved.revision);
-      setLoadedProfileId(saved.profile_id);
-      setLoadedRevision(saved.revision);
-      onProfileSaved?.(saved);
-      closeOverwriteDialog();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Save as new profile failed";
-      setOverwriteDialog((prev) => ({ ...prev, error: message }));
     } finally {
       setIsSaving(false);
     }
@@ -3681,9 +3575,9 @@ export default function CvReview({
         topLevelChanges={overwriteDialog.diff?.topLevelChanges || []}
         sectionChanges={overwriteDialog.diff?.sectionChanges || []}
         suggestedProfileId={overwriteDialog.suggestedProfileId}
-        onSuggestedProfileIdChange={(value) => setOverwriteDialog((prev) => ({ ...prev, suggestedProfileId: value }))}
-        onConfirmOverwrite={handleConfirmOverwrite}
-        onSaveAsNew={handleSaveAsNewFromDialog}
+        onSuggestedProfileIdChange={setSuggestedProfileId}
+        onConfirmOverwrite={() => handleConfirmOverwrite({ onSaved: syncSavedProfileState })}
+        onSaveAsNew={() => handleSaveAsNewFromDialog({ onSaved: syncSavedProfileState })}
         onCancel={closeOverwriteDialog}
         isBusy={isSaving}
         error={overwriteDialog.error}
