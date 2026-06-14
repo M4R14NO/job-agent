@@ -101,6 +101,7 @@ export default function CreateCvView({
                     onThemeColorChange={onThemeColorChange}
                     showProfileImage={applicationContext.show_profile_image !== false}
                     onShowProfileImageChange={onShowProfileImageChange}
+                    hasProfileImage={Boolean(applicationContext.profile_image)}
                     hipsterHeaderAlign={applicationContext.header_text_align || "right"}
                     onHipsterHeaderAlignChange={onHipsterHeaderAlignChange}
                     hipsterHeaderTitleSize={applicationContext.header_title_size || "Huge"}
@@ -211,6 +212,7 @@ export default function CreateCvView({
                   onThemeColorChange={onThemeColorChange}
                   showProfileImage={applicationContext.show_profile_image !== false}
                   onShowProfileImageChange={onShowProfileImageChange}
+                  hasProfileImage={Boolean(applicationContext.profile_image)}
                   hipsterHeaderAlign={applicationContext.header_text_align || "right"}
                   onHipsterHeaderAlignChange={onHipsterHeaderAlignChange}
                   hipsterHeaderTitleSize={applicationContext.header_title_size || "Huge"}

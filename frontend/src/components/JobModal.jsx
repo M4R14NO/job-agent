@@ -192,6 +192,7 @@ export function PdfPreviewCard({
   onThemeColorChange,
   showProfileImage,
   onShowProfileImageChange,
+  hasProfileImage = true,
   hipsterHeaderAlign,
   onHipsterHeaderAlignChange,
   hipsterHeaderTitleSize,
@@ -223,6 +224,9 @@ export function PdfPreviewCard({
       document.getElementById("pdf-download-button")?.focus();
     }
   };
+
+  const canToggleProfileImage = Boolean(hasProfileImage);
+  const isProfileImageVisible = canToggleProfileImage && showProfileImage !== false;
 
   return (
     <div className={`panel-card pdf-preview-card${disabled ? " is-disabled" : ""}`}>
@@ -274,12 +278,13 @@ export function PdfPreviewCard({
                 <button
                   id="pdf-preview-show-image-toggle"
                   type="button"
-                  className={`pdf-preview-switch${showProfileImage !== false ? " is-on" : ""}`}
+                  className={`pdf-preview-switch${isProfileImageVisible ? " is-on" : ""}`}
                   role="switch"
-                  aria-checked={showProfileImage !== false}
+                  aria-checked={isProfileImageVisible}
                   aria-label="Show profile image"
                   onClick={() => onShowProfileImageChange(showProfileImage === false)}
-                  disabled={disabled || isGenerating}
+                  disabled={disabled || isGenerating || !canToggleProfileImage}
+                  title={!canToggleProfileImage ? "Upload a profile image to enable this toggle." : "Show profile image"}
                 >
                   <span className="pdf-preview-switch-thumb" />
                 </button>

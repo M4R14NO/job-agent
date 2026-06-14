@@ -272,6 +272,7 @@ export default function JobSearchCreateCvWorkflowView({
                     onThemeColorChange={handleThemeColorChange}
                     showProfileImage={applicationContext.show_profile_image !== false}
                     onShowProfileImageChange={handleShowProfileImageChange}
+                    hasProfileImage={Boolean(applicationContext.profile_image)}
                     hipsterHeaderAlign={applicationContext.header_text_align || "right"}
                     onHipsterHeaderAlignChange={handleHipsterHeaderAlignChange}
                     hipsterHeaderTitleSize={applicationContext.header_title_size || "Huge"}
@@ -395,6 +396,7 @@ export default function JobSearchCreateCvWorkflowView({
                               onThemeColorChange={handleThemeColorChange}
                               showProfileImage={applicationContext.show_profile_image !== false}
                               onShowProfileImageChange={handleShowProfileImageChange}
+                              hasProfileImage={Boolean(applicationContext.profile_image)}
                               hipsterHeaderAlign={applicationContext.header_text_align || "right"}
                               onHipsterHeaderAlignChange={handleHipsterHeaderAlignChange}
                               hipsterHeaderTitleSize={applicationContext.header_title_size || "Huge"}
