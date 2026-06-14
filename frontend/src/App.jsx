@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   getCvProfile,
-  parseCvCanonical,
   renderCvFromTemplate,
   saveCvProfile,
   uploadCvProfileImage
@@ -9,12 +8,15 @@ import {
 import useCvProfilesController from "./hooks/useCvProfilesController";
 import { useJobDescription } from "./hooks/useJobDescription";
 import useCreateCvWorkflowController from "./hooks/useCreateCvWorkflowController";
+import useCvIdModalController from "./hooks/useCvIdModalController";
+import useLayoutInteractionsController from "./hooks/useLayoutInteractionsController";
+import useProfileWorkflowController from "./hooks/useProfileWorkflowController";
+import useProfileSwitchDialogController from "./hooks/useProfileSwitchDialogController";
 import useSearchWorkflowController from "./hooks/useSearchWorkflowController";
 import useW1CvWorkflowStateMachine from "./hooks/useW1CvWorkflowStateMachine";
 import {
   buildCompanySuffixProfileId,
   buildCvIdSuggestion,
-  buildNextVersionedProfileId,
   sanitizeProfileId
 } from "./workflow/profiles/profileIdUtils";
 import {
@@ -22,13 +24,7 @@ import {
   contextFromProfile,
   contextSnapshotFromProfile
 } from "./workflow/profiles/profileContextUtils";
-import {
-  buildCreateNewEntryPayload,
-  buildRemapProfilePayload,
-  buildSaveAndSwitchPayload,
-  buildUpdateApplicationProfilePayload,
-  resolveRemapLineageFields
-} from "./workflow/profiles/profilePayloadUtils";
+import { buildSaveAndSwitchPayload } from "./workflow/profiles/profilePayloadUtils";
 import SearchFilters from "./components/SearchFilters";
 import CreateCvView from "./components/CreateCvView";
 import JobSearchCreateCvWorkflowView from "./components/workflows/JobSearchCreateCvWorkflowView";
@@ -93,13 +89,7 @@ export default function App() {
   const [wishes, setWishes] = useState("");
   const [selectedJob, setSelectedJob] = useState(null);
   const [cvReview, setCvReview] = useState(null);
-  const [pendingNewbieDraft, setPendingNewbieDraft] = useState(null);
-  const [isCvIdModalOpen, setIsCvIdModalOpen] = useState(false);
-  const [cvIdInput, setCvIdInput] = useState("");
-  const [cvIdError, setCvIdError] = useState("");
-  const [isSavingCvId, setIsSavingCvId] = useState(false);
   const [cvProfiles, setCvProfiles] = useState([]);
-  const [isCreatingProfileEntry, setIsCreatingProfileEntry] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState("");
   const [draftProfileId, setDraftProfileId] = useState("");
   const [isDraftProfileActive, setIsDraftProfileActive] = useState(false);
@@ -109,11 +99,7 @@ export default function App() {
   const [cvEntryError, setCvEntryError] = useState("");
   const [applicationContext, setApplicationContext] = useState(EMPTY_APPLICATION_CONTEXT);
   const [loadedProfileSnapshot, setLoadedProfileSnapshot] = useState(createEmptyLoadedProfileSnapshot);
-  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
-  const [isUpdatingProfileCvText, setIsUpdatingProfileCvText] = useState(false);
-  const [isRemappingProfileCvText, setIsRemappingProfileCvText] = useState(false);
   const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false);
-  const [cvRemapElapsedMs, setCvRemapElapsedMs] = useState(0);
   const [cvDraftState, setCvDraftState] = useState({
     isDirty: false,
     diff: null,
@@ -123,19 +109,9 @@ export default function App() {
     revision: 0,
     updatedAt: null
   });
-  const [profileSwitchDialog, setProfileSwitchDialog] = useState({
-    isOpen: false,
-    pendingProfileId: "",
-    isBusy: false,
-    error: "",
-    diff: null
-  });
   const [activeView, setActiveView] = useState("find");
   const [createMode, setCreateMode] = useState("newbie");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MIN_WIDTH);
-  const [reviewPreviewWidth, setReviewPreviewWidth] = useState(null);
-  const [createReviewPreviewWidth, setCreateReviewPreviewWidth] = useState(null);
   const [cvPreviewPayload, setCvPreviewPayload] = useState(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
@@ -143,25 +119,13 @@ export default function App() {
   const [pendingPreviewSaveCount, setPendingPreviewSaveCount] = useState(0);
   const [cvThemeColors, setCvThemeColors] = useState(DEFAULT_TEMPLATE_THEME_COLORS);
 
-  const cvRemapTimerRef = useRef(null);
   const pdfPreviewRequestVersionRef = useRef(0);
   const clearPreviewTrackingRef = useRef(null);
   const clearCreatePreviewStateRef = useRef(null);
   const cvDraftHashRef = useRef("");
-  const isResizingSidebarRef = useRef(false);
-  const isResizingReviewRef = useRef(false);
-  const isResizingCreateReviewRef = useRef(false);
-  const resizeStartXRef = useRef(0);
-  const resizeStartWidthRef = useRef(SIDEBAR_MIN_WIDTH);
-  const reviewResizeStartXRef = useRef(0);
-  const reviewResizeStartWidthRef = useRef(0);
-  const createReviewResizeStartXRef = useRef(0);
-  const createReviewResizeStartWidthRef = useRef(0);
-  const sidebarWidthRef = useRef(SIDEBAR_MIN_WIDTH);
-  const reviewLayoutRef = useRef(null);
-  const createReviewLayoutRef = useRef(null);
-  const reviewSectionRef = useRef(null);
-  const createReviewSectionRef = useRef(null);
+  const handleNewbieDraftReadyRef = useRef(null);
+  const loadProfileIntoEditorRef = useRef(async () => {});
+  const setAutosaveSnapshotFromPayloadRef = useRef(() => {});
 
   const {
     activeJobAction,
@@ -269,6 +233,29 @@ export default function App() {
   const isW1WizardReviewLayout = Boolean(selectedJob) && (isJobCvCreateStep || isJobCvBranchReviewStep);
   const showW1TailorAction = !isW1CvWorkflow || w1HasCvText;
 
+  const {
+    sidebarWidth,
+    reviewLayoutRef,
+    reviewSectionRef,
+    createReviewLayoutRef,
+    createReviewSectionRef,
+    reviewLayoutStyle,
+    createReviewLayoutStyle,
+    handleSidebarResizeStart,
+    handleReviewResizeStart,
+    handleCreateReviewResizeStart
+  } = useLayoutInteractionsController({
+    isFindView,
+    activeView,
+    isW1WizardReviewLayout,
+    sidebarWidthKey: SIDEBAR_WIDTH_KEY,
+    sidebarMinWidth: SIDEBAR_MIN_WIDTH,
+    sidebarMaxWidth: SIDEBAR_MAX_WIDTH,
+    reviewPreviewMinWidth: REVIEW_PREVIEW_MIN_WIDTH,
+    reviewEditorMinWidth: REVIEW_EDITOR_MIN_WIDTH,
+    reviewSplitterWidth: REVIEW_SPLITTER_WIDTH
+  });
+
   const resolveTemplateThemeColor = (templateId) => {
     const key = templateId || "awesomecv";
     const fallback = DEFAULT_TEMPLATE_THEME_COLORS[key] || DEFAULT_TEMPLATE_THEME_COLORS.awesomecv;
@@ -339,33 +326,6 @@ export default function App() {
     return Math.max(1, Math.ceil(text.length / 4)) + 280;
   })();
 
-  const cvRemapProgress = (() => {
-    if (!isRemappingProfileCvText || !lmTimeout || remapTokenEstimate <= 0) return null;
-    const timeoutMs = Math.max(1, lmTimeout * 1000);
-    const ratio = Math.min(cvRemapElapsedMs / timeoutMs, 1);
-    return {
-      percent: Math.round(ratio * 100),
-      currentTokens: Math.min(remapTokenEstimate, Math.round(remapTokenEstimate * ratio)),
-      totalTokens: remapTokenEstimate,
-      elapsedSeconds: Math.round(cvRemapElapsedMs / 1000),
-      timeoutSeconds: lmTimeout
-    };
-  })();
-
-  useEffect(() => {
-    const stored = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-    if (!stored) return;
-    const parsed = Number(stored);
-    if (Number.isFinite(parsed)) {
-      const clamped = Math.min(Math.max(parsed, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH);
-      setSidebarWidth(clamped);
-    }
-  }, []);
-
-  useEffect(() => {
-    sidebarWidthRef.current = sidebarWidth;
-  }, [sidebarWidth]);
-
   const {
     profilesError,
     profilesLoading,
@@ -410,15 +370,6 @@ export default function App() {
     loadProfiles();
   }, []);
 
-  useEffect(() => {
-    if (isCvIdModalOpen) {
-      document.body.classList.add("modal-open");
-      return () => document.body.classList.remove("modal-open");
-    }
-    document.body.classList.remove("modal-open");
-    return undefined;
-  }, [isCvIdModalOpen]);
-
   const buildApplicationContextDiff = () => buildProfileApplicationContextDiff({
     resumeText,
     applicationContext,
@@ -436,112 +387,6 @@ export default function App() {
       loadProfiles();
     }
   }, [activeView, cvProfiles.length, profilesLoading]);
-
-  useEffect(() => {
-    if (!isRemappingProfileCvText) {
-      setCvRemapElapsedMs(0);
-      if (cvRemapTimerRef.current) {
-        clearInterval(cvRemapTimerRef.current);
-        cvRemapTimerRef.current = null;
-      }
-      return undefined;
-    }
-    const start = Date.now();
-    setCvRemapElapsedMs(0);
-    cvRemapTimerRef.current = setInterval(() => {
-      setCvRemapElapsedMs(Date.now() - start);
-    }, 500);
-    return () => {
-      if (cvRemapTimerRef.current) {
-        clearInterval(cvRemapTimerRef.current);
-        cvRemapTimerRef.current = null;
-      }
-    };
-  }, [isRemappingProfileCvText]);
-
-  useEffect(() => {
-    const stopResizeInteractions = () => {
-      let released = false;
-      if (isResizingSidebarRef.current) {
-        isResizingSidebarRef.current = false;
-        localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidthRef.current));
-        released = true;
-      }
-      if (isResizingReviewRef.current) {
-        isResizingReviewRef.current = false;
-        released = true;
-      }
-      if (isResizingCreateReviewRef.current) {
-        isResizingCreateReviewRef.current = false;
-        released = true;
-      }
-      if (released) {
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      }
-    };
-
-    const handleMouseMove = (event) => {
-      if (event.buttons === 0) {
-        stopResizeInteractions();
-        return;
-      }
-
-      if (isResizingSidebarRef.current) {
-        const delta = event.clientX - resizeStartXRef.current;
-        const nextWidth = Math.min(
-          Math.max(resizeStartWidthRef.current + delta, SIDEBAR_MIN_WIDTH),
-          SIDEBAR_MAX_WIDTH
-        );
-        setSidebarWidth(nextWidth);
-        return;
-      }
-
-      if (isResizingReviewRef.current) {
-        const layoutRect = reviewLayoutRef.current?.getBoundingClientRect();
-        if (!layoutRect) return;
-        const delta = event.clientX - reviewResizeStartXRef.current;
-        const maxPreviewWidth = Math.max(
-          REVIEW_PREVIEW_MIN_WIDTH,
-          layoutRect.width - REVIEW_EDITOR_MIN_WIDTH - REVIEW_SPLITTER_WIDTH
-        );
-        const nextPreviewWidth = Math.min(
-          Math.max(reviewResizeStartWidthRef.current + delta, REVIEW_PREVIEW_MIN_WIDTH),
-          maxPreviewWidth
-        );
-        setReviewPreviewWidth(nextPreviewWidth);
-        return;
-      }
-
-      if (!isResizingCreateReviewRef.current) return;
-      const createLayoutRect = createReviewLayoutRef.current?.getBoundingClientRect();
-      if (!createLayoutRect) return;
-      const createDelta = event.clientX - createReviewResizeStartXRef.current;
-      const createMaxPreviewWidth = Math.max(
-        REVIEW_PREVIEW_MIN_WIDTH,
-        createLayoutRect.width - REVIEW_EDITOR_MIN_WIDTH - REVIEW_SPLITTER_WIDTH
-      );
-      const nextCreatePreviewWidth = Math.min(
-        Math.max(createReviewResizeStartWidthRef.current + createDelta, REVIEW_PREVIEW_MIN_WIDTH),
-        createMaxPreviewWidth
-      );
-      setCreateReviewPreviewWidth(nextCreatePreviewWidth);
-    };
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", stopResizeInteractions);
-    window.addEventListener("pointerup", stopResizeInteractions);
-    window.addEventListener("pointercancel", stopResizeInteractions);
-    window.addEventListener("blur", stopResizeInteractions);
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", stopResizeInteractions);
-      window.removeEventListener("pointerup", stopResizeInteractions);
-      window.removeEventListener("pointercancel", stopResizeInteractions);
-      window.removeEventListener("blur", stopResizeInteractions);
-    };
-  }, []);
-
 
   const handleStartCvReview = ({ canonical, job, templateId, docType, outputLanguage }) => {
     pdfPreviewRequestVersionRef.current += 1;
@@ -691,25 +536,6 @@ export default function App() {
     activateCvBranchReview();
   };
 
-  const openCvIdModal = ({ canonical, templateId, outputLanguage, jobContext }) => {
-    const existingIds = cvProfiles.map((profile) => profile.profile_id);
-    const suggestion = buildCvIdSuggestion({
-      jobTitle: jobContext?.job_title,
-      existingIds
-    });
-    setPendingNewbieDraft({ canonical, templateId, outputLanguage, jobContext });
-    setCvIdInput(suggestion);
-    setCvIdError("");
-    setIsSavingCvId(false);
-    setIsCvIdModalOpen(true);
-  };
-
-  const closeCvIdModal = () => {
-    setIsCvIdModalOpen(false);
-    setCvIdError("");
-    setPendingNewbieDraft(null);
-  };
-
   const buildNewbieDraftPayload = ({ canonical, templateId, outputLanguage, jobContext }, profileId) => {
     const nextTemplateId = templateId || canonical?.template_id || "awesomecv";
     return {
@@ -737,113 +563,6 @@ export default function App() {
     };
   };
 
-  const handleConfirmCvId = async () => {
-    if (!pendingNewbieDraft) return;
-    const normalized = sanitizeProfileId(cvIdInput || "");
-    if (!normalized) {
-      setCvIdError("CV id is required.");
-      return;
-    }
-    const exists = cvProfiles.some((profile) => profile.profile_id === normalized);
-    if (exists) {
-      const suggestion = buildCvIdSuggestion({
-        jobTitle: pendingNewbieDraft.jobContext?.job_title,
-        existingIds: cvProfiles.map((profile) => profile.profile_id)
-      });
-      setCvIdInput(suggestion);
-      setCvIdError(`CV id '${normalized}' already exists. Try '${suggestion}'.`);
-      return;
-    }
-
-    setIsSavingCvId(true);
-    setCvIdError("");
-    try {
-      const payload = buildNewbieDraftPayload(pendingNewbieDraft, normalized);
-      const saved = await saveCvProfile(normalized, payload);
-      upsertCvProfileInList(saved);
-      setSelectedProfileId(saved.profile_id);
-      setNewProfileId(saved.profile_id);
-      setApplicationContext(contextFromProfile(saved));
-      setLoadedProfileSnapshot(contextSnapshotFromProfile(saved));
-      setAutosaveSnapshotFromPayload(payload);
-      setPendingPreviewSaveCount(0);
-      handleNewbieDraftReady({
-        canonical: saved,
-        templateId: saved.template_id || pendingNewbieDraft.templateId,
-        outputLanguage: pendingNewbieDraft.outputLanguage,
-        jobContext: pendingNewbieDraft.jobContext
-      });
-      setPendingNewbieDraft(null);
-      closeCvIdModal();
-    } catch (err) {
-      setCvIdError(err instanceof Error ? err.message : "Failed to save CV id.");
-    } finally {
-      setIsSavingCvId(false);
-    }
-  };
-
-  const handleCreateNewEntry = async ({ profileName } = {}) => {
-    const nextProfileId = sanitizeProfileId(profileName || "");
-    if (!nextProfileId) {
-      throw new Error("Profile name is required.");
-    }
-    const duplicate = cvProfiles.some((profile) => profile.profile_id === nextProfileId);
-    if (duplicate) {
-      throw new Error("Profile name already exists. Please choose another one.");
-    }
-
-    setIsCreatingProfileEntry(true);
-    setCvEntryError("");
-    clearCreatePreviewState();
-    try {
-      const payload = buildCreateNewEntryPayload({
-        nextProfileId,
-        cvTemplateId,
-        canonicalSchemaVersion: CANONICAL_SCHEMA_VERSION,
-        applicationContext,
-        resumeText,
-        normalizeHexColorFn: normalizeHexColor,
-        mergeProfileImageIntoDataFn: mergeProfileImageIntoData
-      });
-      const saved = await saveCvProfile(nextProfileId, payload);
-      upsertCvProfileInList(saved);
-      setSelectedProfileId(saved.profile_id);
-      setIsDraftProfileActive(false);
-      setDraftProfileId("");
-      setNewProfileId(saved.profile_id);
-      setCvTemplateId(saved.template_id || "awesomecv");
-      setApplicationContext(contextFromProfile(saved));
-      setLoadedProfileSnapshot(contextSnapshotFromProfile(saved));
-      setCvEntryError(`Created profile '${saved.profile_id}'.`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to create profile";
-      setCvEntryError(message);
-      throw new Error(message);
-    } finally {
-      setIsCreatingProfileEntry(false);
-    }
-  };
-
-  const handleBeginNewEntry = () => {
-    clearCreatePreviewState();
-    setSelectedProfileId("");
-    setDraftProfileId("");
-    setIsDraftProfileActive(false);
-    setApplicationContext({ ...EMPTY_APPLICATION_CONTEXT });
-    setResumeText("");
-    setLoadedProfileSnapshot({
-      profile_id: "",
-      revision: 0,
-      updated_at: null,
-      raw_resume_text: "",
-      ...EMPTY_APPLICATION_CONTEXT
-    });
-    setCvTemplateId("awesomecv");
-    setCvOutputLanguage("english");
-    setNewProfileId("");
-    setCvEntryError("");
-  };
-
   const upsertCvProfileInList = (profile) => {
     setCvProfiles((prev) => {
       const index = prev.findIndex((item) => item.profile_id === profile.profile_id);
@@ -853,6 +572,35 @@ export default function App() {
       return next;
     });
   };
+
+  handleNewbieDraftReadyRef.current = handleNewbieDraftReady;
+
+  const {
+    isCvIdModalOpen,
+    cvIdInput,
+    cvIdError,
+    isSavingCvId,
+    openCvIdModal,
+    closeCvIdModal,
+    handleCvIdInputChange,
+    handleConfirmCvId
+  } = useCvIdModalController({
+    cvProfiles,
+    saveCvProfile,
+    sanitizeProfileId,
+    buildCvIdSuggestion,
+    buildNewbieDraftPayload,
+    upsertCvProfileInList,
+    setSelectedProfileId,
+    setNewProfileId,
+    setApplicationContext,
+    setLoadedProfileSnapshot,
+    setAutosaveSnapshotFromPayloadRef,
+    setPendingPreviewSaveCount,
+    contextFromProfile,
+    contextSnapshotFromProfile,
+    handleNewbieDraftReadyRef
+  });
 
   const {
     clearPreviewTracking,
@@ -885,354 +633,114 @@ export default function App() {
     setCvDraftState
   });
   clearPreviewTrackingRef.current = clearPreviewTracking;
+  setAutosaveSnapshotFromPayloadRef.current = setAutosaveSnapshotFromPayload;
 
-  const loadProfileIntoEditor = async (profileId) => {
-    if (!profileId) return;
-    pdfPreviewRequestVersionRef.current += 1;
-    setCvEntryError("");
-    setIsLoadingProfile(true);
-    try {
-      const canonical = await getCvProfile(profileId);
-      const nextTemplateId = canonical.template_id || "awesomecv";
-      setIsDraftProfileActive(false);
-      setDraftProfileId("");
-      setSelectedProfileId(canonical.profile_id || profileId);
-      setNewProfileId(canonical.profile_id || profileId);
-      setCvTemplateId(nextTemplateId);
-      setResumeText(canonical.audit?.raw_resume_text || "");
-      setApplicationContext(contextFromProfile(canonical));
-      setLoadedProfileSnapshot(contextSnapshotFromProfile(canonical));
-      upsertCvProfileInList(canonical);
-      handleStartCvEditor({
-        canonical,
-        templateId: nextTemplateId,
-        initialProfileId: canonical.profile_id || profileId
-      });
-    } catch (err) {
-      setCvEntryError(err instanceof Error ? err.message : "Failed to load profile");
-    } finally {
-      setIsLoadingProfile(false);
+  const {
+    profileSwitchDialog,
+    openProfileSwitchDialog,
+    closeProfileSwitchDialog,
+    handleSwitchWithoutSaving,
+    handleSaveAndSwitchProfile
+  } = useProfileSwitchDialogController({
+    selectedProfileId,
+    cvDraftState,
+    resumeText,
+    applicationContext,
+    normalizeHexColor,
+    mergeProfileImageIntoData,
+    getCvProfile,
+    saveCvProfile,
+    buildSaveAndSwitchPayload,
+    contextSnapshotFromProfile,
+    setLoadedProfileSnapshot,
+    upsertCvProfileInList,
+    loadProfileIntoEditor: async (profileId) => {
+      await loadProfileIntoEditorRef.current(profileId);
     }
-  };
+  });
 
-  const handleProfileRowSelect = async (profile) => {
-    if (!profile?.profile_id) return;
-    const nextProfileId = profile.profile_id;
-
-    if (profile.__isDraftEntry) {
-      setIsDraftProfileActive(true);
-      setDraftProfileId(nextProfileId);
-      setSelectedProfileId(nextProfileId);
-      setCvEntryError("");
-      clearCreatePreviewState();
-      return;
+  const {
+    isLoadingProfile,
+    isUpdatingProfileCvText,
+    isRemappingProfileCvText,
+    isCreatingProfileEntry,
+    cvRemapElapsedMs,
+    loadProfileIntoEditor,
+    handleProfileRowSelect,
+    handleUpdateApplicationProfileData,
+    handleRemapProfileCvText,
+    handleCreateNewEntry,
+    handleBeginNewEntry,
+    loadProfileIntoJobCvContext
+  } = useProfileWorkflowController({
+    identifiers: {
+      canonicalSchemaVersion: CANONICAL_SCHEMA_VERSION,
+      emptyApplicationContext: EMPTY_APPLICATION_CONTEXT
+    },
+    profileState: {
+      selectedProfileId,
+      newProfileId,
+      isDraftProfileActive,
+      cvProfiles,
+      cvTemplateId,
+      cvOutputLanguage,
+      resumeText,
+      applicationContext,
+      loadedProfileSnapshot,
+      selectedModel,
+      lmTimeout,
+      activeView,
+      activeJobAction,
+      selectedJob,
+      cvDraftState
+    },
+    profileSetters: {
+      setSelectedProfileId,
+      setNewProfileId,
+      setIsDraftProfileActive,
+      setDraftProfileId,
+      setCvTemplateId,
+      setResumeText,
+      setApplicationContext,
+      setLoadedProfileSnapshot,
+      setCvEntryError,
+      setCvReview,
+      setCvPreviewPayload,
+      setPdfPreviewUrl
+    },
+    helpers: {
+      buildApplicationContextDiff,
+      normalizeHexColor,
+      mergeProfileImageIntoData
+    },
+    actions: {
+      clearCreatePreviewState,
+      upsertCvProfileInList,
+      handleStartCvEditor,
+      preparePreviewForReview,
+      activateCvReviewStep,
+      activateCvBranchReview,
+      openProfileSwitchDialog
+    },
+    refs: {
+      pdfPreviewRequestVersionRef
     }
+  });
 
-    if (nextProfileId === selectedProfileId) {
-      await loadProfileIntoEditor(nextProfileId);
-      return;
-    }
+  loadProfileIntoEditorRef.current = loadProfileIntoEditor;
 
-    const contextDiff = buildApplicationContextDiff();
-    const hasUnsavedChanges = cvDraftState.isDirty || contextDiff.hasChanges;
-
-    if (hasUnsavedChanges) {
-      const contextKeys = new Set([
-        "raw_resume_text",
-        "company",
-        "application_status",
-        "application_date",
-        "job_title",
-        "job_description",
-        "job_url",
-        "profile_image",
-        "theme_color",
-        "show_profile_image"
-      ]);
-      const combinedTopLevelChanges = [
-        ...(cvDraftState.diff?.topLevelChanges || []).filter((change) => !contextKeys.has(change.key)),
-        ...contextDiff.topLevelChanges
-      ];
-      const combinedSectionChanges = cvDraftState.diff?.sectionChanges || [];
-      const combinedTotals = {
-        added: (cvDraftState.diff?.totals?.added || 0),
-        removed: (cvDraftState.diff?.totals?.removed || 0),
-        updated: (cvDraftState.diff?.totals?.updated || 0) + contextDiff.totals.updated
-      };
-      setProfileSwitchDialog({
-        isOpen: true,
-        pendingProfileId: nextProfileId,
-        isBusy: false,
-        error: "",
-        diff: {
-          targetProfileId: cvDraftState.targetProfileId || selectedProfileId,
-          existingRevision: loadedProfileSnapshot.revision || cvDraftState.revision || 0,
-          existingUpdatedAt: loadedProfileSnapshot.updated_at || cvDraftState.updatedAt || null,
-          topLevelChanges: combinedTopLevelChanges,
-          sectionChanges: combinedSectionChanges,
-          totals: combinedTotals
-        }
-      });
-      return;
-    }
-
-    await loadProfileIntoEditor(nextProfileId);
-  };
-
-  const closeProfileSwitchDialog = () => {
-    setProfileSwitchDialog({
-      isOpen: false,
-      pendingProfileId: "",
-      isBusy: false,
-      error: "",
-      diff: null
-    });
-  };
-
-  const handleSwitchWithoutSaving = async () => {
-    if (!profileSwitchDialog.pendingProfileId) return;
-    setProfileSwitchDialog((prev) => ({ ...prev, isBusy: true, error: "" }));
-    await loadProfileIntoEditor(profileSwitchDialog.pendingProfileId);
-    closeProfileSwitchDialog();
-  };
-
-  const handleSaveAndSwitchProfile = async () => {
-    if (!profileSwitchDialog.pendingProfileId) return;
-    const currentProfileId = cvDraftState.targetProfileId || selectedProfileId;
-    if (!currentProfileId) {
-      setProfileSwitchDialog((prev) => ({ ...prev, error: "No selected profile to save." }));
-      return;
-    }
-
-    setProfileSwitchDialog((prev) => ({ ...prev, isBusy: true, error: "" }));
-    try {
-      let existing = null;
-      try {
-        existing = await getCvProfile(currentProfileId);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "";
-        if (!message.includes("status 404")) throw err;
-      }
-
-      if (!existing) {
-        throw new Error("Current profile could not be loaded for saving.");
-      }
-
-      const basePayload = cvDraftState.payload || {
-        schema_version: existing.schema_version,
-        profile_id: currentProfileId,
-        revision: existing.revision,
-        template_id: existing.template_id,
-        data: mergeProfileImageIntoData(existing.data, applicationContext.profile_image),
-        section_order: existing.section_order,
-        sidebar_section_order: existing.sidebar_section_order,
-        main_section_order: existing.main_section_order
-      };
-
-      const payload = buildSaveAndSwitchPayload({
-        existing,
-        basePayload,
-        currentProfileId,
-        applicationContext,
-        resumeText,
-        normalizeHexColorFn: normalizeHexColor,
-        mergeProfileImageIntoDataFn: mergeProfileImageIntoData
-      });
-
-      const saved = await saveCvProfile(payload.profile_id, payload);
-      upsertCvProfileInList(saved);
-      setLoadedProfileSnapshot(contextSnapshotFromProfile(saved));
-      await loadProfileIntoEditor(profileSwitchDialog.pendingProfileId);
-      closeProfileSwitchDialog();
-    } catch (err) {
-      setProfileSwitchDialog((prev) => ({
-        ...prev,
-        error: err instanceof Error ? err.message : "Failed to save draft before switching.",
-        isBusy: false
-      }));
-      return;
-    }
-  };
-
-  const handleUpdateApplicationProfileData = async () => {
-    const hasPersistedSelectedProfile = cvProfiles.some((profile) => profile.profile_id === selectedProfileId);
-    const targetProfileId = hasPersistedSelectedProfile
-      ? selectedProfileId
-      : sanitizeProfileId(newProfileId || "");
-    if (!targetProfileId) {
-      setCvEntryError("Choose a profile ID before saving profile data.");
-      return;
-    }
-    setCvEntryError("");
-    setIsUpdatingProfileCvText(true);
-    try {
-      let existing = null;
-      try {
-        existing = await getCvProfile(targetProfileId);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "";
-        if (!message.includes("status 404")) throw err;
-      }
-
-      const isCreate = !existing;
-      const payload = buildUpdateApplicationProfilePayload({
-        existing,
-        targetProfileId,
-        cvTemplateId,
-        canonicalSchemaVersion: CANONICAL_SCHEMA_VERSION,
-        applicationContext,
-        resumeText,
-        normalizeHexColorFn: normalizeHexColor,
-        mergeProfileImageIntoDataFn: mergeProfileImageIntoData
-      });
-      const saved = await saveCvProfile(targetProfileId, payload);
-      upsertCvProfileInList(saved);
-      setResumeText(saved.audit?.raw_resume_text || "");
-      setApplicationContext(contextFromProfile(saved));
-      setLoadedProfileSnapshot(contextSnapshotFromProfile(saved));
-      setSelectedProfileId(saved.profile_id);
-      setNewProfileId(saved.profile_id);
-      setCvEntryError(isCreate
-        ? `Profile '${saved.profile_id}' saved.`
-        : `Profile '${saved.profile_id}' saved (revision ${saved.revision}).`);
-    } catch (err) {
-      setCvEntryError(err instanceof Error ? err.message : "Failed to update application profile data");
-    } finally {
-      setIsUpdatingProfileCvText(false);
-    }
-  };
-
-  const handleRemapProfileCvText = async ({ targetProfileId, allowOverwrite } = {}) => {
-    if (!selectedProfileId && !isDraftProfileActive) {
-      setCvEntryError("Select a profile or create a new entry before tailoring.");
-      return;
-    }
-    if (!selectedModel) {
-      setCvEntryError("Select a model before remapping.");
-      return;
-    }
-    if (!resumeText.trim()) {
-      setCvEntryError("CV text is required to remap.");
-      return;
-    }
-
-    setCvEntryError("");
-    setIsRemappingProfileCvText(true);
-    try {
-      const hasPersistedSelectedProfile = cvProfiles.some((profile) => profile.profile_id === selectedProfileId);
-      let existing = null;
-      if (hasPersistedSelectedProfile) {
-        existing = await getCvProfile(selectedProfileId);
-      }
-
-      const requestedProfileId = String(targetProfileId || "").trim();
-      const isJobWorkflow = activeView === "find" && activeJobAction === "cv" && Boolean(selectedJob);
-      const fallbackProfileId = hasPersistedSelectedProfile
-        ? (isJobWorkflow
-          ? buildCompanySuffixProfileId({
-            baseId: selectedProfileId,
-            company: selectedJob?.company || applicationContext.company || "company"
-          })
-          : buildNextVersionedProfileId({
-            profileId: selectedProfileId,
-            existingIds: cvProfiles.map((profile) => profile.profile_id)
-          }))
-        : newProfileId.trim();
-      const nextProfileId = sanitizeProfileId(requestedProfileId || fallbackProfileId);
-
-      if (!hasPersistedSelectedProfile && !(requestedProfileId || fallbackProfileId)) {
-        throw new Error("Profile name is required for a new entry.");
-      }
-
-      let existingTarget = null;
-      try {
-        existingTarget = await getCvProfile(nextProfileId);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "";
-        if (!message.includes("status 404")) throw err;
-      }
-
-      if (existingTarget && !allowOverwrite) {
-        throw new Error("Target profile already exists. Choose a different name or confirm overwrite.");
-      }
-
-      const lineageFields = resolveRemapLineageFields({
-        existingTarget,
-        existing,
-        nextProfileId,
-        isJobWorkflow,
-        sanitizeProfileIdFn: sanitizeProfileId
-      });
-
-      const effectiveJobTitle = applicationContext.job_title || existing?.job_title || existing?.audit?.final_template_payload?.job_title || "";
-      const effectiveCompany = applicationContext.company || existing?.company || "";
-      const effectiveJobDescription = applicationContext.job_description || existing?.job_description || "";
-      const effectiveJobUrl = applicationContext.job_url || existing?.job_url || "";
-
-      const parsed = await parseCvCanonical({
-        resume_text: resumeText,
-        model: selectedModel,
-        lm_timeout: lmTimeout,
-        output_language: cvOutputLanguage,
-        job_title: effectiveJobTitle || undefined,
-        company: effectiveCompany || undefined,
-        job_description: effectiveJobDescription || undefined,
-        job_url: effectiveJobUrl || undefined
-      });
-      const payload = buildRemapProfilePayload({
-        parsed,
-        existing,
-        existingTarget,
-        nextProfileId,
-        cvTemplateId,
-        applicationContext,
-        resumeText,
-        effectiveJobTitle,
-        effectiveCompany,
-        effectiveJobDescription,
-        effectiveJobUrl,
-        lineageFields,
-        normalizeHexColorFn: normalizeHexColor,
-        mergeProfileImageIntoDataFn: mergeProfileImageIntoData
-      });
-      const saved = await saveCvProfile(nextProfileId, payload);
-      upsertCvProfileInList(saved);
-      setSelectedProfileId(saved.profile_id);
-      setIsDraftProfileActive(false);
-      setDraftProfileId("");
-      setNewProfileId(saved.profile_id);
-      setCvTemplateId(saved.template_id || "awesomecv");
-      setApplicationContext(contextFromProfile(saved));
-      setLoadedProfileSnapshot(contextSnapshotFromProfile(saved));
-      if (isJobWorkflow && selectedJob) {
-        pdfPreviewRequestVersionRef.current += 1;
-        setCvReview({
-          canonical: saved,
-          job: selectedJob,
-          templateId: saved.template_id || "awesomecv",
-          docType: "resume",
-          outputLanguage: cvOutputLanguage
-        });
-        activateCvReviewStep("branch-review");
-        setCvPreviewPayload(null);
-        setPdfPreviewUrl(null);
-        preparePreviewForReview(saved.template_id || "awesomecv");
-      } else {
-        handleStartCvEditor({
-          canonical: saved,
-          templateId: saved.template_id || "awesomecv",
-          initialProfileId: saved.profile_id
-        });
-      }
-      setCvEntryError(existingTarget
-        ? `Updated '${saved.profile_id}' with a newly tailored profile mapping.`
-        : `Created '${saved.profile_id}' from remapped CV text.`);
-    } catch (err) {
-      setCvEntryError(err instanceof Error ? err.message : "Failed to remap CV text");
-    } finally {
-      setIsRemappingProfileCvText(false);
-    }
-  };
+  const cvRemapProgress = (() => {
+    if (!isRemappingProfileCvText || !lmTimeout || remapTokenEstimate <= 0) return null;
+    const timeoutMs = Math.max(1, lmTimeout * 1000);
+    const ratio = Math.min(cvRemapElapsedMs / timeoutMs, 1);
+    return {
+      percent: Math.round(ratio * 100),
+      currentTokens: Math.min(remapTokenEstimate, Math.round(remapTokenEstimate * ratio)),
+      totalTokens: remapTokenEstimate,
+      elapsedSeconds: Math.round(cvRemapElapsedMs / 1000),
+      timeoutSeconds: lmTimeout
+    };
+  })();
 
   const handleTemplateIdChange = (nextTemplateId) => {
     setCvTemplateId(nextTemplateId);
@@ -1358,90 +866,6 @@ export default function App() {
     setCvDraftState(nextDraftState);
   };
 
-  const loadProfileIntoJobCvContext = async (profileId) => {
-    if (!profileId || !selectedJob) return;
-    setCvEntryError("");
-    setIsLoadingProfile(true);
-    try {
-      const canonical = await getCvProfile(profileId);
-      const nextTemplateId = canonical.template_id || "awesomecv";
-      const nextSuggestedId = buildCompanySuffixProfileId({
-        baseId: canonical.profile_id || profileId,
-        company: selectedJob.company || applicationContext.company || "company"
-      });
-      setSelectedProfileId(canonical.profile_id || profileId);
-      setCvTemplateId(nextTemplateId);
-      setResumeText(canonical.audit?.raw_resume_text || "");
-      setApplicationContext({
-        ...contextFromProfile(canonical),
-        company: selectedJob.company || "",
-        application_status: "",
-        application_date: "",
-        job_title: selectedJob.title || "",
-        job_description: selectedJob.description || "",
-        job_url: selectedJob.job_url || ""
-      });
-      setLoadedProfileSnapshot(contextSnapshotFromProfile(canonical));
-      setNewProfileId(nextSuggestedId);
-      upsertCvProfileInList(canonical);
-      setCvReview({
-        canonical,
-        job: selectedJob,
-        templateId: nextTemplateId,
-        docType: "resume",
-        outputLanguage: cvOutputLanguage
-      });
-      activateCvBranchReview();
-    } catch (err) {
-      setCvEntryError(err instanceof Error ? err.message : "Failed to load profile");
-    } finally {
-      setIsLoadingProfile(false);
-    }
-  };
-
-  const handleSidebarResizeStart = (event) => {
-    if (!isFindView) return;
-    isResizingSidebarRef.current = true;
-    resizeStartXRef.current = event.clientX;
-    resizeStartWidthRef.current = sidebarWidthRef.current;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-  };
-
-  const handleReviewResizeStart = (event) => {
-    if (!isW1WizardReviewLayout || window.matchMedia("(max-width: 960px)").matches) return;
-    const layoutRect = reviewLayoutRef.current?.getBoundingClientRect();
-    if (!layoutRect) return;
-
-    const currentPreviewWidth = reviewSectionRef.current?.getBoundingClientRect().width
-      || reviewPreviewWidth
-      || (layoutRect.width * 0.5);
-
-    isResizingReviewRef.current = true;
-    reviewResizeStartXRef.current = event.clientX;
-    reviewResizeStartWidthRef.current = currentPreviewWidth;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    event.preventDefault();
-  };
-
-  const handleCreateReviewResizeStart = (event) => {
-    if (activeView !== "create" || window.matchMedia("(max-width: 960px)").matches) return;
-    const layoutRect = createReviewLayoutRef.current?.getBoundingClientRect();
-    if (!layoutRect) return;
-
-    const currentPreviewWidth = createReviewSectionRef.current?.getBoundingClientRect().width
-      || createReviewPreviewWidth
-      || (layoutRect.width * 0.5);
-
-    isResizingCreateReviewRef.current = true;
-    createReviewResizeStartXRef.current = event.clientX;
-    createReviewResizeStartWidthRef.current = currentPreviewWidth;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    event.preventDefault();
-  };
-
   useEffect(() => {
     if (!isFindView) setIsSidebarOpen(false);
   }, [isFindView]);
@@ -1453,12 +877,6 @@ export default function App() {
   const showJobCvEntryPanel = activeJobAction === "cv";
   const showJobCoverPanel = activeJobAction === "cover";
   const showActionSwitcher = activeJobAction !== "none";
-  const reviewLayoutStyle = reviewPreviewWidth
-    ? { "--review-preview-width": `${Math.round(reviewPreviewWidth)}px` }
-    : undefined;
-  const createReviewLayoutStyle = createReviewPreviewWidth
-    ? { "--create-review-preview-width": `${Math.round(createReviewPreviewWidth)}px` }
-    : undefined;
   const actionLabel = cvReview
     ? "CV review"
     : (activeJobAction === "cover" ? "Cover letter" : "CV generation");
@@ -1561,10 +979,7 @@ export default function App() {
           inputLabel="CV id"
           inputId="newbieCvId"
           value={cvIdInput}
-          onChange={(value) => {
-            setCvIdInput(value);
-            if (cvIdError) setCvIdError("");
-          }}
+          onChange={handleCvIdInputChange}
           onCancel={closeCvIdModal}
           onConfirm={handleConfirmCvId}
           error={cvIdError}
@@ -1763,10 +1178,7 @@ export default function App() {
         inputLabel="CV id"
         inputId="newbieCvId"
         value={cvIdInput}
-        onChange={(value) => {
-          setCvIdInput(value);
-          if (cvIdError) setCvIdError("");
-        }}
+        onChange={handleCvIdInputChange}
         onCancel={closeCvIdModal}
         onConfirm={handleConfirmCvId}
         error={cvIdError}
