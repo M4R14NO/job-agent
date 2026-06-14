@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fetchModels } from "../api/llm";
 import {
   enrichLinkedInJobs,
   fetchQueryDebug,
@@ -18,35 +19,27 @@ export default function useSearchWorkflowController(options = {}) {
   const {
     resumeText,
     wishes,
-    selectedRerankProfileId,
-    searchTerm,
-    location,
-    searchRadiusKm,
-    resultsWanted,
-    hoursOld,
-    isRemote,
-    selectedModel,
-    lmTimeout,
-    enableRerank,
-    rerankTopN,
-    weightEmbedding,
-    weightKeyword,
     setResumeText,
     setWishes,
-    setSearchTerm,
-    setLocation,
-    setSearchRadiusKm,
-    setResultsWanted,
-    setHoursOld,
-    setIsRemote,
-    setSelectedModel,
-    setLmTimeout,
-    setEnableRerank,
-    setRerankTopN,
-    setWeightEmbedding,
-    setWeightKeyword,
+    loadRerankProfile,
     onLoadCacheApplied
   } = options;
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [location, setLocation] = useState("");
+  const [searchRadiusKm, setSearchRadiusKm] = useState(null);
+  const [resultsWanted, setResultsWanted] = useState(10);
+  const [hoursOld, setHoursOld] = useState(72);
+  const [isRemote, setIsRemote] = useState(false);
+  const [enableRerank, setEnableRerank] = useState(false);
+  const [rerankTopN, setRerankTopN] = useState(null);
+  const [weightEmbedding, setWeightEmbedding] = useState(0.8);
+  const [weightKeyword, setWeightKeyword] = useState(0.2);
+  const [selectedRerankProfileId, setSelectedRerankProfileId] = useState("");
+  const [models, setModels] = useState([]);
+  const [modelError, setModelError] = useState("");
+  const [selectedModel, setSelectedModel] = useState("");
+  const [lmTimeout, setLmTimeout] = useState(120);
 
   const [response, setResponse] = useState(null);
   const [error, setError] = useState("");
@@ -56,6 +49,7 @@ export default function useSearchWorkflowController(options = {}) {
   const [searchElapsedMs, setSearchElapsedMs] = useState(0);
   const [searchPhaseMessage, setSearchPhaseMessage] = useState("");
   const [isReranking, setIsReranking] = useState(false);
+  const [rerankProfileError, setRerankProfileError] = useState("");
 
   const searchTimerRef = useRef(null);
   const searchRequestIdRef = useRef(0);
@@ -71,6 +65,7 @@ export default function useSearchWorkflowController(options = {}) {
         response: nextResponse,
         resumeText,
         wishes,
+        selectedRerankProfileId,
         searchTerm,
         location,
         searchRadiusKm,
@@ -91,6 +86,7 @@ export default function useSearchWorkflowController(options = {}) {
   }, [
     resumeText,
     wishes,
+    selectedRerankProfileId,
     searchTerm,
     location,
     searchRadiusKm,
@@ -215,9 +211,7 @@ export default function useSearchWorkflowController(options = {}) {
       if (!finalData) return;
       persistSearchCache(finalData);
     } catch (err) {
-      if (err?.name === "AbortError") {
-        return;
-      }
+      if (err?.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       if (requestId === searchRequestIdRef.current) {
@@ -258,7 +252,7 @@ export default function useSearchWorkflowController(options = {}) {
     setIsReranking(true);
     setError("");
     setSearchPhaseMessage("Running LLM matching on current results...");
-    setEnableRerank?.(true);
+    setEnableRerank(true);
 
     try {
       const currentQueryDebug = await fetchQueryDebug(
@@ -295,9 +289,7 @@ export default function useSearchWorkflowController(options = {}) {
       setResponse(mergedResponse);
       persistSearchCache(mergedResponse);
     } catch (err) {
-      if (err?.name === "AbortError") {
-        return;
-      }
+      if (err?.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Failed to rerank current results.");
     } finally {
       setIsLoading(false);
@@ -307,7 +299,6 @@ export default function useSearchWorkflowController(options = {}) {
   }, [
     response,
     selectedModel,
-    setEnableRerank,
     resumeText,
     wishes,
     selectedRerankProfileId,
@@ -317,6 +308,52 @@ export default function useSearchWorkflowController(options = {}) {
     weightKeyword,
     persistSearchCache
   ]);
+
+  const handleSelectRerankProfile = useCallback(async (profileId) => {
+    const nextId = profileId || "";
+    setSelectedRerankProfileId(nextId);
+    if (!nextId) {
+      setRerankProfileError("");
+      return;
+    }
+
+    if (typeof loadRerankProfile !== "function") {
+      setRerankProfileError("");
+      return;
+    }
+
+    setRerankProfileError("");
+    try {
+      const profile = await loadRerankProfile(nextId);
+      const rawResume = profile?.audit?.raw_resume_text || "";
+      setResumeText?.(rawResume);
+      if (!rawResume.trim()) {
+        setRerankProfileError("Selected CV profile has no saved CV text.");
+      }
+    } catch (err) {
+      setRerankProfileError(err instanceof Error ? err.message : "Failed to load selected CV profile.");
+    }
+  }, [loadRerankProfile, setResumeText]);
+
+  const syncRerankProfileSelection = useCallback((profiles = []) => {
+    const list = Array.isArray(profiles) ? profiles : [];
+    setSelectedRerankProfileId((prev) => {
+      if (prev && list.some((profile) => profile.profile_id === prev)) {
+        return prev;
+      }
+      return list[0]?.profile_id || "";
+    });
+    if (!list.length) {
+      setRerankProfileError("");
+    }
+  }, []);
+
+  const handleProfilesDeletedFromSearch = useCallback((deletedProfileIds = []) => {
+    const ids = Array.isArray(deletedProfileIds) ? deletedProfileIds : [];
+    if (!ids.length) return;
+    setSelectedRerankProfileId((prev) => (ids.includes(prev) ? "" : prev));
+    setRerankProfileError("");
+  }, []);
 
   const handleLoadCache = useCallback(() => {
     if (!cachedResponse) return;
@@ -360,6 +397,28 @@ export default function useSearchWorkflowController(options = {}) {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+    fetchModels()
+      .then((available) => {
+        if (!isMounted) return;
+        const list = Array.isArray(available) ? available : [];
+        setModels(list);
+        setModelError("");
+        setSelectedModel((prev) => {
+          if (prev && list.includes(prev)) return prev;
+          return list[0] || "";
+        });
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setModelError(err instanceof Error ? err.message : "Failed to load models");
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const cached = sessionStorage.getItem(CACHE_KEY);
     if (!cached) return;
     try {
@@ -370,58 +429,79 @@ export default function useSearchWorkflowController(options = {}) {
       setCachedAt(parsed.savedAt || "");
       if (typeof parsed.resumeText === "string") setResumeText?.(parsed.resumeText);
       if (typeof parsed.wishes === "string") setWishes?.(parsed.wishes);
-      if (typeof parsed.searchTerm === "string") setSearchTerm?.(parsed.searchTerm);
-      if (typeof parsed.location === "string") setLocation?.(parsed.location);
+      if (typeof parsed.searchTerm === "string") setSearchTerm(parsed.searchTerm);
+      if (typeof parsed.location === "string") setLocation(parsed.location);
       if (typeof parsed.searchRadiusKm === "number" || parsed.searchRadiusKm === null) {
-        setSearchRadiusKm?.(parsed.searchRadiusKm ?? null);
+        setSearchRadiusKm(parsed.searchRadiusKm ?? null);
       }
-      if (typeof parsed.resultsWanted === "number") setResultsWanted?.(parsed.resultsWanted);
-      if (typeof parsed.hoursOld === "number") setHoursOld?.(parsed.hoursOld);
-      if (typeof parsed.isRemote === "boolean") setIsRemote?.(parsed.isRemote);
+      if (typeof parsed.resultsWanted === "number") setResultsWanted(parsed.resultsWanted);
+      if (typeof parsed.hoursOld === "number") setHoursOld(parsed.hoursOld);
+      if (typeof parsed.isRemote === "boolean") setIsRemote(parsed.isRemote);
       if (typeof parsed.selectedModel === "string") setSelectedModel?.(parsed.selectedModel);
       if (typeof parsed.lmTimeout === "number") setLmTimeout?.(parsed.lmTimeout);
-      if (typeof parsed.enableRerank === "boolean") setEnableRerank?.(parsed.enableRerank);
+      if (typeof parsed.enableRerank === "boolean") setEnableRerank(parsed.enableRerank);
       if (typeof parsed.rerankTopN === "number" || parsed.rerankTopN === null) {
-        setRerankTopN?.(parsed.rerankTopN ?? null);
+        setRerankTopN(parsed.rerankTopN ?? null);
       }
-      if (typeof parsed.weightEmbedding === "number") setWeightEmbedding?.(parsed.weightEmbedding);
-      if (typeof parsed.weightKeyword === "number") setWeightKeyword?.(parsed.weightKeyword);
+      if (typeof parsed.weightEmbedding === "number") setWeightEmbedding(parsed.weightEmbedding);
+      if (typeof parsed.weightKeyword === "number") setWeightKeyword(parsed.weightKeyword);
+      if (typeof parsed.selectedRerankProfileId === "string") {
+        setSelectedRerankProfileId(parsed.selectedRerankProfileId);
+      }
     } catch (_err) {
       sessionStorage.removeItem(CACHE_KEY);
     }
-  }, [
-    setResumeText,
-    setWishes,
-    setSearchTerm,
-    setLocation,
-    setSearchRadiusKm,
-    setResultsWanted,
-    setHoursOld,
-    setIsRemote,
-    setSelectedModel,
-    setLmTimeout,
-    setEnableRerank,
-    setRerankTopN,
-    setWeightEmbedding,
-    setWeightKeyword
-  ]);
+  }, [setResumeText, setWishes]);
 
   return useMemo(() => ({
+    models,
+    modelError,
+    selectedModel,
+    setSelectedModel,
+    lmTimeout,
+    setLmTimeout,
     response,
-    setResponse,
     error,
-    setError,
     isLoading,
     searchElapsedMs,
     searchPhaseMessage,
     isReranking,
     cachedResponse,
     cachedAt,
+    rerankProfileError,
+    searchTerm,
+    setSearchTerm,
+    location,
+    setLocation,
+    searchRadiusKm,
+    setSearchRadiusKm,
+    resultsWanted,
+    setResultsWanted,
+    hoursOld,
+    setHoursOld,
+    isRemote,
+    setIsRemote,
+    enableRerank,
+    setEnableRerank,
+    rerankTopN,
+    setRerankTopN,
+    weightEmbedding,
+    setWeightEmbedding,
+    weightKeyword,
+    setWeightKeyword,
+    selectedRerankProfileId,
+    syncRerankProfileSelection,
+    handleProfilesDeletedFromSearch,
     handleSearch,
     handleRunRerank,
+    handleSelectRerankProfile,
     handleLoadCache,
     handleClearCache
   }), [
+    models,
+    modelError,
+    selectedModel,
+    lmTimeout,
     response,
     error,
     isLoading,
@@ -430,8 +510,23 @@ export default function useSearchWorkflowController(options = {}) {
     isReranking,
     cachedResponse,
     cachedAt,
+    rerankProfileError,
+    searchTerm,
+    location,
+    searchRadiusKm,
+    resultsWanted,
+    hoursOld,
+    isRemote,
+    enableRerank,
+    rerankTopN,
+    weightEmbedding,
+    weightKeyword,
+    selectedRerankProfileId,
+    syncRerankProfileSelection,
+    handleProfilesDeletedFromSearch,
     handleSearch,
     handleRunRerank,
+    handleSelectRerankProfile,
     handleLoadCache,
     handleClearCache
   ]);

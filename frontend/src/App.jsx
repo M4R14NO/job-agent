@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   deleteCvProfile,
-  fetchModels,
   getCvProfile,
   listCvProfiles,
   parseCvCanonical,
@@ -75,12 +74,6 @@ const createEmptyLoadedProfileSnapshot = () => ({
 export default function App() {
   const [resumeText, setResumeText] = useState("");
   const [wishes, setWishes] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [location, setLocation] = useState("");
-  const [searchRadiusKm, setSearchRadiusKm] = useState(null);
-  const [resultsWanted, setResultsWanted] = useState(10);
-  const [hoursOld, setHoursOld] = useState(72);
-  const [isRemote, setIsRemote] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [cvReview, setCvReview] = useState(null);
   const [isJobReviewReadOnly, setIsJobReviewReadOnly] = useState(false);
@@ -89,14 +82,6 @@ export default function App() {
   const [cvIdInput, setCvIdInput] = useState("");
   const [cvIdError, setCvIdError] = useState("");
   const [isSavingCvId, setIsSavingCvId] = useState(false);
-  const [models, setModels] = useState([]);
-  const [modelError, setModelError] = useState("");
-  const [selectedModel, setSelectedModel] = useState("");
-  const [lmTimeout, setLmTimeout] = useState(120);
-  const [enableRerank, setEnableRerank] = useState(false);
-  const [rerankTopN, setRerankTopN] = useState(null);
-  const [weightEmbedding, setWeightEmbedding] = useState(0.8);
-  const [weightKeyword, setWeightKeyword] = useState(0.2);
   const [cvProfiles, setCvProfiles] = useState([]);
   const [profilesError, setProfilesError] = useState("");
   const [profilesLoading, setProfilesLoading] = useState(false);
@@ -141,8 +126,6 @@ export default function App() {
   const [activeView, setActiveView] = useState("find");
   const [createMode, setCreateMode] = useState("newbie");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [selectedRerankProfileId, setSelectedRerankProfileId] = useState("");
-  const [rerankProfileError, setRerankProfileError] = useState("");
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MIN_WIDTH);
   const [reviewPreviewWidth, setReviewPreviewWidth] = useState(null);
   const [createReviewPreviewWidth, setCreateReviewPreviewWidth] = useState(null);
@@ -239,6 +222,12 @@ export default function App() {
   });
 
   const {
+    models,
+    modelError,
+    selectedModel,
+    setSelectedModel,
+    lmTimeout,
+    setLmTimeout,
     response,
     error,
     isLoading,
@@ -247,40 +236,44 @@ export default function App() {
     isReranking,
     cachedResponse,
     cachedAt,
+    rerankProfileError,
+    searchTerm,
+    setSearchTerm,
+    location,
+    setLocation,
+    searchRadiusKm,
+    setSearchRadiusKm,
+    resultsWanted,
+    setResultsWanted,
+    hoursOld,
+    setHoursOld,
+    isRemote,
+    setIsRemote,
+    enableRerank,
+    setEnableRerank,
+    rerankTopN,
+    setRerankTopN,
+    weightEmbedding,
+    setWeightEmbedding,
+    weightKeyword,
+    setWeightKeyword,
+    selectedRerankProfileId,
+    syncRerankProfileSelection,
+    handleProfilesDeletedFromSearch,
     handleSearch,
     handleRunRerank,
+    handleSelectRerankProfile,
     handleLoadCache,
     handleClearCache
   } = useSearchWorkflowController({
     resumeText,
     wishes,
-    selectedRerankProfileId,
-    searchTerm,
-    location,
-    searchRadiusKm,
-    resultsWanted,
-    hoursOld,
-    isRemote,
-    selectedModel,
-    lmTimeout,
-    enableRerank,
-    rerankTopN,
-    weightEmbedding,
-    weightKeyword,
     setResumeText,
     setWishes,
-    setSearchTerm,
-    setLocation,
-    setSearchRadiusKm,
-    setResultsWanted,
-    setHoursOld,
-    setIsRemote,
-    setSelectedModel,
-    setLmTimeout,
-    setEnableRerank,
-    setRerankTopN,
-    setWeightEmbedding,
-    setWeightKeyword,
+    loadRerankProfile: async (profileId) => {
+      const listedProfile = cvProfiles.find((profile) => profile.profile_id === profileId);
+      return listedProfile || getCvProfile(profileId);
+    },
     onLoadCacheApplied: () => setSelectedJob(null)
   });
 
@@ -391,25 +384,6 @@ export default function App() {
   })();
 
   useEffect(() => {
-    let isMounted = true;
-    fetchModels()
-      .then((available) => {
-        if (!isMounted) return;
-        setModels(available);
-        if (!selectedModel && available.length > 0) {
-          setSelectedModel(available[0]);
-        }
-      })
-      .catch((err) => {
-        if (!isMounted) return;
-        setModelError(err instanceof Error ? err.message : "Failed to load models");
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
     const stored = localStorage.getItem(SIDEBAR_WIDTH_KEY);
     if (!stored) return;
     const parsed = Number(stored);
@@ -430,12 +404,7 @@ export default function App() {
       const data = await listCvProfiles();
       const profiles = Array.isArray(data?.profiles) ? data.profiles : [];
       setCvProfiles(profiles);
-      setSelectedRerankProfileId((prev) => {
-        if (prev && profiles.some((profile) => profile.profile_id === prev)) {
-          return prev;
-        }
-        return profiles[0]?.profile_id || "";
-      });
+      syncRerankProfileSelection(profiles);
       if (!profiles.length) {
         setSelectedProfileId("");
       } else if (preferredProfileId && profiles.some((profile) => profile.profile_id === preferredProfileId)) {
@@ -530,9 +499,7 @@ export default function App() {
         });
       }
 
-      if (deletedIds.includes(selectedRerankProfileId)) {
-        setSelectedRerankProfileId("");
-      }
+      handleProfilesDeletedFromSearch(deletedIds);
 
       await loadProfiles();
 
@@ -918,27 +885,6 @@ export default function App() {
     };
   }, []);
 
-
-  const handleSelectRerankProfile = async (profileId) => {
-    setSelectedRerankProfileId(profileId || "");
-    if (!profileId) {
-      setRerankProfileError("");
-      return;
-    }
-
-    setRerankProfileError("");
-    try {
-      const listedProfile = cvProfiles.find((profile) => profile.profile_id === profileId);
-      const profile = listedProfile || await getCvProfile(profileId);
-      const rawResume = profile?.audit?.raw_resume_text || "";
-      setResumeText(rawResume);
-      if (!rawResume.trim()) {
-        setRerankProfileError("Selected CV profile has no saved CV text.");
-      }
-    } catch (err) {
-      setRerankProfileError(err instanceof Error ? err.message : "Failed to load selected CV profile.");
-    }
-  };
 
   const handleStartCvReview = ({ canonical, job, templateId, docType, outputLanguage }) => {
     pdfPreviewRequestVersionRef.current += 1;
