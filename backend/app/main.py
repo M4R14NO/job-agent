@@ -1,7 +1,7 @@
 import math
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from datetime import datetime
@@ -42,6 +42,7 @@ from .services.cv_service import (
     render_cv_pdf_from_payload,
     rewrite_canonical_with_prompt,
     save_profile_image,
+    _resolve_profile_image_path,
 )
 from .services.cv_storage import RevisionMismatchError, get_profile_store
 from .services.lmstudio_client import chat_completion, list_models, safe_request
@@ -51,7 +52,15 @@ from .services.ranking_service import build_query_debug, score_jobs
 
 app = FastAPI(title="Job Agent API")
 
-ALLOWED_OUTPUT_LANGUAGES = {"english", "german"}
+ALLOWED_OUTPUT_LANGUAGES = {"english", "german", "french", "chinese", "spanish"}
+
+OUTPUT_LANGUAGE_PROMPTS = {
+    "english": "English",
+    "german": "German",
+    "french": "French",
+    "chinese": "Chinese",
+    "spanish": "Spanish",
+}
 
 app.add_middleware(
     CORSMiddleware,
@@ -79,9 +88,10 @@ def _normalize_output_language(value: str | None) -> str | None:
         return None
     normalized = value.strip().lower()
     if normalized not in ALLOWED_OUTPUT_LANGUAGES:
+        allowed = ", ".join(f"'{item}'" for item in sorted(ALLOWED_OUTPUT_LANGUAGES))
         raise HTTPException(
             status_code=400,
-            detail="Unsupported output_language. Use 'english' or 'german'.",
+            detail=f"Unsupported output_language. Use one of: {allowed}.",
         )
     return normalized
 
@@ -340,11 +350,8 @@ def generate_cover_letter(payload: CoverLetterRequest) -> CoverLetterResponse:
         raise HTTPException(status_code=400, detail="Model is required")
 
     output_language = _normalize_output_language(payload.output_language)
-    language_line = ""
-    if output_language == "english":
-        language_line = " Write the letter in English."
-    elif output_language == "german":
-        language_line = " Write the letter in German."
+    language_name = OUTPUT_LANGUAGE_PROMPTS.get(output_language or "")
+    language_line = f" Write the letter in {language_name}." if language_name else ""
 
     system = (
         "You are a hiring assistant who writes concise, tailored cover letters. "
@@ -466,6 +473,14 @@ async def upload_cv_profile_image(file: UploadFile = File(...)) -> dict:
     return {"image_path": image_path}
 
 
+@app.get("/cv/profile-image/{image_name}")
+def get_cv_profile_image(image_name: str) -> FileResponse:
+    resolved = _resolve_profile_image_path(image_name)
+    if resolved is None:
+        raise HTTPException(status_code=404, detail="Profile image not found")
+    return FileResponse(resolved)
+
+
 @app.get("/cv/profiles", response_model=CvProfileListResponse)
 def list_cv_profiles() -> CvProfileListResponse:
     store = get_profile_store()
@@ -550,6 +565,7 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
                 lm_timeout=payload.lm_timeout,
                 output_language=output_language,
                 section_order=payload.section_order,
+                section_labels=payload.section_labels,
                 sidebar_section_order=payload.sidebar_section_order,
                 main_section_order=payload.main_section_order,
             )
@@ -558,7 +574,9 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
                 raise HTTPException(status_code=400, detail="Template does not support deterministic mapping")
             template_payload, _ = deterministic_mapper(
                 canonical=payload.data,
+                output_language=output_language,
                 section_order=payload.section_order,
+                section_labels=payload.section_labels,
                 sidebar_section_order=payload.sidebar_section_order,
                 main_section_order=payload.main_section_order,
             )
@@ -603,6 +621,7 @@ def preview_cv_mapping(payload: CvPreviewRequest) -> CvPreviewResponse:
                 lm_timeout=payload.lm_timeout,
                 output_language=output_language,
                 section_order=payload.section_order,
+                section_labels=payload.section_labels,
                 sidebar_section_order=payload.sidebar_section_order,
                 main_section_order=payload.main_section_order,
             )
@@ -611,7 +630,9 @@ def preview_cv_mapping(payload: CvPreviewRequest) -> CvPreviewResponse:
                 raise HTTPException(status_code=400, detail="Template does not support deterministic mapping")
             template_payload, _ = deterministic_mapper(
                 canonical=payload.data,
+                output_language=output_language,
                 section_order=payload.section_order,
+                section_labels=payload.section_labels,
                 sidebar_section_order=payload.sidebar_section_order,
                 main_section_order=payload.main_section_order,
             )

@@ -17,8 +17,10 @@ import {
   deleteCvProfile,
   previewCvMapping,
   rewriteCvCanonical,
-  saveCvProfile
+  saveCvProfile,
+  API_BASE_URL
 } from "../api/llm";
+import { useCvReviewOverwriteDialogController } from "../hooks/useCvDialogsController";
 import OverwriteConfirmationModal from "./OverwriteConfirmationModal";
 
 const DEFAULT_SECTION_ORDER = [
@@ -35,6 +37,7 @@ const DEFAULT_SECTION_ORDER = [
 ];
 
 const SECTION_LABELS = {
+  contact: "Contact",
   summary: "Summary",
   skills: "Skills",
   languages: "Languages",
@@ -47,7 +50,25 @@ const SECTION_LABELS = {
   education: "Education"
 };
 
-const SECTION_KEYS = Object.keys(SECTION_LABELS);
+const sanitizeSectionLabelMap = (labels) => {
+  if (!labels || typeof labels !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(labels).filter(
+      ([key, value]) => typeof key === "string" && typeof value === "string" && value.trim()
+    )
+  );
+};
+
+const normalizeStoredSectionLabelOverrides = (labels) => {
+  const sanitized = sanitizeSectionLabelMap(labels);
+  const keys = Object.keys(sanitized);
+  const isLegacyEnglishDefaults =
+    keys.length > 0 &&
+    keys.every((key) => typeof SECTION_LABELS[key] === "string" && sanitized[key] === SECTION_LABELS[key]);
+  return isLegacyEnglishDefaults ? {} : sanitized;
+};
+
+const SECTION_KEYS = [...DEFAULT_SECTION_ORDER];
 
 const HIPSTER_SIDEBAR_SECTION_KEYS = ["summary", "languages", "interests"];
 const HIPSTER_MAIN_SECTION_KEYS = ["experience", "education", "skills", "volunteer", "writing", "certificates", "honors"];
@@ -779,7 +800,10 @@ export default function CvReview({
   tailorProgress = null,
   readOnly = false,
   showTailorAction = true,
-  onEditProfile
+  onEditProfile,
+  onUploadProfileImage,
+  onClearProfileImage,
+  isUploadingProfileImage = false
 }) {
   const isHipsterTemplate = templateId === "hipstercv";
   const resolvedInitialProfileId = canonical?.profile_id || initialProfileId || "default";
@@ -796,8 +820,14 @@ export default function CvReview({
       mainSectionOrder: canonical?.main_section_order
     })
   );
-  const [sectionLabels, setSectionLabels] = useState(() => ({ ...SECTION_LABELS }));
-  const sectionLabelsRef = useRef({ ...SECTION_LABELS });
+  const [sectionLabelOverrides, setSectionLabelOverrides] = useState(() =>
+    normalizeStoredSectionLabelOverrides(canonical?.section_labels)
+  );
+  const sectionLabelOverridesRef = useRef(normalizeStoredSectionLabelOverrides(canonical?.section_labels));
+  const [sectionLabels, setSectionLabels] = useState(() => ({
+    ...SECTION_LABELS,
+    ...sectionLabelOverridesRef.current,
+  }));
   const [editingLabelKey, setEditingLabelKey] = useState(null);
   const [rewriteOpen, setRewriteOpen] = useState(false);
   const [saveProfileOpen, setSaveProfileOpen] = useState(false);
@@ -817,6 +847,8 @@ export default function CvReview({
   const [dragOverItem, setDragOverItem] = useState(null); // { namespace, index }
   const [openPreviewEditors, setOpenPreviewEditors] = useState({});
   const [hipsterPreviewTab, setHipsterPreviewTab] = useState("sidebar");
+  const [showProfileImageUploader, setShowProfileImageUploader] = useState(false);
+  const [profileImagePreviewError, setProfileImagePreviewError] = useState(false);
   const [expandedSections, setExpandedSections] = useState(() => ({
     basics: true,
     summary: false,
@@ -830,15 +862,6 @@ export default function CvReview({
     writing: false,
     education: false
   }));
-  const [overwriteDialog, setOverwriteDialog] = useState({
-    isOpen: false,
-    diff: null,
-    suggestedProfileId: "",
-    pendingPayload: null,
-    pendingTargetProfileId: "",
-    pendingTargetRevision: 0,
-    error: ""
-  });
   const previewDebounceRef = useRef(null);
   const previousTemplateIdRef = useRef(templateId);
   const forceImmediatePreviewRef = useRef(true);
@@ -899,7 +922,7 @@ export default function CvReview({
     show_profile_image: applicationContext?.show_profile_image !== false,
     data: formData,
     section_order: currentSectionOrder,
-    section_labels: sectionLabels,
+    section_labels: sectionLabelOverrides,
     sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
     main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined
   };
@@ -926,6 +949,28 @@ export default function CvReview({
 
   const hasProfileIdChange = draftProfileId !== (canonical?.profile_id || "default");
   const hasUnsavedDraftChanges = hasProfileIdChange || draftDiff.hasChanges;
+
+  const syncSavedProfileState = (saved) => {
+    setProfileId(saved.profile_id);
+    setRevision(saved.revision);
+    setLoadedProfileId(saved.profile_id);
+    setLoadedRevision(saved.revision);
+  };
+
+  const {
+    overwriteDialog,
+    setSuggestedProfileId,
+    resolveSaveConflict,
+    closeOverwriteDialog,
+    handleConfirmOverwrite,
+    handleSaveAsNewFromDialog
+  } = useCvReviewOverwriteDialogController({
+    readOnly,
+    setIsSaving,
+    onProfileSaved,
+    buildOverwriteDiff,
+    nextProfileSuggestion
+  });
 
   const scheduleNextPreview = ({ immediate = false } = {}) => {
     if (immediate) {
@@ -967,9 +1012,10 @@ export default function CvReview({
     setIsRewriting(false);
     setOpenPreviewEditors({});
     setHipsterPreviewTab("sidebar");
-    const nextSectionLabels = canonical?.section_labels ? { ...SECTION_LABELS, ...canonical.section_labels } : { ...SECTION_LABELS };
-    sectionLabelsRef.current = nextSectionLabels;
-    setSectionLabels(nextSectionLabels);
+    const nextSectionLabelOverrides = normalizeStoredSectionLabelOverrides(canonical?.section_labels);
+    sectionLabelOverridesRef.current = nextSectionLabelOverrides;
+    setSectionLabelOverrides(nextSectionLabelOverrides);
+    setSectionLabels({ ...SECTION_LABELS, ...nextSectionLabelOverrides });
     setEditingLabelKey(null);
     setHiddenPersonalFields(new Set());
     hiddenPersonalFieldValuesRef.current = {};
@@ -983,6 +1029,13 @@ export default function CvReview({
       setHipsterPreviewTab("sidebar");
     }
   }, [isHipsterTemplate]);
+
+  useEffect(() => {
+    setProfileImagePreviewError(false);
+    if (!applicationContext?.profile_image) {
+      setShowProfileImageUploader(false);
+    }
+  }, [applicationContext?.profile_image]);
 
   useEffect(() => {
     const sourceProfileId = canonical?.profile_id || initialProfileId || "default";
@@ -1313,12 +1366,20 @@ export default function CvReview({
 
   const updateSectionLabel = (key, value) => {
     cancelScheduledPreview();
-      setSectionLabels((prev) => {
-        const next = { ...prev, [key]: value };
-        sectionLabelsRef.current = next;
-        return next;
-      });
-    setPreviewPayload((prev) => prev ? { ...prev, section_labels: { ...(prev.section_labels || {}), [key]: value } } : prev);
+    const nextValue = value.trim() ? value : (SECTION_LABELS[key] || value);
+    setSectionLabels((prev) => ({ ...prev, [key]: nextValue }));
+    setSectionLabelOverrides((prev) => {
+      const next = { ...prev };
+      const normalized = value.trim();
+      if (!normalized || normalized === SECTION_LABELS[key]) {
+        delete next[key];
+      } else {
+        next[key] = normalized;
+      }
+      sectionLabelOverridesRef.current = next;
+      return next;
+    });
+    setPreviewPayload((prev) => prev ? { ...prev, section_labels: { ...(prev.section_labels || {}), [key]: nextValue } } : prev);
   };
 
   // Updates a canonical formData field AND the corresponding preview payload field simultaneously.
@@ -1455,7 +1516,6 @@ export default function CvReview({
   const handleSave = async () => {
     if (readOnly) return;
     setError("");
-    setOverwriteDialog((prev) => ({ ...prev, error: "" }));
     const targetProfileId = profileId.trim();
     if (!targetProfileId) {
       setError("Profile ID is required.");
@@ -1484,142 +1544,23 @@ export default function CvReview({
       section_order: currentSectionOrder,
       sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
       main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined,
-      section_labels: sectionLabels
+      section_labels: sectionLabelOverridesRef.current
     };
 
     setIsSaving(true);
     try {
-      let existingTarget = null;
-      let targetRevision = 0;
-      try {
-        existingTarget = await getCvProfile(targetProfileId);
-        targetRevision = existingTarget?.revision ?? 0;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "";
-        if (!message.includes("status 404")) {
-          throw err;
-        }
-      }
-
-      if (existingTarget) {
-        const diff = buildOverwriteDiff({
-          existingProfile: existingTarget,
-          pendingPayload: payload,
-          targetProfileId
-        });
-
-        if (diff.hasChanges) {
-          setOverwriteDialog({
-            isOpen: true,
-            diff,
-            suggestedProfileId: nextProfileSuggestion(targetProfileId),
-            pendingPayload: payload,
-            pendingTargetProfileId: targetProfileId,
-            pendingTargetRevision: targetRevision,
-            error: ""
-          });
-          return;
-        }
-      }
+      const { blockedByDialog, targetRevision } = await resolveSaveConflict({
+        targetProfileId,
+        payload
+      });
+      if (blockedByDialog) return;
 
       payload.revision = targetRevision;
       const saved = await saveCvProfile(targetProfileId, payload);
-      setProfileId(saved.profile_id);
-      setRevision(saved.revision);
-      setLoadedProfileId(saved.profile_id);
-      setLoadedRevision(saved.revision);
+      syncSavedProfileState(saved);
       onProfileSaved?.(saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const closeOverwriteDialog = () => {
-    setOverwriteDialog({
-      isOpen: false,
-      diff: null,
-      suggestedProfileId: "",
-      pendingPayload: null,
-      pendingTargetProfileId: "",
-      pendingTargetRevision: 0,
-      error: ""
-    });
-  };
-
-  const handleConfirmOverwrite = async () => {
-    if (readOnly) return;
-    if (!overwriteDialog.pendingPayload || !overwriteDialog.pendingTargetProfileId) return;
-    setOverwriteDialog((prev) => ({ ...prev, error: "" }));
-    setIsSaving(true);
-    try {
-      const payload = {
-        ...overwriteDialog.pendingPayload,
-        revision: overwriteDialog.pendingTargetRevision,
-        profile_id: overwriteDialog.pendingTargetProfileId
-      };
-      const saved = await saveCvProfile(overwriteDialog.pendingTargetProfileId, payload);
-      setProfileId(saved.profile_id);
-      setRevision(saved.revision);
-      setLoadedProfileId(saved.profile_id);
-      setLoadedRevision(saved.revision);
-      onProfileSaved?.(saved);
-      closeOverwriteDialog();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Overwrite failed";
-      setOverwriteDialog((prev) => ({ ...prev, error: message }));
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleSaveAsNewFromDialog = async () => {
-    if (readOnly) return;
-    const nextId = overwriteDialog.suggestedProfileId.trim();
-    if (!nextId || !overwriteDialog.pendingPayload) {
-      setOverwriteDialog((prev) => ({ ...prev, error: "Enter a new profile name." }));
-      return;
-    }
-
-    setIsSaving(true);
-    setOverwriteDialog((prev) => ({ ...prev, error: "" }));
-    try {
-      try {
-        await getCvProfile(nextId);
-        setOverwriteDialog((prev) => ({
-          ...prev,
-          error: "That profile name already exists. Choose a different one."
-        }));
-        return;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "";
-        if (!message.includes("status 404")) {
-          throw err;
-        }
-      }
-
-      const payload = {
-        ...overwriteDialog.pendingPayload,
-        profile_id: nextId,
-        revision: 0,
-        parent_profile_id: overwriteDialog.pendingTargetProfileId || overwriteDialog.pendingPayload.profile_id || null,
-        lineage_root_profile_id: overwriteDialog.pendingPayload.lineage_root_profile_id || overwriteDialog.pendingTargetProfileId || nextId,
-        lineage_depth: (Number.isFinite(overwriteDialog.pendingPayload.lineage_depth)
-          ? Number(overwriteDialog.pendingPayload.lineage_depth)
-          : 0) + 1,
-        branch_reason: "manual-save-as"
-      };
-      const saved = await saveCvProfile(nextId, payload);
-      setProfileId(saved.profile_id);
-      setRevision(saved.revision);
-      setLoadedProfileId(saved.profile_id);
-      setLoadedRevision(saved.revision);
-      onProfileSaved?.(saved);
-      closeOverwriteDialog();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Save as new profile failed";
-      setOverwriteDialog((prev) => ({ ...prev, error: message }));
     } finally {
       setIsSaving(false);
     }
@@ -1654,11 +1595,16 @@ export default function CvReview({
         lm_timeout: lmTimeout,
         output_language: outputLanguage,
         section_order: currentSectionOrder,
+        section_labels: sectionLabelOverridesRef.current,
         sidebar_section_order: isHipsterTemplate ? hipsterSectionOrders.sidebar : undefined,
         main_section_order: isHipsterTemplate ? hipsterSectionOrders.main : undefined,
         mapping_mode: "deterministic"
       });
-      setPreviewPayload(result.payload ? { ...result.payload, section_labels: sectionLabelsRef.current } : null);
+      const nextSectionLabels = result.payload?.section_labels
+        ? { ...SECTION_LABELS, ...result.payload.section_labels }
+        : { ...SECTION_LABELS, ...sectionLabelOverridesRef.current };
+      setSectionLabels(nextSectionLabels);
+      setPreviewPayload(result.payload ? { ...result.payload, section_labels: nextSectionLabels } : null);
       setPreviewHash(nextHash);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Preview failed");
@@ -2569,6 +2515,22 @@ export default function CvReview({
     );
   };
 
+  const handleProfileImageChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    await onUploadProfileImage?.(file);
+    setShowProfileImageUploader(false);
+  };
+
+  const profileImageSrc = useMemo(() => {
+    const value = applicationContext?.profile_image;
+    if (!value) return "";
+    if (/^https?:\/\//i.test(value)) return value;
+    if (value.startsWith("/")) return `${API_BASE_URL}${value}`;
+    return `${API_BASE_URL}/cv/profile-image/${encodeURIComponent(value)}`;
+  }, [applicationContext?.profile_image]);
+
   const renderBasics = () =>
     renderCollapsibleSection({
       key: "basics",
@@ -2576,6 +2538,57 @@ export default function CvReview({
       helper: "Edit the details shown in the CV header. Use the eye icon to hide optional fields.",
       content: (
         <div className="personal-fields-grid">
+          {(templateId === "awesomecv" || templateId === "hipstercv")
+            && typeof onUploadProfileImage === "function" && (
+            <div className="personal-field-row is-full-width">
+              <label className="label">Profile image</label>
+              <div className="profile-image-row">
+                {applicationContext?.profile_image && !profileImagePreviewError ? (
+                  <img
+                    className="profile-image-thumb"
+                    src={profileImageSrc}
+                    alt="Profile image preview"
+                    onError={() => setProfileImagePreviewError(true)}
+                  />
+                ) : null}
+                {applicationContext?.profile_image ? (
+                  <div className="profile-image-actions">
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setShowProfileImageUploader(true)}
+                    >
+                      Change
+                    </button>
+                    {typeof onClearProfileImage === "function" ? (
+                      <button
+                        type="button"
+                        className="ghost"
+                        onClick={onClearProfileImage}
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              {(!applicationContext?.profile_image || showProfileImageUploader) ? (
+                <div className="profile-image-uploader">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleProfileImageChange}
+                    disabled={isUploadingProfileImage}
+                  />
+                </div>
+              ) : null}
+              <p className="helper">
+                {applicationContext?.profile_image
+                  ? `Current image: ${applicationContext.profile_image}`
+                  : "No image selected yet."}
+              </p>
+            </div>
+          )}
           {renderPersonalField({ label: "First name", previewKey: "first_name", canonicalField: "first_name" })}
           {renderPersonalField({ label: "Last name", previewKey: "last_name", canonicalField: "last_name" })}
           {renderPersonalField({ label: "Headline / Position", previewKey: "position", canonicalField: "headline" })}
@@ -3282,6 +3295,53 @@ export default function CvReview({
     );
   };
 
+  const renderHipsterContactLabelCard = () => {
+    const key = "contact";
+    const contactValues = [
+      previewPayload?.email,
+      previewPayload?.mobile,
+      previewPayload?.linkedin,
+      previewPayload?.github,
+      previewPayload?.homepage,
+    ].filter(Boolean);
+
+    return (
+      <div key="preview-sidebar-contact" className="preview-card">
+        <div className="preview-card-header">
+          <div className="preview-card-title">
+            {editingLabelKey === key ? (
+              <input
+                className="section-label-input"
+                value={sectionLabels[key] ?? SECTION_LABELS[key]}
+                autoFocus
+                onChange={(e) => updateSectionLabel(key, e.target.value)}
+                onBlur={() => setEditingLabelKey(null)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setEditingLabelKey(null); }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="section-label-btn"
+                title="Click to rename section"
+                onClick={() => setEditingLabelKey(key)}
+              >
+                {sectionLabels[key] ?? SECTION_LABELS[key]}
+                <Pencil size={12} className="section-label-edit-icon" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+        </div>
+        {contactValues.length ? (
+          <div className="preview-item">
+            {contactValues.map((value, idx) => <p key={`contact-${idx}`}>{value}</p>)}
+          </div>
+        ) : (
+          <p className="helper">No contact fields set.</p>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className={`panel-card cv-editor${readOnly ? " is-readonly" : ""}`}>
       <div className="panel-header">
@@ -3424,6 +3484,7 @@ export default function CvReview({
                       <h4 className="preview-column-title">
                         {hipsterPreviewTab === "sidebar" ? "Sidebar" : "Main content"}
                       </h4>
+                      {hipsterPreviewTab === "sidebar" ? renderHipsterContactLabelCard() : null}
                       {(hipsterPreviewTab === "sidebar" ? hipsterSectionOrders.sidebar : hipsterSectionOrders.main)
                         .map((key) => renderPreviewCard(key, hipsterPreviewTab))}
                       {hiddenSectionKeysForCurrentView.map((key) => renderPreviewCard(key, hipsterPreviewTab))}
@@ -3514,9 +3575,9 @@ export default function CvReview({
         topLevelChanges={overwriteDialog.diff?.topLevelChanges || []}
         sectionChanges={overwriteDialog.diff?.sectionChanges || []}
         suggestedProfileId={overwriteDialog.suggestedProfileId}
-        onSuggestedProfileIdChange={(value) => setOverwriteDialog((prev) => ({ ...prev, suggestedProfileId: value }))}
-        onConfirmOverwrite={handleConfirmOverwrite}
-        onSaveAsNew={handleSaveAsNewFromDialog}
+        onSuggestedProfileIdChange={setSuggestedProfileId}
+        onConfirmOverwrite={() => handleConfirmOverwrite({ onSaved: syncSavedProfileState })}
+        onSaveAsNew={() => handleSaveAsNewFromDialog({ onSaved: syncSavedProfileState })}
         onCancel={closeOverwriteDialog}
         isBusy={isSaving}
         error={overwriteDialog.error}

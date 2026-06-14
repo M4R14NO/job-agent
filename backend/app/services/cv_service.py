@@ -49,6 +49,14 @@ DEFAULT_TMP_DIR = _default_tmp_dir()
 DEBUG_TEX = os.getenv("CV_DEBUG_TEX", "0") == "1"
 DEBUG_TEX_DIR = os.getenv("CV_DEBUG_TEX_DIR", str(Path(DEFAULT_TMP_DIR) / "debug"))
 CANONICAL_SCHEMA_VERSION = "v1"
+
+OUTPUT_LANGUAGE_PROMPTS = {
+    "english": "English",
+    "german": "German",
+    "french": "French",
+    "chinese": "Chinese",
+    "spanish": "Spanish",
+}
 DEFAULT_LM_TIMEOUT = float(os.getenv("LMSTUDIO_TIMEOUT", "240"))
 logger = logging.getLogger(__name__)
 TEMPLATE_ROOT_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -139,11 +147,12 @@ def _build_canonical_prompt(
     job_description: str | None = None,
     job_url: str | None = None,
 ) -> str:
-    language_line = ""
-    if output_language == "english":
-        language_line = "Write all free-text fields in English. Translate if needed. "
-    elif output_language == "german":
-        language_line = "Write all free-text fields in German. Translate if needed. "
+    language_name = OUTPUT_LANGUAGE_PROMPTS.get(output_language or "")
+    language_line = (
+        f"Write all free-text fields in {language_name}. Translate if needed. "
+        if language_name
+        else ""
+    )
     job_context = ""
     if job_title or company or job_description or job_url:
         job_context = (
@@ -402,11 +411,12 @@ def rewrite_canonical_with_prompt(
     job_description: str | None = None,
     job_url: str | None = None,
 ) -> CvCanonicalData:
-    language_line = ""
-    if output_language == "english":
-        language_line = "Write all free-text fields in English. Translate if needed. "
-    elif output_language == "german":
-        language_line = "Write all free-text fields in German. Translate if needed. "
+    language_name = OUTPUT_LANGUAGE_PROMPTS.get(output_language or "")
+    language_line = (
+        f"Write all free-text fields in {language_name}. Translate if needed. "
+        if language_name
+        else ""
+    )
 
     job_context = ""
     if job_title or company or job_description or job_url:
@@ -512,7 +522,10 @@ def generate_cv_pdf(
             output_language=output_language,
         )
     else:
-        template_payload, _ = deterministic_mapper(canonical=canonical)
+        template_payload, _ = deterministic_mapper(
+            canonical=canonical,
+            output_language=output_language,
+        )
 
     data = template_payload.model_dump()
     if not data.get("summary"):

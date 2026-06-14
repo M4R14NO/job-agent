@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronRight, Download, PencilLine, Plus, Search, RotateCcw, Sparkles, Tag, Trash2, Upload } from "lucide-react";
 import { Progress, Spinner } from "@chakra-ui/react";
+import CvIdModal from "./CvIdModal";
+import { CV_OUTPUT_LANGUAGES } from "../constants/outputLanguages";
 
 const EXAMPLE_CV_TEXT = `PROFILE
 Name: Alex Rivers
@@ -163,7 +165,6 @@ export default function CvEntry({
   isLoadingProfile,
   isUpdatingProfileCvText,
   isRemappingProfileCvText,
-  isUploadingProfileImage,
   isProfileBulkActionBusy = false,
   remapProgress,
   cvEntryError,
@@ -173,7 +174,6 @@ export default function CvEntry({
   onCvOutputLanguageChange,
   applicationContext,
   onApplicationContextChange,
-  onUploadProfileImage,
   resumeText,
   onResumeTextChange,
   newProfileId,
@@ -209,7 +209,6 @@ export default function CvEntry({
   const [newEntryDialogMode, setNewEntryDialogMode] = useState("create-and-save");
   const [newEntryProfileName, setNewEntryProfileName] = useState("");
   const [newEntryError, setNewEntryError] = useState("");
-  const [profileImageError, setProfileImageError] = useState("");
   const [profileBrowserOpen, setProfileBrowserOpen] = useState(!profileTableCollapsedByDefault);
   const [applicationContextOpen, setApplicationContextOpen] = useState(!applicationContextDefaultCollapsed);
   const [entryCollapsed, setEntryCollapsed] = useState(defaultCollapsed);
@@ -500,17 +499,38 @@ export default function CvEntry({
     setNewEntryDialogOpen(true);
   };
 
+  const buildVersionedIdSuggestion = (rawId) => {
+    const base = String(rawId || "").trim();
+    if (!base) return "v2";
+    const normalizedBase = base.replace(/-v\d+$/i, "");
+    let version = 2;
+    let candidate = `${normalizedBase}-v${version}`;
+    const existing = new Set(cvProfiles.map((profile) => String(profile.profile_id || "").toLowerCase()));
+    while (existing.has(candidate.toLowerCase())) {
+      version += 1;
+      candidate = `${normalizedBase}-v${version}`;
+    }
+    return candidate;
+  };
+
   const handleConfirmCreateEntry = async () => {
     const requestedName = newEntryProfileName.trim();
     if (!requestedName) {
-      setNewEntryError("Profile name is required.");
+      setNewEntryError("CV id is required.");
       return;
     }
 
     if (newEntryDialogMode === "assign-id") {
       const normalizedName = String(requestedName || "").trim();
       if (!normalizedName) {
-        setNewEntryError("Profile name is required.");
+        setNewEntryError("CV id is required.");
+        return;
+      }
+      const exists = cvProfiles.some((profile) => profile.profile_id === normalizedName);
+      if (exists) {
+        const suggestion = buildVersionedIdSuggestion(normalizedName);
+        setNewEntryProfileName(suggestion);
+        setNewEntryError(`CV id '${normalizedName}' already exists. Try '${suggestion}'.`);
         return;
       }
       onSelectedProfileIdChange("");
@@ -565,17 +585,6 @@ export default function CvEntry({
     setRemapDialogOpen(false);
   };
 
-  const handleProfileImageChange = async (event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setProfileImageError("");
-    try {
-      await onUploadProfileImage?.(file);
-    } catch (err) {
-      setProfileImageError(err instanceof Error ? err.message : "Failed to upload profile image");
-    }
-  };
 
   const toggleSort = (nextSortBy) => {
     if (sortBy === nextSortBy) {
@@ -1433,8 +1442,9 @@ export default function CvEntry({
                   value={cvOutputLanguage}
                   onChange={(e) => onCvOutputLanguageChange(e.target.value)}
                 >
-                  <option value="english">English</option>
-                  <option value="german">German</option>
+                  {CV_OUTPUT_LANGUAGES.map((language) => (
+                    <option key={language.value} value={language.value}>{language.label}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -1486,36 +1496,6 @@ export default function CvEntry({
             </div>
 
             <div className="field-grid">
-                {cvTemplateId === "hipstercv" || cvTemplateId === "awesomecv" ? (
-                  <div>
-                    <label htmlFor="ctxProfileImage" className="label">
-                      {cvTemplateId === "hipstercv" ? "Profile image (top bar)" : "Profile image"}
-                    </label>
-                    <input
-                      id="ctxProfileImage"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      onChange={handleProfileImageChange}
-                      disabled={isUploadingProfileImage}
-                    />
-                    <p className="helper" style={{ marginTop: 6 }}>
-                      {applicationContext.profile_image
-                        ? `Current image: ${applicationContext.profile_image}`
-                        : "No image selected yet."}
-                    </p>
-                    {applicationContext.profile_image ? (
-                      <button
-                        type="button"
-                        className="ghost"
-                        style={{ marginTop: 6 }}
-                        onClick={() => onApplicationContextChange((prev) => ({ ...prev, profile_image: "" }))}
-                      >
-                        Remove profile image
-                      </button>
-                    ) : null}
-                    {profileImageError ? <p className="error">{profileImageError}</p> : null}
-                  </div>
-                ) : null}
               <div style={{ gridColumn: "1 / -1" }}>
                 <label htmlFor="ctxJobUrl" className="label">Job URL</label>
                 <input
@@ -1792,51 +1772,27 @@ export default function CvEntry({
         </div>
       )}
 
-      {newEntryDialogOpen && (
-        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="new-entry-title">
-          <div className="modal-backdrop" onClick={() => setNewEntryDialogOpen(false)} />
-          <div className="modal-card">
-            <div className="modal-header">
-              <h2 id="new-entry-title">
-                {newEntryDialogMode === "assign-id" ? "Choose profile ID" : "Create new CV Profile"}
-              </h2>
-            </div>
-            <p className="helper">
-              {newEntryDialogMode === "assign-id"
-                ? "Choose the profile ID for this working copy. Nothing is saved yet."
-                : "Choose a profile name to create and save a new entry immediately."}
-            </p>
-            <div>
-              <label htmlFor="newEntryProfileName" className="label">Profile name</label>
-              <input
-                id="newEntryProfileName"
-                type="text"
-                value={newEntryProfileName}
-                onChange={(e) => {
-                  setNewEntryProfileName(e.target.value);
-                  if (newEntryError) setNewEntryError("");
-                }}
-              />
-            </div>
-            {newEntryError ? <p className="error">{newEntryError}</p> : null}
-            <div className="inline-actions">
-              <button type="button" className="secondary" onClick={() => setNewEntryDialogOpen(false)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="secondary cv-action-remap"
-                onClick={handleConfirmCreateEntry}
-                disabled={isCreatingProfileEntry || !newEntryProfileName.trim()}
-              >
-                {newEntryDialogMode === "assign-id"
-                  ? "Use this profile ID"
-                  : (isCreatingProfileEntry ? "Creating..." : "Create and save profile")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CvIdModal
+        isOpen={newEntryDialogOpen}
+        title={newEntryDialogMode === "assign-id" ? "Choose CV id" : "Create new CV"}
+        helperText={newEntryDialogMode === "assign-id"
+          ? "Choose the CV id for this working copy. Nothing is saved yet."
+          : "Choose a CV id to create and save a new entry immediately."}
+        inputLabel="CV id"
+        inputId="newEntryProfileName"
+        value={newEntryProfileName}
+        onChange={(value) => {
+          setNewEntryProfileName(value);
+          if (newEntryError) setNewEntryError("");
+        }}
+        onCancel={() => setNewEntryDialogOpen(false)}
+        onConfirm={handleConfirmCreateEntry}
+        error={newEntryError}
+        isBusy={isCreatingProfileEntry}
+        confirmLabel={newEntryDialogMode === "assign-id"
+          ? "Use this CV id"
+          : (isCreatingProfileEntry ? "Creating..." : "Create and save")}
+      />
     </div>
   );
 }

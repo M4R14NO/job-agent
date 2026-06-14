@@ -2,6 +2,7 @@ import { Spinner } from "@chakra-ui/react";
 import { ChevronDown, ChevronRight, Download, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { generateCoverLetter, parseCvCanonical } from "../api/llm";
+import { CV_OUTPUT_LANGUAGES } from "../constants/outputLanguages";
 
 const RERANK_REASON_EXPLANATIONS = {
   rag: "Strong alignment with retrieval-augmented generation experience and related tooling.",
@@ -191,6 +192,7 @@ export function PdfPreviewCard({
   onThemeColorChange,
   showProfileImage,
   onShowProfileImageChange,
+  hasProfileImage = true,
   hipsterHeaderAlign,
   onHipsterHeaderAlignChange,
   hipsterHeaderTitleSize,
@@ -200,7 +202,8 @@ export function PdfPreviewCard({
   onUpdate,
   onDownload,
   disabled = false,
-  disabledReason = ""
+  disabledReason = "",
+  unsyncedSaveCount = 0
 }) {
   const previewSrc = (() => {
     if (!pdfUrl) return "";
@@ -221,6 +224,9 @@ export function PdfPreviewCard({
       document.getElementById("pdf-download-button")?.focus();
     }
   };
+
+  const canToggleProfileImage = Boolean(hasProfileImage);
+  const isProfileImageVisible = canToggleProfileImage && showProfileImage !== false;
 
   return (
     <div className={`panel-card pdf-preview-card${disabled ? " is-disabled" : ""}`}>
@@ -272,12 +278,13 @@ export function PdfPreviewCard({
                 <button
                   id="pdf-preview-show-image-toggle"
                   type="button"
-                  className={`pdf-preview-switch${showProfileImage !== false ? " is-on" : ""}`}
+                  className={`pdf-preview-switch${isProfileImageVisible ? " is-on" : ""}`}
                   role="switch"
-                  aria-checked={showProfileImage !== false}
+                  aria-checked={isProfileImageVisible}
                   aria-label="Show profile image"
                   onClick={() => onShowProfileImageChange(showProfileImage === false)}
-                  disabled={disabled || isGenerating}
+                  disabled={disabled || isGenerating || !canToggleProfileImage}
+                  title={!canToggleProfileImage ? "Upload a profile image to enable this toggle." : "Show profile image"}
                 >
                   <span className="pdf-preview-switch-thumb" />
                 </button>
@@ -286,7 +293,7 @@ export function PdfPreviewCard({
             <button
               id="pdf-update-preview-button"
               type="button"
-              className="secondary btn-sm pdf-icon-only-button"
+              className="secondary btn-sm pdf-icon-only-button pdf-update-button"
               onClick={onUpdate}
               disabled={disabled || isGenerating}
               onKeyDown={handleUpdateKeyDown}
@@ -294,6 +301,9 @@ export function PdfPreviewCard({
               title={isGenerating ? "Rendering preview" : "Render preview"}
             >
               <RefreshCw size={14} />
+              {unsyncedSaveCount > 0 ? (
+                <span className="pdf-update-badge" aria-hidden="true">{unsyncedSaveCount}</span>
+              ) : null}
             </button>
             <button
               id="pdf-download-button"
@@ -492,8 +502,9 @@ export function JobActionsCard({
                   value={coverOutputLanguage}
                   onChange={(e) => setCoverOutputLanguage(e.target.value)}
                 >
-                  <option value="english">English</option>
-                  <option value="german">German</option>
+                  {CV_OUTPUT_LANGUAGES.map((language) => (
+                    <option key={language.value} value={language.value}>{language.label}</option>
+                  ))}
                 </select>
               </div>
               <button
@@ -553,8 +564,9 @@ export function JobActionsCard({
                     value={outputLanguage}
                     onChange={(e) => setOutputLanguage(e.target.value)}
                   >
-                    <option value="english">English</option>
-                    <option value="german">German</option>
+                    {CV_OUTPUT_LANGUAGES.map((language) => (
+                      <option key={language.value} value={language.value}>{language.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>

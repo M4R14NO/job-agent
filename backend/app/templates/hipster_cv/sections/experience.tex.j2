@@ -11,8 +11,11 @@
 {\bfseries\normalsize ((( entry.title | default('') | latex_escape ))) }
 ((* if entry.title and entry.organization *)) -- ((* endif *))
 ((* if entry.organization *))\textit{((( entry.organization | latex_escape )))}((* endif *))\\[0pt]
-{\scshape\small ((( entry.organization | default('') | latex_escape )))
-((* if entry.location *))\;\textbar\;((( entry.location | latex_escape )))((* endif *))}
+{\scshape\small
+((* if not (entry.title and entry.organization) and entry.organization *))((( entry.organization | latex_escape )))((* endif *))
+((* if entry.location *))
+((* if not (entry.title and entry.organization) and entry.organization *))\;\textbar\;((* endif *))((( entry.location | latex_escape )))
+((* endif *))}
 ((* if entry.details and entry.details | length > 0 *))\\[-6pt]
 {\color{black!75}\small\vspace{-0.35em}
 \begin{itemize}[leftmargin=1.2em, itemsep=0.16em, topsep=0em, partopsep=0em, parsep=0em]

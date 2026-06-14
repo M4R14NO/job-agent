@@ -1,5 +1,7 @@
 const BASE_URL = "http://localhost:8000";
 
+export const API_BASE_URL = BASE_URL;
+
 export async function fetchModels() {
   const response = await fetch(`${BASE_URL}/models`);
   if (!response.ok) {

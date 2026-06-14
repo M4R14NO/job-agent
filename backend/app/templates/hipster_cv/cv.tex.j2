@@ -7,10 +7,31 @@
 \documentclass[pastel]{hipstercv}
 \usepackage[utf8]{inputenc}
 \usepackage[default]{raleway}
+\usepackage{fontspec}
 \usepackage[left=1cm,right=1cm,bottom=1cm,top=0cm,a4paper]{geometry}
 \usepackage[english]{babel}
 \usepackage{enumitem}
 \usepackage{eso-pic}
+\IfFileExists{xeCJK.sty}{
+\usepackage{xeCJK}
+\newcommand{\hipstersetcjkfont}[1]{
+	\setCJKmainfont{#1}
+	\setCJKsansfont{#1}
+}
+\IfFontExistsTF{Noto Sans CJK SC}{\hipstersetcjkfont{Noto Sans CJK SC}}{
+	\IfFontExistsTF{Source Han Sans SC}{\hipstersetcjkfont{Source Han Sans SC}}{
+		\IfFontExistsTF{PingFang SC}{\hipstersetcjkfont{PingFang SC}}{
+			\IfFontExistsTF{Hiragino Sans GB}{\hipstersetcjkfont{Hiragino Sans GB}}{
+				\IfFontExistsTF{Microsoft YaHei}{\hipstersetcjkfont{Microsoft YaHei}}{
+					\IfFontExistsTF{SimHei}{\hipstersetcjkfont{SimHei}}{
+						\IfFontExistsTF{WenQuanYi Zen Hei}{\hipstersetcjkfont{WenQuanYi Zen Hei}}{}
+					}
+				}
+			}
+		}
+	}
+}
+}{}
 
 \newlength{\rightcolwidth}
 \newlength{\leftcolwidth}
@@ -152,7 +173,8 @@
 \vspace{0.2em}
 
 ((* if email or mobile or homepage or github or linkedin *))
-\hspace{-0.7cm}\bgUpper{backBlue}{white}{Contact}\\
+((* set _contact_label = (section_labels or {}).get('contact', 'Contact') *))
+\hspace{-0.7cm}\bgUpper{backBlue}{white}{((( _contact_label | latex_escape )))}\\
 \hspace{\hipstersidebarcontentoffset}\begin{minipage}[t]{\hipstersidebarcontentwidth}
 {\footnotesize\begin{tabular}{@{}>{\raggedright\arraybackslash\hspace{0pt}}p{0.09\linewidth}@{\hspace{0.2em}}>{\raggedright\arraybackslash\hspace{0pt}}p{0.86\linewidth}@{}}
 ((* if email *))
@@ -186,8 +208,12 @@
 ((* if sections.languages *))((* include "sections/languages.tex.j2" *))((* endif *))
 ((* if sections.interests *))((* include "sections/interests.tex.j2" *))((* endif *))
 ((* endif *))
+% Strengths/Hobbies rendering intentionally disabled.
+% Keep section templates in the repository for optional future re-enable.
+((* if false *))
 ((* if strengths and strengths | length > 0 *))((* include "sections/strengths.tex.j2" *))((* endif *))
 ((* if hobbies and hobbies | length > 0 *))((* include "sections/hobbies.tex.j2" *))((* endif *))
+((* endif *))
 \vspace*{\fill}\null
 }
 
