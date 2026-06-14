@@ -9,13 +9,15 @@
 - Shared step wizard: `frontend/src/components/cvNewbie/CvDraftWizard.jsx`.
 - Shared step UI shell: `frontend/src/components/cvNewbie/CvNewbieFlow.jsx`.
 - W1 orchestration view: `frontend/src/components/workflows/JobSearchCreateCvWorkflowView.jsx`.
-- App-level state machine: `frontend/src/App.jsx` (`jobCvEntryStep`, `activeJobAction`, review/nav routing).
+- App composition/wiring entry point: `frontend/src/App.jsx`.
 - Shared preview/autosave controller: `frontend/src/hooks/useCreateCvWorkflowController.js`.
+- Detailed domain ownership map: `docs/frontend-workflow-ownership-map.md`.
 
 ## W1 CV State-Machine Contract
 Canonical states are: choice, create, branch, branch-review, review.
 Transition rules must be centralized in the workflow module. 
 No duplicate ad-hoc state transitions in UI components.
+Primary owner is `useW1CvWorkflowStateMachine` and invariants are defined in `w1CvWorkflowContract`.
 ### Required invariants:
 branch-review opens the shared wizard at step 5 (review).
 entering branch-review never auto-runs adaptation.
@@ -32,6 +34,9 @@ Pending preview badge increments only after successful autosave.
 ### Guardrails
 Do not bind workflow behavior to file location (for example only in App).
 Implement behavior in shared domain modules and consume through explicit APIs.
+
+## Refactor Navigation Guide
+- Use `docs/frontend-workflow-ownership-map.md` as the canonical module ownership and debug-entry reference.
 
 ## Validation Before Finishing
 - Frontend: `cd frontend && npm run build`.

@@ -4,6 +4,14 @@ Date: 2026-05-27
 Status: Finalized for implementation in a follow-up chat
 Scope: Frontend workflow and UX behavior for W1 (Find Job -> Job Detail -> Generate CV)
 
+## Current Code Ownership (2026-06-14)
+
+- W1 transition/state ownership: `frontend/src/hooks/useW1CvWorkflowStateMachine.js`
+- W1 canonical transition contract/invariants: `frontend/src/workflow/contracts/w1CvWorkflowContract.js`
+- W1 orchestration view: `frontend/src/components/workflows/JobSearchCreateCvWorkflowView.jsx`
+- Composition/wiring entry point: `frontend/src/App.jsx`
+- Cross-domain ownership map: `docs/frontend-workflow-ownership-map.md`
+
 ## 1. Goal
 
 Unify W1 behavior with safe profile handling and clear user intent:

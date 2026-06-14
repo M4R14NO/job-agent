@@ -34,7 +34,7 @@ Notes:
   - `useCreateCvWorkflowController` for preview/autosave orchestration.
 
 ## W1 Job-Detail CV Workflow
-- Explicit state machine in `App.jsx`:
+- Explicit state machine in `frontend/src/hooks/useW1CvWorkflowStateMachine.js` with contract in `frontend/src/workflow/contracts/w1CvWorkflowContract.js`:
   - `choice` -> choose create or branch
   - `create` -> shared step wizard from step 1
   - `branch` -> select source profile
@@ -58,6 +58,9 @@ Notes:
 ## Manage Profiles (Power User Entry)
 Purpose: maintain saved CVs outside the guided newbie-only path.
 
+Code ownership reference:
+- `docs/frontend-workflow-ownership-map.md` is the canonical module ownership map.
+
 Core actions:
 - Browse/search/select profile rows.
 - Create new profile entry.
@@ -74,9 +77,12 @@ Core actions:
 ## Implementation Rules for Architecture Changes
 - When editing flow behavior, update both:
   - Shared wizard path (standalone Create CV).
-  - W1 job-detail path in `JobSearchCreateCvWorkflowView` + `App.jsx` state transitions.
+  - W1 job-detail path in `JobSearchCreateCvWorkflowView` + `useW1CvWorkflowStateMachine` transitions.
 - Prefer extending shared flow components/hooks over adding parallel one-off logic.
 - If a UX contract changes, update docs under `docs/**` in the same change set.
+
+For exact domain ownership boundaries, use:
+- `docs/frontend-workflow-ownership-map.md`
 
 ## Related Files
 - `frontend/src/App.jsx`
@@ -84,3 +90,4 @@ Core actions:
 - `frontend/src/components/cvNewbie/CvDraftWizard.jsx`
 - `frontend/src/components/cvNewbie/CvNewbieFlow.jsx`
 - `frontend/src/hooks/useCreateCvWorkflowController.js`
+- `docs/frontend-workflow-ownership-map.md`
