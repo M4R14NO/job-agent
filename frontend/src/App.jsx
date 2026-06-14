@@ -1,11 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  enrichLinkedInJobs,
-  fetchQueryDebug,
-  rerankJobs,
-  searchJobs
-} from "./api/search";
-import {
   deleteCvProfile,
   fetchModels,
   getCvProfile,
@@ -17,6 +11,8 @@ import {
 } from "./api/llm";
 import { useJobDescription } from "./hooks/useJobDescription";
 import useCreateCvWorkflowController from "./hooks/useCreateCvWorkflowController";
+import useSearchWorkflowController from "./hooks/useSearchWorkflowController";
+import useW1CvWorkflowStateMachine from "./hooks/useW1CvWorkflowStateMachine";
 import SearchFilters from "./components/SearchFilters";
 import CreateCvView from "./components/CreateCvView";
 import JobSearchCreateCvWorkflowView from "./components/workflows/JobSearchCreateCvWorkflowView";
@@ -25,170 +21,16 @@ import CvIdModal from "./components/CvIdModal";
 import OverwriteConfirmationModal from "./components/OverwriteConfirmationModal";
 import { Box, Grid, GridItem } from "@chakra-ui/react";
 
-const CACHE_KEY = "job-agent:search-response";
 const SIDEBAR_WIDTH_KEY = "job-agent:sidebar-width";
 const SIDEBAR_MIN_WIDTH = 360;
 const SIDEBAR_MAX_WIDTH = 720;
 const REVIEW_PREVIEW_MIN_WIDTH = 360;
 const REVIEW_EDITOR_MIN_WIDTH = 420;
 const REVIEW_SPLITTER_WIDTH = 14;
-const SEARCH_BATCH_SIZE = 4;
 const CANONICAL_SCHEMA_VERSION = "v1";
 const DEFAULT_TEMPLATE_THEME_COLORS = {
   awesomecv: "#C0392B",
   hipstercv: "#496E8C"
-};
-
-const getJobStableId = (job, fallbackIndex = 0) => {
-  if (!job || typeof job !== "object") return `job-${fallbackIndex}`;
-  const jobUrl = String(job.job_url || "").trim();
-  if (jobUrl) return `url:${jobUrl}`;
-  const title = String(job.title || "").trim().toLowerCase();
-  const company = String(job.company || job.company_name || "").trim().toLowerCase();
-  const location = String(job.location || "").trim().toLowerCase();
-  const site = String(job.site || "").trim().toLowerCase();
-  return `sig:${title}|${company}|${location}|${site}|${fallbackIndex}`;
-};
-
-const mergeResponseStable = (previous, incoming, options = {}) => {
-  const preserveRichDetails = Boolean(options.preserveRichDetails);
-  if (!incoming || !Array.isArray(incoming.jobs)) {
-    return incoming;
-  }
-
-  const prevJobs = Array.isArray(previous?.jobs) ? previous.jobs : [];
-  const prevKeys = new Set(prevJobs.map((job, index) => getJobStableId(job, index)));
-  const incomingByKey = new Map(
-    incoming.jobs.map((job, index) => [getJobStableId(job, index), job])
-  );
-
-  const mergedJobs = [];
-  prevJobs.forEach((job, index) => {
-    const key = getJobStableId(job, index);
-    const next = incomingByKey.get(key);
-    if (!next) {
-      mergedJobs.push(job);
-      return;
-    }
-
-    const merged = { ...job, ...next };
-
-    // mark rows that just received their description for the first time (detailed pass)
-    if (!preserveRichDetails) {
-      const hadDescription = (job.description || "").trim().length > 0;
-      const nowHasDescription = (next.description || "").trim().length > 0;
-      if (!hadDescription && nowHasDescription) {
-        merged._enrichedAt = Date.now();
-      } else {
-        merged._enrichedAt = job._enrichedAt ?? null;
-      }
-    }
-
-    if (preserveRichDetails) {
-      const prevDescription = String(job.description || "");
-      const nextDescription = String(next.description || "");
-      if (prevDescription.length > nextDescription.length) {
-        merged.description = job.description;
-      }
-
-      const prevJobDescription = String(job.job_description || "");
-      const nextJobDescription = String(next.job_description || "");
-      if (prevJobDescription.length > nextJobDescription.length) {
-        merged.job_description = job.job_description;
-      }
-
-      const prevSnippet = String(job.snippet || "");
-      const nextSnippet = String(next.snippet || "");
-      if (prevSnippet.length > nextSnippet.length) {
-        merged.snippet = job.snippet;
-      }
-
-      if (job.rerank_score != null && next.rerank_score == null) {
-        merged.rerank_score = job.rerank_score;
-      }
-
-      const nextReasons = Array.isArray(next.match_reasons) ? next.match_reasons : [];
-      const prevReasons = Array.isArray(job.match_reasons) ? job.match_reasons : [];
-      if (prevReasons.length > nextReasons.length) {
-        merged.match_reasons = prevReasons;
-      }
-    }
-
-    mergedJobs.push(merged);
-  });
-
-  incoming.jobs.forEach((job, index) => {
-    const key = getJobStableId(job, index);
-    if (!prevKeys.has(key)) {
-      mergedJobs.push(job);
-    }
-  });
-
-  return {
-    ...incoming,
-    jobs: mergedJobs,
-  };
-};
-
-const mergeLinkedInEnrichedJobs = (previous, enrichItems) => {
-  if (!previous || !Array.isArray(previous.jobs) || !Array.isArray(enrichItems)) {
-    return previous;
-  }
-
-  const enrichByUrl = new Map(
-    enrichItems
-      .filter((item) => item)
-      .map((item) => [String(item.job_url || "").trim(), item])
-      .filter(([jobUrl]) => jobUrl)
-  );
-
-  if (!enrichByUrl.size) {
-    return previous;
-  }
-
-  const jobs = previous.jobs.map((job) => {
-    const jobUrl = String(job?.job_url || "").trim();
-    const item = enrichByUrl.get(jobUrl);
-    if (!item) {
-      return job;
-    }
-
-    const hadDescription = String(job.description || job.job_description || "").trim().length > 0;
-    const nextDescription = String(item.description || "").trim();
-
-    if (item.status === "ok" && (nextDescription || item.description_html)) {
-      return {
-        ...job,
-        description: nextDescription,
-        job_description: nextDescription,
-        description_html: item.description_html || null,
-        _detailsFetched: true,
-        _detailsStatus: "ok",
-        _detailsError: null,
-        _enrichedAt: hadDescription ? (job._enrichedAt ?? null) : Date.now(),
-      };
-    }
-
-    return {
-      ...job,
-      _detailsFetched: false,
-      _detailsStatus: item.status || "error",
-      _detailsError: item.error || null,
-    };
-  });
-
-  return {
-    ...previous,
-    jobs,
-  };
-};
-
-const isTransientDetailsFailure = (item) => {
-  if (!item) return false;
-  if (item.status === "timeout") return true;
-  if (item.status !== "http_error") return false;
-  const msg = String(item.error || "");
-  return /HTTP\s(429|502|503|504)/i.test(msg);
 };
 
 const normalizeHexColor = (value, fallback = null) => {
@@ -222,6 +64,14 @@ const EMPTY_APPLICATION_CONTEXT = {
   header_subtitle_size: "Large"
 };
 
+const createEmptyLoadedProfileSnapshot = () => ({
+  profile_id: "",
+  revision: 0,
+  updated_at: null,
+  raw_resume_text: "",
+  ...EMPTY_APPLICATION_CONTEXT
+});
+
 export default function App() {
   const [resumeText, setResumeText] = useState("");
   const [wishes, setWishes] = useState("");
@@ -231,9 +81,6 @@ export default function App() {
   const [resultsWanted, setResultsWanted] = useState(10);
   const [hoursOld, setHoursOld] = useState(72);
   const [isRemote, setIsRemote] = useState(false);
-  const [response, setResponse] = useState(null);
-  const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [cvReview, setCvReview] = useState(null);
   const [isJobReviewReadOnly, setIsJobReviewReadOnly] = useState(false);
@@ -250,8 +97,6 @@ export default function App() {
   const [rerankTopN, setRerankTopN] = useState(null);
   const [weightEmbedding, setWeightEmbedding] = useState(0.8);
   const [weightKeyword, setWeightKeyword] = useState(0.2);
-  const [cachedResponse, setCachedResponse] = useState(null);
-  const [cachedAt, setCachedAt] = useState("");
   const [cvProfiles, setCvProfiles] = useState([]);
   const [profilesError, setProfilesError] = useState("");
   const [profilesLoading, setProfilesLoading] = useState(false);
@@ -265,13 +110,7 @@ export default function App() {
   const [cvOutputLanguage, setCvOutputLanguage] = useState("english");
   const [cvEntryError, setCvEntryError] = useState("");
   const [applicationContext, setApplicationContext] = useState(EMPTY_APPLICATION_CONTEXT);
-  const [loadedProfileSnapshot, setLoadedProfileSnapshot] = useState({
-    profile_id: "",
-    revision: 0,
-    updated_at: null,
-    raw_resume_text: "",
-    ...EMPTY_APPLICATION_CONTEXT
-  });
+  const [loadedProfileSnapshot, setLoadedProfileSnapshot] = useState(createEmptyLoadedProfileSnapshot);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [isUpdatingProfileCvText, setIsUpdatingProfileCvText] = useState(false);
   const [isRemappingProfileCvText, setIsRemappingProfileCvText] = useState(false);
@@ -302,12 +141,8 @@ export default function App() {
   const [activeView, setActiveView] = useState("find");
   const [createMode, setCreateMode] = useState("newbie");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [activeJobAction, setActiveJobAction] = useState("none");
-  const [jobCvEntryStep, setJobCvEntryStep] = useState("choice");
   const [selectedRerankProfileId, setSelectedRerankProfileId] = useState("");
   const [rerankProfileError, setRerankProfileError] = useState("");
-  const [searchElapsedMs, setSearchElapsedMs] = useState(0);
-  const [searchPhaseMessage, setSearchPhaseMessage] = useState("");
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MIN_WIDTH);
   const [reviewPreviewWidth, setReviewPreviewWidth] = useState(null);
   const [createReviewPreviewWidth, setCreateReviewPreviewWidth] = useState(null);
@@ -317,18 +152,14 @@ export default function App() {
   const [isPdfDownloading, setIsPdfDownloading] = useState(false);
   const [pendingPreviewSaveCount, setPendingPreviewSaveCount] = useState(0);
   const [cvThemeColors, setCvThemeColors] = useState(DEFAULT_TEMPLATE_THEME_COLORS);
-  const [isReranking, setIsReranking] = useState(false);
   const [isJobDetailsPanelVisible, setIsJobDetailsPanelVisible] = useState(false);
   const [isProfileBrowserPanelVisible, setIsProfileBrowserPanelVisible] = useState(false);
-  const [activeReviewNav, setActiveReviewNav] = useState("review");
 
-  const searchTimerRef = useRef(null);
   const cvRemapTimerRef = useRef(null);
   const pdfPreviewRequestVersionRef = useRef(0);
+  const clearPreviewTrackingRef = useRef(null);
+  const clearCreatePreviewStateRef = useRef(null);
   const cvDraftHashRef = useRef("");
-  const searchRequestIdRef = useRef(0);
-  const searchAbortControllerRef = useRef(null);
-  const queryDebugDataRef = useRef(null);
   const isResizingSidebarRef = useRef(false);
   const isResizingReviewRef = useRef(false);
   const isResizingCreateReviewRef = useRef(false);
@@ -346,6 +177,112 @@ export default function App() {
   const reviewSectionRef = useRef(null);
   const createReviewSectionRef = useRef(null);
   const shouldFocusReviewAfterProfileLoadRef = useRef(false);
+
+  const {
+    activeJobAction,
+    jobCvEntryStep,
+    activeReviewNav,
+    setActiveJobAction,
+    initializeJobCvContext,
+    handleSelectJob,
+    handleChooseCreateJobCv,
+    handleChooseBranchJobCv,
+    handleBackToResults,
+    handleSetView,
+    handleSwitchJobAction,
+    handleOpenJobDetailsPanel,
+    handleOpenProfileBrowserPanel,
+    handleOpenCvReviewSection,
+    selectReviewNav,
+    selectDetailsNav,
+    selectProfilesNav,
+    activateCvReviewStep,
+    activateCvReview,
+    activateCvBranchReview
+  } = useW1CvWorkflowStateMachine({
+    selectedJob,
+    emptyApplicationContext: EMPTY_APPLICATION_CONTEXT,
+    createEmptyLoadedProfileSnapshot,
+    pdfPreviewRequestVersionRef,
+    clearPreviewTrackingRef,
+    clearCreatePreviewStateRef,
+    setSelectedJob,
+    setCvReview,
+    setIsJobReviewReadOnly,
+    setActiveView,
+    setCvPreviewPayload,
+    setPdfPreviewUrl,
+    setCvEntryError,
+    setNewProfileId,
+    setApplicationContext,
+    setSelectedProfileId,
+    setLoadedProfileSnapshot,
+    setResumeText,
+    setIsDraftProfileActive,
+    setDraftProfileId,
+    setIsSidebarOpen,
+    scrollToJobDetails: () => {
+      requestAnimationFrame(() => {
+        jobDetailsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    },
+    scrollToProfiles: () => {
+      requestAnimationFrame(() => {
+        profileBrowserSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    },
+    scrollToReview: () => {
+      requestAnimationFrame(() => {
+        reviewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  });
+
+  const {
+    response,
+    error,
+    isLoading,
+    searchElapsedMs,
+    searchPhaseMessage,
+    isReranking,
+    cachedResponse,
+    cachedAt,
+    handleSearch,
+    handleRunRerank,
+    handleLoadCache,
+    handleClearCache
+  } = useSearchWorkflowController({
+    resumeText,
+    wishes,
+    selectedRerankProfileId,
+    searchTerm,
+    location,
+    searchRadiusKm,
+    resultsWanted,
+    hoursOld,
+    isRemote,
+    selectedModel,
+    lmTimeout,
+    enableRerank,
+    rerankTopN,
+    weightEmbedding,
+    weightKeyword,
+    setResumeText,
+    setWishes,
+    setSearchTerm,
+    setLocation,
+    setSearchRadiusKm,
+    setResultsWanted,
+    setHoursOld,
+    setIsRemote,
+    setSelectedModel,
+    setLmTimeout,
+    setEnableRerank,
+    setRerankTopN,
+    setWeightEmbedding,
+    setWeightKeyword,
+    onLoadCacheApplied: () => setSelectedJob(null)
+  });
 
   const jobs = response?.jobs ?? [];
   const descriptionHtml = useJobDescription(selectedJob);
@@ -433,35 +370,6 @@ export default function App() {
       timeoutSeconds: lmTimeout
     };
   })();
-
-  const persistSearchCache = (nextResponse) => {
-    if (!nextResponse) return;
-    const savedAt = new Date().toISOString();
-    sessionStorage.setItem(
-      CACHE_KEY,
-      JSON.stringify({
-        savedAt,
-        response: nextResponse,
-        resumeText,
-        wishes,
-        searchTerm,
-        location,
-        searchRadiusKm,
-        resultsWanted,
-        hoursOld,
-        isRemote,
-        sites: ["linkedin"],
-        selectedModel,
-        lmTimeout,
-        enableRerank,
-        rerankTopN,
-        weightEmbedding,
-        weightKeyword
-      })
-    );
-    setCachedResponse(nextResponse);
-    setCachedAt(savedAt);
-  };
 
   const remapTokenEstimate = (() => {
     const text = `${resumeText}`.trim();
@@ -906,34 +814,6 @@ export default function App() {
   }, [activeView, cvProfiles.length, profilesLoading]);
 
   useEffect(() => {
-    if (!isLoading) {
-      setSearchElapsedMs(0);
-      if (searchTimerRef.current) {
-        clearInterval(searchTimerRef.current);
-        searchTimerRef.current = null;
-      }
-      return undefined;
-    }
-    const start = Date.now();
-    setSearchElapsedMs(0);
-    searchTimerRef.current = setInterval(() => {
-      setSearchElapsedMs(Date.now() - start);
-    }, 500);
-    return () => {
-      if (searchTimerRef.current) {
-        clearInterval(searchTimerRef.current);
-        searchTimerRef.current = null;
-      }
-    };
-  }, [isLoading]);
-
-  useEffect(() => () => {
-    if (searchAbortControllerRef.current) {
-      searchAbortControllerRef.current.abort();
-    }
-  }, []);
-
-  useEffect(() => {
     if (!isRemappingProfileCvText) {
       setCvRemapElapsedMs(0);
       if (cvRemapTimerRef.current) {
@@ -1038,223 +918,6 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    const cached = sessionStorage.getItem(CACHE_KEY);
-    if (!cached) return;
-    try {
-      const parsed = JSON.parse(cached);
-      if (parsed?.response) {
-        setCachedResponse(parsed.response);
-        setCachedAt(parsed.savedAt || "");
-        if (typeof parsed.resumeText === "string") setResumeText(parsed.resumeText);
-        if (typeof parsed.wishes === "string") setWishes(parsed.wishes);
-        if (typeof parsed.searchTerm === "string") setSearchTerm(parsed.searchTerm);
-        if (typeof parsed.location === "string") setLocation(parsed.location);
-        if (typeof parsed.searchRadiusKm === "number" || parsed.searchRadiusKm === null) {
-          setSearchRadiusKm(parsed.searchRadiusKm ?? null);
-        }
-        if (typeof parsed.resultsWanted === "number") setResultsWanted(parsed.resultsWanted);
-        if (typeof parsed.hoursOld === "number") setHoursOld(parsed.hoursOld);
-        if (typeof parsed.isRemote === "boolean") setIsRemote(parsed.isRemote);
-        if (typeof parsed.selectedModel === "string") setSelectedModel(parsed.selectedModel);
-        if (typeof parsed.lmTimeout === "number") setLmTimeout(parsed.lmTimeout);
-        if (typeof parsed.enableRerank === "boolean") setEnableRerank(parsed.enableRerank);
-        if (typeof parsed.rerankTopN === "number" || parsed.rerankTopN === null) setRerankTopN(parsed.rerankTopN ?? null);
-        if (typeof parsed.weightEmbedding === "number") setWeightEmbedding(parsed.weightEmbedding);
-        if (typeof parsed.weightKeyword === "number") setWeightKeyword(parsed.weightKeyword);
-      }
-    } catch (err) {
-      sessionStorage.removeItem(CACHE_KEY);
-    }
-  }, []);
-
-  const handleSearch = async () => {
-    const requestId = searchRequestIdRef.current + 1;
-    searchRequestIdRef.current = requestId;
-    if (searchAbortControllerRef.current) {
-      searchAbortControllerRef.current.abort();
-    }
-    const abortController = new AbortController();
-    searchAbortControllerRef.current = abortController;
-
-    const baseInput = {
-      resumeText,
-      wishes,
-      selectedRerankProfileId,
-      searchTerm,
-      location,
-      searchRadiusKm,
-      resultsWanted,
-      hoursOld,
-      isRemote,
-      sites: ["linkedin"],
-      model: selectedModel,
-      lmTimeout,
-      rerankTopN,
-      weightEmbedding,
-      weightKeyword
-    };
-
-    setIsLoading(true);
-    setError("");
-    setResponse(null);
-    setSearchPhaseMessage("Loading LinkedIn results...");
-    queryDebugDataRef.current = null;
-
-    try {
-      let finalData = null;
-
-      const quickData = await searchJobs({
-        ...baseInput,
-        enableRerank: false
-      }, { signal: abortController.signal });
-      if (requestId !== searchRequestIdRef.current) return;
-
-      finalData = mergeResponseStable(null, quickData);
-      setResponse(finalData);
-
-      const jobsNeedingDetails = (finalData.jobs || [])
-        .filter((job) => String(job.site || "").toLowerCase() === "linkedin")
-        .filter((job) => (job.description || job.job_description || "").trim().length === 0)
-        .filter((job) => String(job.job_url || "").trim().length > 0);
-
-      const totalNeedingDetails = jobsNeedingDetails.length;
-      const totalBatches = Math.ceil(totalNeedingDetails / SEARCH_BATCH_SIZE);
-      const retriedUrls = new Set();
-
-      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
-        const start = batchIndex * SEARCH_BATCH_SIZE;
-        const end = Math.min(start + SEARCH_BATCH_SIZE, totalNeedingDetails);
-        const batch = jobsNeedingDetails.slice(start, end);
-        const batchLabel = `${batchIndex + 1}/${totalBatches}`;
-
-        setSearchPhaseMessage(
-          `Batch ${batchLabel}: enriching ${end}/${totalNeedingDetails} LinkedIn jobs...`
-        );
-
-        const enrichedItems = await enrichLinkedInJobs(
-          batch.map((job) => ({ job_url: job.job_url })),
-          { signal: abortController.signal }
-        );
-        if (requestId !== searchRequestIdRef.current) return;
-
-        const retryCandidates = enrichedItems.filter((item) => {
-          const jobUrl = String(item?.job_url || "").trim();
-          if (!jobUrl || retriedUrls.has(jobUrl)) return false;
-          return isTransientDetailsFailure(item);
-        });
-
-        let finalEnrichedItems = enrichedItems;
-        if (retryCandidates.length > 0) {
-          retryCandidates.forEach((item) => {
-            retriedUrls.add(String(item.job_url || "").trim());
-          });
-
-          setSearchPhaseMessage(
-            `Batch ${batchLabel}: retrying ${retryCandidates.length} transient detail fetches...`
-          );
-
-          const retriedItems = await enrichLinkedInJobs(
-            retryCandidates.map((item) => ({ job_url: item.job_url })),
-            { signal: abortController.signal }
-          );
-          if (requestId !== searchRequestIdRef.current) return;
-
-          const retriedByUrl = new Map(
-            retriedItems
-              .map((item) => [String(item.job_url || "").trim(), item])
-              .filter(([jobUrl]) => jobUrl)
-          );
-
-          finalEnrichedItems = enrichedItems.map((item) => {
-            const jobUrl = String(item?.job_url || "").trim();
-            return retriedByUrl.get(jobUrl) || item;
-          });
-        }
-
-        finalData = mergeLinkedInEnrichedJobs(finalData, finalEnrichedItems);
-        setResponse((prev) => mergeLinkedInEnrichedJobs(prev, finalEnrichedItems));
-      }
-
-      if (!finalData) return;
-
-      persistSearchCache(finalData);
-    } catch (err) {
-      if (err?.name === "AbortError") {
-        return;
-      }
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      if (requestId === searchRequestIdRef.current) {
-        setIsLoading(false);
-        setSearchPhaseMessage("");
-      }
-    }
-  };
-
-  const handleRunRerank = async () => {
-    if (!response?.jobs?.length) {
-      setError("Run a search first before reranking the current results.");
-      return;
-    }
-    if (!selectedModel) {
-      setError("Select an AI model in the matching settings before running LLM matching.");
-      return;
-    }
-
-    const abortController = new AbortController();
-    setIsLoading(true);
-    setIsReranking(true);
-    setError("");
-    setSearchPhaseMessage("Running LLM matching on current results...");
-    setEnableRerank(true);
-
-    try {
-      const currentQueryDebug = await fetchQueryDebug(
-        {
-          resumeText,
-          wishes,
-          selectedRerankProfileId,
-          model: selectedModel,
-          lmTimeout
-        },
-        { signal: abortController.signal }
-      );
-      queryDebugDataRef.current = currentQueryDebug;
-
-      const rerankData = await rerankJobs(
-        {
-          jobs: response.jobs,
-          resumeText,
-          wishes,
-          selectedRerankProfileId: selectedRerankProfileId || currentQueryDebug.query_profile_id || response.query_profile_id || "",
-          bm25Query: currentQueryDebug.bm25_query || response.bm25_query || null,
-          bm25Language: currentQueryDebug.bm25_language || response.bm25_language || null,
-          bm25Tokenizer: currentQueryDebug.bm25_tokenizer || response.bm25_tokenizer || null,
-          bm25QueryTerms: currentQueryDebug.bm25_query_terms || response.bm25_query_terms || null,
-          model: selectedModel,
-          lmTimeout,
-          rerankTopN,
-          precisionWeightEmbedding: weightEmbedding,
-          precisionWeightKeyword: weightKeyword
-        },
-        { signal: abortController.signal }
-      );
-
-      const mergedResponse = mergeResponseStable(response, rerankData, { preserveRichDetails: true });
-      setResponse(mergedResponse);
-      persistSearchCache(mergedResponse);
-    } catch (err) {
-      if (err?.name === "AbortError") {
-        return;
-      }
-      setError(err instanceof Error ? err.message : "Failed to rerank current results.");
-    } finally {
-      setIsLoading(false);
-      setIsReranking(false);
-      setSearchPhaseMessage("");
-    }
-  };
 
   const handleSelectRerankProfile = async (profileId) => {
     setSelectedRerankProfileId(profileId || "");
@@ -1277,23 +940,10 @@ export default function App() {
     }
   };
 
-  const handleLoadCache = () => {
-    if (!cachedResponse) return;
-    setError("");
-    setResponse(cachedResponse);
-    setSelectedJob(null);
-  };
-
-  const handleClearCache = () => {
-    sessionStorage.removeItem(CACHE_KEY);
-    setCachedResponse(null);
-    setCachedAt("");
-  };
-
   const handleStartCvReview = ({ canonical, job, templateId, docType, outputLanguage }) => {
     pdfPreviewRequestVersionRef.current += 1;
     setCvReview({ canonical, job, templateId, docType, outputLanguage });
-    setJobCvEntryStep("review");
+    activateCvReview();
     setIsJobReviewReadOnly(false);
     setApplicationContext({
       company: job?.company || "",
@@ -1310,7 +960,6 @@ export default function App() {
       header_subtitle_size: "Large"
     });
     setSelectedJob(job);
-    setActiveJobAction("cv");
     setCvPreviewPayload(null);
     setPdfPreviewUrl(null);
     preparePreviewForReview(templateId);
@@ -1409,6 +1058,7 @@ export default function App() {
     setPendingPreviewSaveCount(0);
     clearPreviewTracking();
   };
+  clearCreatePreviewStateRef.current = clearCreatePreviewState;
 
   const handleNewbieDraftReady = ({ canonical, templateId, outputLanguage, jobContext }) => {
     pdfPreviewRequestVersionRef.current += 1;
@@ -1439,7 +1089,7 @@ export default function App() {
 
   const handleBranchDraftGenerated = ({ canonical, templateId, outputLanguage, jobContext }) => {
     handleNewbieDraftReady({ canonical, templateId, outputLanguage, jobContext });
-    setJobCvEntryStep("branch-review");
+    activateCvBranchReview();
     setIsJobReviewReadOnly(false);
   };
 
@@ -1752,6 +1402,7 @@ export default function App() {
     contextSnapshotFromProfile,
     setCvDraftState
   });
+  clearPreviewTrackingRef.current = clearPreviewTracking;
 
   const loadProfileIntoEditor = async (profileId) => {
     if (!profileId) return;
@@ -2166,9 +1817,8 @@ export default function App() {
           docType: "resume",
           outputLanguage: cvOutputLanguage
         });
-        setJobCvEntryStep(isJobCvBranchReviewStep ? "branch-review" : "review");
+        activateCvReviewStep(isJobCvBranchReviewStep ? "branch-review" : "review");
         setIsJobReviewReadOnly(false);
-        setActiveJobAction("cv");
         setCvPreviewPayload(null);
         setPdfPreviewUrl(null);
         preparePreviewForReview(saved.template_id || "awesomecv");
@@ -2313,89 +1963,6 @@ export default function App() {
     setCvDraftState(nextDraftState);
   };
 
-  const handleSelectJob = (job) => {
-    pdfPreviewRequestVersionRef.current += 1;
-    setSelectedJob(job);
-    setCvReview(null);
-    setIsJobReviewReadOnly(false);
-    setActiveView("find");
-    setActiveJobAction("none");
-    setJobCvEntryStep("choice");
-    setCvPreviewPayload(null);
-    setPdfPreviewUrl(null);
-    clearPreviewTracking();
-  };
-
-  const initializeJobCvContext = async (job) => {
-    if (!job) return;
-    setCvEntryError("");
-    setActiveJobAction("cv");
-    setJobCvEntryStep("choice");
-    clearCreatePreviewState();
-
-    const nextCompany = job?.company || "";
-
-    setNewProfileId("");
-
-    const mergedContext = {
-      ...EMPTY_APPLICATION_CONTEXT,
-      company: nextCompany,
-      application_status: "",
-      application_date: "",
-      job_title: job?.title || "",
-      job_description: job?.description || "",
-      job_url: job?.job_url || ""
-    };
-    setApplicationContext(mergedContext);
-    setSelectedProfileId("");
-    setLoadedProfileSnapshot({
-      profile_id: "",
-      revision: 0,
-      updated_at: null,
-      raw_resume_text: "",
-      ...EMPTY_APPLICATION_CONTEXT
-    });
-    setCvReview(null);
-    setIsJobReviewReadOnly(false);
-  };
-
-  const handleChooseCreateJobCv = () => {
-    const mergedContext = {
-      ...EMPTY_APPLICATION_CONTEXT,
-      company: selectedJob?.company || "",
-      application_status: "",
-      application_date: "",
-      job_title: selectedJob?.title || "",
-      job_description: selectedJob?.description || "",
-      job_url: selectedJob?.job_url || ""
-    };
-
-    setJobCvEntryStep("create");
-    setSelectedProfileId("");
-    setNewProfileId("");
-    setResumeText("");
-    setIsDraftProfileActive(false);
-    setDraftProfileId("");
-    setApplicationContext(mergedContext);
-    setLoadedProfileSnapshot({
-      profile_id: "",
-      revision: 0,
-      updated_at: null,
-      raw_resume_text: "",
-      ...EMPTY_APPLICATION_CONTEXT
-    });
-    setCvReview(null);
-    setIsJobReviewReadOnly(false);
-  };
-
-  const handleChooseBranchJobCv = () => {
-    setJobCvEntryStep("branch");
-    setIsDraftProfileActive(false);
-    setDraftProfileId("");
-    setCvReview(null);
-    setIsJobReviewReadOnly(false);
-  };
-
   const loadProfileIntoJobCvContext = async (profileId) => {
     if (!profileId || !selectedJob) return;
     setCvEntryError("");
@@ -2429,7 +1996,7 @@ export default function App() {
         docType: "resume",
         outputLanguage: cvOutputLanguage
       });
-      setJobCvEntryStep("branch-review");
+      activateCvBranchReview();
       setIsJobReviewReadOnly(false);
     } catch (err) {
       setCvEntryError(err instanceof Error ? err.message : "Failed to load profile");
@@ -2562,42 +2129,6 @@ export default function App() {
     }
   };
 
-  const handleBackToResults = () => {
-    pdfPreviewRequestVersionRef.current += 1;
-    setSelectedJob(null);
-    setCvReview(null);
-    setIsJobReviewReadOnly(false);
-    setActiveView("find");
-    setActiveJobAction("none");
-    setJobCvEntryStep("choice");
-    setCvPreviewPayload(null);
-    setPdfPreviewUrl(null);
-    clearPreviewTracking();
-  };
-
-  const handleSetView = (view) => {
-    setActiveView(view);
-    setSelectedJob(null);
-    setJobCvEntryStep("choice");
-    setIsSidebarOpen(false);
-  };
-
-  const handleSwitchJobAction = () => {
-    if (activeJobAction === "cover") {
-      initializeJobCvContext(selectedJob);
-      return;
-    }
-
-    pdfPreviewRequestVersionRef.current += 1;
-    setCvReview(null);
-    setIsJobReviewReadOnly(false);
-    setJobCvEntryStep("choice");
-    setCvPreviewPayload(null);
-    setPdfPreviewUrl(null);
-    clearPreviewTracking();
-    setActiveJobAction("cover");
-  };
-
   const handleSidebarResizeStart = (event) => {
     if (!isFindView) return;
     isResizingSidebarRef.current = true;
@@ -2669,9 +2200,9 @@ export default function App() {
     if (!cvReview) {
       setIsJobDetailsPanelVisible(false);
       setIsProfileBrowserPanelVisible(false);
-      setActiveReviewNav("review");
+      selectReviewNav();
     }
-  }, [cvReview]);
+  }, [cvReview, selectReviewNav]);
 
   useEffect(() => {
     if (!cvReview) return;
@@ -2683,27 +2214,27 @@ export default function App() {
       const profileTop = profileBrowserSectionRef.current?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
       const detailTop = jobDetailsSectionRef.current?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
       if (reviewTop <= stickyOffset + 80) {
-        setActiveReviewNav("review");
+        selectReviewNav();
         return;
       }
 
       if (profileTop <= stickyOffset + 80) {
-        setActiveReviewNav("profiles");
+        selectProfilesNav();
         return;
       }
 
       if (detailTop <= stickyOffset + 80) {
-        setActiveReviewNav("details");
+        selectDetailsNav();
         return;
       }
 
-      setActiveReviewNav("details");
+      selectDetailsNav();
     };
 
     updateActiveNavFromScroll();
     window.addEventListener("scroll", updateActiveNavFromScroll, { passive: true });
     return () => window.removeEventListener("scroll", updateActiveNavFromScroll);
-  }, [cvReview]);
+  }, [cvReview, selectDetailsNav, selectProfilesNav, selectReviewNav]);
 
   useEffect(() => {
     if (!cvReview || jobCvEntryStep !== "review") return;
@@ -2712,30 +2243,9 @@ export default function App() {
 
     requestAnimationFrame(() => {
       reviewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      setActiveReviewNav("review");
+      selectReviewNav();
     });
-  }, [cvReview, jobCvEntryStep]);
-
-  const handleOpenJobDetailsPanel = () => {
-    setActiveReviewNav("details");
-    requestAnimationFrame(() => {
-      jobDetailsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  };
-
-  const handleOpenProfileBrowserPanel = () => {
-    setActiveReviewNav("profiles");
-    requestAnimationFrame(() => {
-      profileBrowserSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  };
-
-  const handleOpenCvReviewSection = () => {
-    setActiveReviewNav("review");
-    requestAnimationFrame(() => {
-      reviewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  };
+  }, [cvReview, jobCvEntryStep, selectReviewNav]);
 
   const jobEditDecisionModal = jobEditDecisionDialog.isOpen ? (
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby="job-edit-decision-title">
