@@ -1,4 +1,5 @@
 import math
+import os
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
@@ -52,6 +53,13 @@ from .services.ranking_service import build_query_debug, score_jobs
 
 app = FastAPI(title="Job Agent API")
 
+SCRAPING_ENABLED_ENV_VAR = "ENABLE_SCRAPING"
+SCRAPING_DISABLED_DETAIL = {
+    "code": "SCRAPING_DISABLED",
+    "message": "Scraping and LinkedIn enrichment are disabled by configuration.",
+    "env_var": SCRAPING_ENABLED_ENV_VAR,
+}
+
 ALLOWED_OUTPUT_LANGUAGES = {"english", "german", "french", "chinese", "spanish"}
 
 OUTPUT_LANGUAGE_PROMPTS = {
@@ -73,7 +81,10 @@ app.add_middleware(
 
 @app.get("/health")
 def health_check() -> dict:
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "scraping_enabled": _is_scraping_enabled(),
+    }
 
 
 def _default_rerank_top_n(total_jobs: int, results_wanted: int) -> int:
@@ -103,6 +114,21 @@ def _normalize_mapping_mode(value: str | None) -> str:
     if normalized not in {"deterministic", "llm"}:
         raise HTTPException(status_code=400, detail="Unsupported mapping_mode. Use 'deterministic' or 'llm'.")
     return normalized
+
+
+def _is_truthy(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_scraping_enabled() -> bool:
+    return _is_truthy(os.getenv(SCRAPING_ENABLED_ENV_VAR, "0"))
+
+
+def _ensure_scraping_enabled() -> None:
+    if not _is_scraping_enabled():
+        raise HTTPException(status_code=503, detail=SCRAPING_DISABLED_DETAIL)
 
 
 def _build_profile_query_context(profile: CvCanonicalProfile) -> str:
@@ -163,6 +189,7 @@ def get_models() -> ModelsResponse:
 
 @app.post("/search", response_model=SearchResponse)
 def start_search(payload: SearchRequest) -> SearchResponse:
+    _ensure_scraping_enabled()
     search_term = payload.search_term or "software engineer"
     # LinkedIn-only mode keeps source behavior deterministic and enables one-pass detail enrichment.
     sites = ["linkedin"]
@@ -324,6 +351,7 @@ def rerank_existing_jobs(payload: RerankJobsRequest) -> SearchResponse:
 
 @app.post("/search/linkedin/enrich", response_model=LinkedInEnrichResponse)
 def enrich_linkedin_details(payload: LinkedInEnrichRequest) -> LinkedInEnrichResponse:
+    _ensure_scraping_enabled()
     jobs = [job.model_dump() for job in payload.jobs]
     results = fetch_linkedin_job_details(
         jobs,

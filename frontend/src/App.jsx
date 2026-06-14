@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  fetchHealth,
   getCvProfile,
   renderCvFromTemplate,
   uploadCvProfileImage
@@ -108,6 +109,7 @@ export default function App() {
     updatedAt: null
   });
   const [activeView, setActiveView] = useState("find");
+  const [isScrapingEnabled, setIsScrapingEnabled] = useState(true);
   const [createMode, setCreateMode] = useState("newbie");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [cvPreviewPayload, setCvPreviewPayload] = useState(null);
@@ -366,6 +368,31 @@ export default function App() {
 
   useEffect(() => {
     loadProfiles();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadHealth = async () => {
+      try {
+        const health = await fetchHealth();
+        if (cancelled) return;
+        const scrapingEnabled = health?.scraping_enabled !== false;
+        setIsScrapingEnabled(scrapingEnabled);
+        if (!scrapingEnabled) {
+          handleSetView("create");
+          setCreateMode("newbie");
+        }
+      } catch (_err) {
+        if (!cancelled) {
+          setIsScrapingEnabled(true);
+        }
+      }
+    };
+
+    loadHealth();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const buildApplicationContextDiff = () => buildProfileApplicationContextDiff({
@@ -1051,14 +1078,16 @@ export default function App() {
         minHeight="100vh"
       >
         <GridItem className="app-rail">
-          <button
-            type="button"
-            className={`rail-button ${isFindView ? "is-active" : ""}`}
-            onClick={() => handleSetView("find")}
-          >
-            <span className="rail-icon">🔎</span>
-            <span>Find a job</span>
-          </button>
+          {isScrapingEnabled && (
+            <button
+              type="button"
+              className={`rail-button ${isFindView ? "is-active" : ""}`}
+              onClick={() => handleSetView("find")}
+            >
+              <span className="rail-icon">🔎</span>
+              <span>Find a job</span>
+            </button>
+          )}
           <button
             type="button"
             className={`rail-button ${!isFindView && createMode === "newbie" ? "is-active" : ""}`}
