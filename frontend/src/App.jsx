@@ -1,17 +1,39 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  deleteCvProfile,
   getCvProfile,
-  listCvProfiles,
   parseCvCanonical,
   renderCvFromTemplate,
   saveCvProfile,
   uploadCvProfileImage
 } from "./api/llm";
+import useCvProfilesController from "./hooks/useCvProfilesController";
 import { useJobDescription } from "./hooks/useJobDescription";
 import useCreateCvWorkflowController from "./hooks/useCreateCvWorkflowController";
 import useSearchWorkflowController from "./hooks/useSearchWorkflowController";
 import useW1CvWorkflowStateMachine from "./hooks/useW1CvWorkflowStateMachine";
+import {
+  buildCompanySuffixProfileId,
+  buildCvIdSuggestion,
+  buildJobDraftProfileId,
+  buildNextAvailableDraftProfileId,
+  buildNextVersionedProfileId,
+  sanitizeProfileId
+} from "./workflow/profiles/profileIdUtils";
+import {
+  buildProfileApplicationContextDiff,
+  contextFromProfile,
+  contextSnapshotFromProfile,
+  doesProfileMatchJobContext
+} from "./workflow/profiles/profileContextUtils";
+import {
+  buildCreateNewEntryPayload,
+  buildJobEditDraftPayload,
+  buildRemapProfilePayload,
+  buildSaveAndSwitchPayload,
+  buildUpdateApplicationProfilePayload,
+  buildLineageFields,
+  resolveRemapLineageFields
+} from "./workflow/profiles/profilePayloadUtils";
 import SearchFilters from "./components/SearchFilters";
 import CreateCvView from "./components/CreateCvView";
 import JobSearchCreateCvWorkflowView from "./components/workflows/JobSearchCreateCvWorkflowView";
@@ -83,9 +105,6 @@ export default function App() {
   const [cvIdError, setCvIdError] = useState("");
   const [isSavingCvId, setIsSavingCvId] = useState(false);
   const [cvProfiles, setCvProfiles] = useState([]);
-  const [profilesError, setProfilesError] = useState("");
-  const [profilesLoading, setProfilesLoading] = useState(false);
-  const [isProfileBulkActionBusy, setIsProfileBulkActionBusy] = useState(false);
   const [isCreatingProfileEntry, setIsCreatingProfileEntry] = useState(false);
   const [selectedProfileId, setSelectedProfileId] = useState("");
   const [draftProfileId, setDraftProfileId] = useState("");
@@ -397,27 +416,33 @@ export default function App() {
     sidebarWidthRef.current = sidebarWidth;
   }, [sidebarWidth]);
 
-  const loadProfiles = async (preferredProfileId = "") => {
-    setProfilesLoading(true);
-    setProfilesError("");
-    try {
-      const data = await listCvProfiles();
-      const profiles = Array.isArray(data?.profiles) ? data.profiles : [];
-      setCvProfiles(profiles);
-      syncRerankProfileSelection(profiles);
-      if (!profiles.length) {
-        setSelectedProfileId("");
-      } else if (preferredProfileId && profiles.some((profile) => profile.profile_id === preferredProfileId)) {
-        setSelectedProfileId(preferredProfileId);
-      } else if (!selectedProfileId) {
-        setSelectedProfileId(profiles[0].profile_id || "");
-      }
-    } catch (err) {
-      setProfilesError(err instanceof Error ? err.message : "Failed to load profiles");
-    } finally {
-      setProfilesLoading(false);
+  const {
+    profilesError,
+    profilesLoading,
+    isProfileBulkActionBusy,
+    loadProfiles,
+    handleDeleteProfiles,
+    handleExportProfiles,
+    handleImportProfiles
+  } = useCvProfilesController({
+    setCvProfiles,
+    selectedProfileId,
+    setSelectedProfileId,
+    syncRerankProfileSelection,
+    handleProfilesDeletedFromSearch,
+    setCvEntryError,
+    canonicalSchemaVersion: CANONICAL_SCHEMA_VERSION,
+    onDeletedActiveProfile: () => {
+      clearCreatePreviewState();
+      setSelectedProfileId("");
+      setDraftProfileId("");
+      setIsDraftProfileActive(false);
+      setNewProfileId("");
+      setResumeText("");
+      setApplicationContext({ ...EMPTY_APPLICATION_CONTEXT });
+      setLoadedProfileSnapshot(createEmptyLoadedProfileSnapshot());
     }
-  };
+  });
 
   const handleCvReviewProfileSaved = async (savedProfile) => {
     const savedProfileId = savedProfile?.profile_id || "";
@@ -444,329 +469,11 @@ export default function App() {
     return undefined;
   }, [isCvIdModalOpen]);
 
-  const buildExportFilename = () => {
-    const datePart = new Date().toISOString().slice(0, 10);
-    return `cv-profiles-${datePart}.json`;
-  };
-
-  const downloadJson = (payload, filename) => {
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleDeleteProfiles = async (profileIds = []) => {
-    const ids = Array.from(new Set((profileIds || []).filter(Boolean)));
-    if (!ids.length) return;
-
-    setIsProfileBulkActionBusy(true);
-    setCvEntryError("");
-    try {
-      const failedIds = [];
-      for (const id of ids) {
-        try {
-          await deleteCvProfile(id);
-        } catch (_err) {
-          failedIds.push(id);
-        }
-      }
-
-      const deletedIds = ids.filter((id) => !failedIds.includes(id));
-      if (deletedIds.length) {
-        setCvProfiles((prev) => prev.filter((profile) => !deletedIds.includes(profile.profile_id)));
-      }
-
-      if (deletedIds.includes(selectedProfileId)) {
-        clearCreatePreviewState();
-        setSelectedProfileId("");
-        setDraftProfileId("");
-        setIsDraftProfileActive(false);
-        setNewProfileId("");
-        setResumeText("");
-        setApplicationContext({ ...EMPTY_APPLICATION_CONTEXT });
-        setLoadedProfileSnapshot({
-          profile_id: "",
-          revision: 0,
-          updated_at: null,
-          raw_resume_text: "",
-          ...EMPTY_APPLICATION_CONTEXT
-        });
-      }
-
-      handleProfilesDeletedFromSearch(deletedIds);
-
-      await loadProfiles();
-
-      if (!failedIds.length) {
-        setCvEntryError(`Deleted ${deletedIds.length} profile(s).`);
-      } else {
-        setCvEntryError(
-          `Deleted ${deletedIds.length} profile(s). Failed to delete ${failedIds.length}: ${failedIds.join(", ")}`
-        );
-      }
-    } catch (err) {
-      setCvEntryError(err instanceof Error ? err.message : "Failed to delete selected profiles.");
-    } finally {
-      setIsProfileBulkActionBusy(false);
-    }
-  };
-
-  const handleExportProfiles = async (profileIds = []) => {
-    const ids = Array.from(new Set((profileIds || []).filter(Boolean)));
-    if (!ids.length) return;
-
-    setIsProfileBulkActionBusy(true);
-    setCvEntryError("");
-    try {
-      // Use one list call instead of many profile calls to avoid partial exports when requests fail.
-      const listed = await listCvProfiles();
-      const allProfiles = Array.isArray(listed?.profiles) ? listed.profiles : [];
-      const profileById = new Map(
-        allProfiles
-          .filter((profile) => profile?.profile_id)
-          .map((profile) => [profile.profile_id, profile])
-      );
-      const exported = ids
-        .map((id) => profileById.get(id))
-        .filter(Boolean);
-      const failedIds = ids.filter((id) => !profileById.has(id));
-
-      if (!exported.length) {
-        throw new Error("No profiles could be exported.");
-      }
-
-      downloadJson(
-        {
-          // Keep export format storage-compatible so imports can consume it reliably.
-          profiles: exported
-        },
-        buildExportFilename()
-      );
-
-      if (!failedIds.length) {
-        setCvEntryError(`Exported ${exported.length} profile(s).`);
-      } else {
-        setCvEntryError(
-          `Exported ${exported.length} profile(s). Failed to export ${failedIds.length}: ${failedIds.join(", ")}`
-        );
-      }
-    } catch (err) {
-      setCvEntryError(err instanceof Error ? err.message : "Failed to export profiles.");
-    } finally {
-      setIsProfileBulkActionBusy(false);
-    }
-  };
-
-  const handleImportProfiles = async ({ profiles = [], overwriteExisting = true } = {}) => {
-    const incomingProfiles = Array.isArray(profiles) ? profiles : [];
-    if (!incomingProfiles.length) return;
-
-    const resolveImportedProfileId = (profile) =>
-      String(
-        profile?.profile_id
-        || profile?.profileId
-        || profile?.id
-        || profile?.name
-        || ""
-      ).trim();
-
-    const normalizeImportedProfile = ({ profilePayload, profileId, existing }) => {
-      const candidate = profilePayload?.profile && typeof profilePayload.profile === "object"
-        ? profilePayload.profile
-        : profilePayload;
-
-      const normalizedData = candidate?.data && typeof candidate.data === "object" && !Array.isArray(candidate.data)
-        ? candidate.data
-        : (existing?.data || {});
-
-      const normalizedAudit = candidate?.audit && typeof candidate.audit === "object" && !Array.isArray(candidate.audit)
-        ? candidate.audit
-        : (existing?.audit || {});
-
-      return {
-        schema_version: candidate?.schema_version || existing?.schema_version || CANONICAL_SCHEMA_VERSION,
-        profile_id: profileId,
-        revision: existing ? (existing.revision ?? 0) : 0,
-        template_id: candidate?.template_id || existing?.template_id || "awesomecv",
-        data: normalizedData,
-        company: candidate?.company ?? existing?.company ?? null,
-        application_status: candidate?.application_status ?? existing?.application_status ?? null,
-        application_date: candidate?.application_date ?? existing?.application_date ?? null,
-        job_title: candidate?.job_title ?? existing?.job_title ?? null,
-        job_description: candidate?.job_description ?? existing?.job_description ?? null,
-        job_url: candidate?.job_url ?? existing?.job_url ?? null,
-        theme_color: candidate?.theme_color ?? existing?.theme_color ?? null,
-        show_profile_image: typeof candidate?.show_profile_image === "boolean"
-          ? candidate.show_profile_image
-          : (existing?.show_profile_image ?? true),
-        header_text_align: candidate?.header_text_align ?? existing?.header_text_align ?? "right",
-        header_title_size: candidate?.header_title_size ?? existing?.header_title_size ?? "Huge",
-        header_subtitle_size: candidate?.header_subtitle_size ?? existing?.header_subtitle_size ?? "Large",
-        parent_profile_id: candidate?.parent_profile_id ?? existing?.parent_profile_id ?? null,
-        lineage_root_profile_id: candidate?.lineage_root_profile_id ?? existing?.lineage_root_profile_id ?? profileId,
-        lineage_depth: Number.isFinite(candidate?.lineage_depth)
-          ? Number(candidate.lineage_depth)
-          : (existing?.lineage_depth ?? 0),
-        branch_reason: candidate?.branch_reason ?? existing?.branch_reason ?? null,
-        section_order: Array.isArray(candidate?.section_order)
-          ? candidate.section_order
-          : (existing?.section_order || []),
-        sidebar_section_order: Array.isArray(candidate?.sidebar_section_order)
-          ? candidate.sidebar_section_order
-          : (existing?.sidebar_section_order || []),
-        main_section_order: Array.isArray(candidate?.main_section_order)
-          ? candidate.main_section_order
-          : (existing?.main_section_order || []),
-        section_labels: candidate?.section_labels && typeof candidate.section_labels === "object" && !Array.isArray(candidate.section_labels)
-          ? candidate.section_labels
-          : (existing?.section_labels || undefined),
-        audit: normalizedAudit
-      };
-    };
-
-    setIsProfileBulkActionBusy(true);
-    setCvEntryError("");
-    try {
-      const uniqueById = new Map();
-      incomingProfiles.forEach((profile) => {
-        const id = resolveImportedProfileId(profile);
-        if (!id) return;
-        uniqueById.set(id, { ...profile, profile_id: id });
-      });
-
-      const stats = {
-        created: 0,
-        updated: 0,
-        skipped: 0,
-        failed: 0
-      };
-
-      for (const [profileId, profilePayload] of uniqueById.entries()) {
-        let existing = null;
-        try {
-          existing = await getCvProfile(profileId);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : "";
-          if (!message.includes("status 404")) {
-            throw err;
-          }
-        }
-
-        if (existing && !overwriteExisting) {
-          stats.skipped += 1;
-          continue;
-        }
-
-        const savePayload = normalizeImportedProfile({
-          profilePayload,
-          profileId,
-          existing
-        });
-
-        try {
-          await saveCvProfile(profileId, savePayload);
-          if (existing) {
-            stats.updated += 1;
-          } else {
-            stats.created += 1;
-          }
-        } catch (_err) {
-          stats.failed += 1;
-        }
-      }
-
-      await loadProfiles();
-      setCvEntryError(
-        `Import done. Created: ${stats.created}, updated: ${stats.updated}, skipped: ${stats.skipped}, failed: ${stats.failed}.`
-      );
-    } catch (err) {
-      setCvEntryError(err instanceof Error ? err.message : "Failed to import profiles.");
-    } finally {
-      setIsProfileBulkActionBusy(false);
-    }
-  };
-
-  const contextFromProfile = (profile) => ({
-    company: profile?.company || "",
-    application_status: profile?.application_status || "",
-    application_date: profile?.application_date || "",
-    job_title: profile?.job_title || "",
-    job_description: profile?.job_description || "",
-    job_url: profile?.job_url || "",
-    profile_image: profile?.data?.profile_image || "",
-    theme_color: profile?.theme_color || "",
-    show_profile_image: profile?.show_profile_image !== false,
-    header_text_align: profile?.header_text_align || "right",
-    header_title_size: profile?.header_title_size || "Huge",
-    header_subtitle_size: profile?.header_subtitle_size || "Large"
+  const buildApplicationContextDiff = () => buildProfileApplicationContextDiff({
+    resumeText,
+    applicationContext,
+    loadedProfileSnapshot
   });
-
-  const contextSnapshotFromProfile = (profile) => ({
-    profile_id: profile?.profile_id || "",
-    revision: profile?.revision ?? 0,
-    updated_at: profile?.updated_at || null,
-    raw_resume_text: profile?.audit?.raw_resume_text || "",
-    ...contextFromProfile(profile)
-  });
-
-  const buildApplicationContextDiff = () => {
-    const current = {
-      raw_resume_text: resumeText,
-      ...applicationContext
-    };
-    const previous = {
-      raw_resume_text: loadedProfileSnapshot.raw_resume_text || "",
-      company: loadedProfileSnapshot.company || "",
-      application_status: loadedProfileSnapshot.application_status || "",
-      application_date: loadedProfileSnapshot.application_date || "",
-      job_title: loadedProfileSnapshot.job_title || "",
-      job_description: loadedProfileSnapshot.job_description || "",
-      job_url: loadedProfileSnapshot.job_url || "",
-      profile_image: loadedProfileSnapshot.profile_image || "",
-      theme_color: loadedProfileSnapshot.theme_color || "",
-      show_profile_image: loadedProfileSnapshot.show_profile_image !== false,
-      header_text_align: loadedProfileSnapshot.header_text_align || "right",
-      header_title_size: loadedProfileSnapshot.header_title_size || "Huge",
-      header_subtitle_size: loadedProfileSnapshot.header_subtitle_size || "Large"
-    };
-
-    const config = [
-      ["raw_resume_text", "CV text"],
-      ["company", "Company"],
-      ["application_status", "Application status"],
-      ["application_date", "Application date"],
-      ["job_title", "Job title"],
-      ["job_description", "Job description"],
-      ["job_url", "Job URL"],
-      ["profile_image", "Profile image"],
-      ["theme_color", "Theme color"],
-      ["show_profile_image", "Show profile image"],
-      ["header_text_align", "Header text align"],
-      ["header_title_size", "Header title size"],
-      ["header_subtitle_size", "Header subtitle size"]
-    ];
-
-    const topLevelChanges = config
-      .filter(([key]) => JSON.stringify(previous[key] || "") !== JSON.stringify(current[key] || ""))
-      .map(([key, label]) => ({
-        key,
-        label,
-        oldValue: String(previous[key] || "(empty)"),
-        newValue: String(current[key] || "(empty)")
-      }));
-
-    return {
-      topLevelChanges,
-      totals: { added: 0, removed: 0, updated: topLevelChanges.length },
-      hasChanges: topLevelChanges.length > 0
-    };
-  };
 
   useEffect(() => {
     if (activeView === "create") {
@@ -1039,80 +746,12 @@ export default function App() {
     setIsJobReviewReadOnly(false);
   };
 
-  const sanitizeProfileId = (value) => {
-    const normalized = (value || "").trim().toLowerCase();
-    const safe = normalized
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-    return safe || `profile-${Date.now()}`;
-  };
-
-  const buildCvIdSuggestion = ({ jobTitle, existingIds }) => {
-    const normalizedIds = new Set((existingIds || []).map((id) => String(id || "").toLowerCase()));
-    const baseSlug = String(jobTitle || "")
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-    const prefix = baseSlug ? `${baseSlug}-v` : "v";
-    let version = 2;
-    let candidate = `${prefix}${version}`;
-    while (normalizedIds.has(candidate.toLowerCase())) {
-      version += 1;
-      candidate = `${prefix}${version}`;
-    }
-    return candidate;
-  };
-
-
-  const escapeRegexLiteral = (value) => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-  const buildJobDraftProfileId = ({ baseId, company }) => {
-    const companySlug = sanitizeProfileId(company || "company");
-    const base = sanitizeProfileId(baseId || "profile")
-      .replace(/-v\d+$/, "")
-      .replace(new RegExp(`-${escapeRegexLiteral(companySlug)}-draft(-v\\d+)?$`), "");
-    return `${base}-${companySlug}-draft`;
-  };
-
-  const buildNextAvailableDraftProfileId = (draftBaseId) => {
-    const normalizedBase = sanitizeProfileId(draftBaseId || "profile-draft");
-    const exactExists = cvProfiles.some((profile) => profile.profile_id === normalizedBase);
-    if (!exactExists) return normalizedBase;
-    const suffixPattern = new RegExp(`^${escapeRegexLiteral(normalizedBase)}-v(\\d+)$`);
-    const versions = cvProfiles
-      .map((profile) => {
-        const match = suffixPattern.exec(profile.profile_id || "");
-        return match ? Number(match[1]) : null;
-      })
-      .filter((value) => Number.isFinite(value));
-    const maxVersion = versions.length ? Math.max(...versions) : 1;
-    return `${normalizedBase}-v${Math.max(2, maxVersion + 1)}`;
-  };
-
-  const normalizeContextValue = (value) => String(value || "").trim().toLowerCase();
-
-  const doesLoadedProfileMatchCurrentJob = () => {
-    if (!selectedJob || !selectedProfileId) return false;
-    const loadedUrl = normalizeContextValue(loadedProfileSnapshot.job_url);
-    const currentUrl = normalizeContextValue(selectedJob.job_url || applicationContext.job_url);
-    if (loadedUrl && currentUrl) {
-      return loadedUrl === currentUrl;
-    }
-    const loadedTitle = normalizeContextValue(loadedProfileSnapshot.job_title);
-    const loadedCompany = normalizeContextValue(loadedProfileSnapshot.company);
-    const currentTitle = normalizeContextValue(selectedJob.title || applicationContext.job_title);
-    const currentCompany = normalizeContextValue(selectedJob.company || applicationContext.company);
-    return Boolean(loadedTitle && loadedCompany && loadedTitle === currentTitle && loadedCompany === currentCompany);
-  };
-
-  const buildCompanySuffixProfileId = ({ baseId, company }) => {
-    const base = sanitizeProfileId(baseId || "profile");
-    const companySlug = sanitizeProfileId(company || "company");
-    const withoutTrailingVersion = base.replace(/-v\d+$/, "");
-    const withoutCompanySuffix = withoutTrailingVersion.replace(new RegExp(`-${companySlug}$`), "");
-    return `${withoutCompanySuffix}-${companySlug}`;
-  };
+  const doesLoadedProfileMatchCurrentJob = () => doesProfileMatchJobContext({
+    selectedJob,
+    selectedProfileId,
+    loadedProfileSnapshot,
+    applicationContext
+  });
 
   const openCvIdModal = ({ canonical, templateId, outputLanguage, jobContext }) => {
     const existingIds = cvProfiles.map((profile) => profile.profile_id);
@@ -1205,28 +844,6 @@ export default function App() {
     }
   };
 
-  const buildLineageFields = ({ sourceProfile, nextProfileId, branchReason = null }) => {
-    const targetId = sanitizeProfileId(nextProfileId || "profile");
-    if (!sourceProfile?.profile_id) {
-      return {
-        parent_profile_id: null,
-        lineage_root_profile_id: targetId,
-        lineage_depth: 0,
-        branch_reason: branchReason
-      };
-    }
-    const sourceRoot = sourceProfile.lineage_root_profile_id || sourceProfile.profile_id;
-    const sourceDepth = Number.isFinite(sourceProfile.lineage_depth)
-      ? Number(sourceProfile.lineage_depth)
-      : 0;
-    return {
-      parent_profile_id: sourceProfile.profile_id,
-      lineage_root_profile_id: sourceRoot,
-      lineage_depth: sourceDepth + 1,
-      branch_reason: branchReason || "manual-branch"
-    };
-  };
-
   const handleCreateNewEntry = async ({ profileName } = {}) => {
     const nextProfileId = sanitizeProfileId(profileName || "");
     if (!nextProfileId) {
@@ -1241,34 +858,15 @@ export default function App() {
     setCvEntryError("");
     clearCreatePreviewState();
     try {
-      const payload = {
-        schema_version: CANONICAL_SCHEMA_VERSION,
-        profile_id: nextProfileId,
-        revision: 0,
-        template_id: cvTemplateId || "awesomecv",
-        company: applicationContext.company || null,
-        application_status: applicationContext.application_status || null,
-        application_date: applicationContext.application_date || null,
-        job_title: applicationContext.job_title || null,
-        job_description: applicationContext.job_description || null,
-        job_url: applicationContext.job_url || null,
-        theme_color: normalizeHexColor(applicationContext.theme_color, null),
-        show_profile_image: applicationContext.show_profile_image !== false,
-        header_text_align: applicationContext.header_text_align || "right",
-        header_title_size: applicationContext.header_title_size || "Huge",
-        header_subtitle_size: applicationContext.header_subtitle_size || "Large",
-        parent_profile_id: null,
-        lineage_root_profile_id: nextProfileId,
-        lineage_depth: 0,
-        branch_reason: null,
-        data: mergeProfileImageIntoData({}, applicationContext.profile_image),
-        section_order: [],
-        sidebar_section_order: [],
-        main_section_order: [],
-        audit: {
-          raw_resume_text: resumeText || ""
-        }
-      };
+      const payload = buildCreateNewEntryPayload({
+        nextProfileId,
+        cvTemplateId,
+        canonicalSchemaVersion: CANONICAL_SCHEMA_VERSION,
+        applicationContext,
+        resumeText,
+        normalizeHexColorFn: normalizeHexColor,
+        mergeProfileImageIntoDataFn: mergeProfileImageIntoData
+      });
       const saved = await saveCvProfile(nextProfileId, payload);
       upsertCvProfileInList(saved);
       setSelectedProfileId(saved.profile_id);
@@ -1377,20 +975,6 @@ export default function App() {
     } finally {
       setIsLoadingProfile(false);
     }
-  };
-
-  const buildNextVersionedProfileId = (profileId) => {
-    const normalized = (profileId || "profile").trim();
-    const base = normalized.replace(/-v\d+$/, "") || "profile";
-    const regex = new RegExp(`^${base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-v(\\d+)$`);
-    const versionCandidates = cvProfiles
-      .map((profile) => {
-        const match = regex.exec(profile.profile_id || "");
-        return match ? Number(match[1]) : null;
-      })
-      .filter((value) => Number.isFinite(value));
-    const maxVersion = versionCandidates.length ? Math.max(...versionCandidates) : (normalized === base ? 1 : 0);
-    return `${base}-v${Math.max(2, maxVersion + 1)}`;
   };
 
   const handleProfileRowSelect = async (profile) => {
@@ -1507,32 +1091,15 @@ export default function App() {
         main_section_order: existing.main_section_order
       };
 
-      const payload = {
-        ...basePayload,
-        profile_id: currentProfileId,
-        revision: existing.revision,
-        company: applicationContext.company || null,
-        application_status: applicationContext.application_status || null,
-        application_date: applicationContext.application_date || null,
-        job_title: applicationContext.job_title || null,
-        job_description: applicationContext.job_description || null,
-        job_url: applicationContext.job_url || null,
-        theme_color: normalizeHexColor(applicationContext.theme_color, null),
-        show_profile_image: applicationContext.show_profile_image !== false,
-        header_text_align: applicationContext.header_text_align || "right",
-        header_title_size: applicationContext.header_title_size || "Huge",
-        header_subtitle_size: applicationContext.header_subtitle_size || "Large",
-        parent_profile_id: basePayload.parent_profile_id ?? existing.parent_profile_id ?? null,
-        lineage_root_profile_id: basePayload.lineage_root_profile_id ?? existing.lineage_root_profile_id ?? existing.profile_id,
-        lineage_depth: basePayload.lineage_depth ?? existing.lineage_depth ?? 0,
-        branch_reason: basePayload.branch_reason ?? existing.branch_reason ?? null,
-        audit: {
-          ...(existing.audit || {}),
-          ...(basePayload.audit || {}),
-          raw_resume_text: resumeText
-        },
-        data: mergeProfileImageIntoData(basePayload.data || existing.data, applicationContext.profile_image)
-      };
+      const payload = buildSaveAndSwitchPayload({
+        existing,
+        basePayload,
+        currentProfileId,
+        applicationContext,
+        resumeText,
+        normalizeHexColorFn: normalizeHexColor,
+        mergeProfileImageIntoDataFn: mergeProfileImageIntoData
+      });
 
       const saved = await saveCvProfile(payload.profile_id, payload);
       upsertCvProfileInList(saved);
@@ -1570,50 +1137,16 @@ export default function App() {
       }
 
       const isCreate = !existing;
-      const basePayload = existing || {
-        schema_version: CANONICAL_SCHEMA_VERSION,
-        profile_id: targetProfileId,
-        revision: 0,
-        template_id: cvTemplateId || "awesomecv",
-        parent_profile_id: null,
-        lineage_root_profile_id: targetProfileId,
-        lineage_depth: 0,
-        branch_reason: null,
-        data: {},
-        section_order: [],
-        sidebar_section_order: [],
-        main_section_order: [],
-        audit: {}
-      };
-      const payload = {
-        ...basePayload,
-        profile_id: targetProfileId,
-        revision: basePayload.revision ?? 0,
-        template_id: cvTemplateId || basePayload.template_id || "awesomecv",
-        company: applicationContext.company || null,
-        application_status: applicationContext.application_status || null,
-        application_date: applicationContext.application_date || null,
-        job_title: applicationContext.job_title || null,
-        job_description: applicationContext.job_description || null,
-        job_url: applicationContext.job_url || null,
-        theme_color: normalizeHexColor(applicationContext.theme_color, null),
-        show_profile_image: applicationContext.show_profile_image !== false,
-        header_text_align: applicationContext.header_text_align || "right",
-        header_title_size: applicationContext.header_title_size || "Huge",
-        header_subtitle_size: applicationContext.header_subtitle_size || "Large",
-        parent_profile_id: basePayload.parent_profile_id ?? null,
-        lineage_root_profile_id: basePayload.lineage_root_profile_id ?? targetProfileId,
-        lineage_depth: basePayload.lineage_depth ?? 0,
-        branch_reason: basePayload.branch_reason ?? null,
-        section_order: basePayload.section_order || [],
-        sidebar_section_order: basePayload.sidebar_section_order || [],
-        main_section_order: basePayload.main_section_order || [],
-        audit: {
-          ...(basePayload.audit || {}),
-          raw_resume_text: resumeText
-        },
-        data: mergeProfileImageIntoData(basePayload.data, applicationContext.profile_image)
-      };
+      const payload = buildUpdateApplicationProfilePayload({
+        existing,
+        targetProfileId,
+        cvTemplateId,
+        canonicalSchemaVersion: CANONICAL_SCHEMA_VERSION,
+        applicationContext,
+        resumeText,
+        normalizeHexColorFn: normalizeHexColor,
+        mergeProfileImageIntoDataFn: mergeProfileImageIntoData
+      });
       const saved = await saveCvProfile(targetProfileId, payload);
       upsertCvProfileInList(saved);
       setResumeText(saved.audit?.raw_resume_text || "");
@@ -1662,7 +1195,10 @@ export default function App() {
             baseId: selectedProfileId,
             company: selectedJob?.company || applicationContext.company || "company"
           })
-          : buildNextVersionedProfileId(selectedProfileId))
+          : buildNextVersionedProfileId({
+            profileId: selectedProfileId,
+            existingIds: cvProfiles.map((profile) => profile.profile_id)
+          }))
         : newProfileId.trim();
       const nextProfileId = sanitizeProfileId(requestedProfileId || fallbackProfileId);
 
@@ -1682,25 +1218,13 @@ export default function App() {
         throw new Error("Target profile already exists. Choose a different name or confirm overwrite.");
       }
 
-      const isBranchFromSource = Boolean(
-        existing?.profile_id &&
-        nextProfileId !== existing.profile_id &&
-        !existingTarget
-      );
-      const lineageFields = existingTarget
-        ? {
-          parent_profile_id: existingTarget.parent_profile_id ?? null,
-          lineage_root_profile_id: existingTarget.lineage_root_profile_id ?? existingTarget.profile_id,
-          lineage_depth: existingTarget.lineage_depth ?? 0,
-          branch_reason: existingTarget.branch_reason ?? null
-        }
-        : isBranchFromSource
-          ? buildLineageFields({
-            sourceProfile: existing,
-            nextProfileId,
-            branchReason: isJobWorkflow ? "job-tailor" : "manual-tailor"
-          })
-          : buildLineageFields({ sourceProfile: null, nextProfileId, branchReason: null });
+      const lineageFields = resolveRemapLineageFields({
+        existingTarget,
+        existing,
+        nextProfileId,
+        isJobWorkflow,
+        sanitizeProfileIdFn: sanitizeProfileId
+      });
 
       const effectiveJobTitle = applicationContext.job_title || existing?.job_title || existing?.audit?.final_template_payload?.job_title || "";
       const effectiveCompany = applicationContext.company || existing?.company || "";
@@ -1717,34 +1241,22 @@ export default function App() {
         job_description: effectiveJobDescription || undefined,
         job_url: effectiveJobUrl || undefined
       });
-      const payload = {
-        schema_version: parsed.schema_version || existing?.schema_version || "v1",
-        profile_id: nextProfileId,
-        revision: existingTarget?.revision ?? 0,
-        template_id: existing?.template_id || cvTemplateId,
-        company: effectiveCompany || null,
-        application_status: applicationContext.application_status || existing?.application_status || null,
-        application_date: applicationContext.application_date || existing?.application_date || null,
-        job_title: effectiveJobTitle || null,
-        job_description: effectiveJobDescription || null,
-        job_url: effectiveJobUrl || null,
-        theme_color: normalizeHexColor(applicationContext.theme_color || existing?.theme_color, null),
-        show_profile_image: applicationContext.show_profile_image !== false,
-        header_text_align: applicationContext.header_text_align || existing?.header_text_align || "right",
-        header_title_size: applicationContext.header_title_size || existing?.header_title_size || "Huge",
-        header_subtitle_size: applicationContext.header_subtitle_size || existing?.header_subtitle_size || "Large",
-        ...lineageFields,
-        data: mergeProfileImageIntoData(parsed.data, applicationContext.profile_image || existing?.data?.profile_image),
-        section_order: existing?.section_order || parsed.section_order || [],
-        sidebar_section_order: existing?.sidebar_section_order || parsed.sidebar_section_order || [],
-        main_section_order: existing?.main_section_order || parsed.main_section_order || [],
-        audit: {
-          ...(existing?.audit || {}),
-          raw_resume_text: resumeText,
-          parsed_canonical: parsed.data,
-          edited_canonical: parsed.data
-        }
-      };
+      const payload = buildRemapProfilePayload({
+        parsed,
+        existing,
+        existingTarget,
+        nextProfileId,
+        cvTemplateId,
+        applicationContext,
+        resumeText,
+        effectiveJobTitle,
+        effectiveCompany,
+        effectiveJobDescription,
+        effectiveJobUrl,
+        lineageFields,
+        normalizeHexColorFn: normalizeHexColor,
+        mergeProfileImageIntoDataFn: mergeProfileImageIntoData
+      });
       const saved = await saveCvProfile(nextProfileId, payload);
       upsertCvProfileInList(saved);
       setSelectedProfileId(saved.profile_id);
@@ -1953,10 +1465,13 @@ export default function App() {
 
   const openJobEditDecisionDialog = () => {
     const suggestedDraftId = buildNextAvailableDraftProfileId(
-      buildJobDraftProfileId({
-        baseId: selectedProfileId || newProfileId || "profile",
-        company: selectedJob?.company || applicationContext.company || "company"
-      })
+      {
+        draftBaseId: buildJobDraftProfileId({
+          baseId: selectedProfileId || newProfileId || "profile",
+          company: selectedJob?.company || applicationContext.company || "company"
+        }),
+        existingIds: cvProfiles.map((profile) => profile.profile_id)
+      }
     );
     setJobEditDecisionDialog({
       isOpen: true,
@@ -2020,31 +1535,20 @@ export default function App() {
     try {
       const sourceProfile = await getCvProfile(selectedProfileId);
 
-      const payload = {
-        ...sourceProfile,
-        profile_id: nextDraftId,
-        revision: 0,
-        company: selectedJob.company || applicationContext.company || sourceProfile.company || null,
-        application_status: applicationContext.application_status || "",
-        application_date: applicationContext.application_date || null,
-        job_title: selectedJob.title || applicationContext.job_title || sourceProfile.job_title || null,
-        job_description: selectedJob.description || applicationContext.job_description || sourceProfile.job_description || null,
-        job_url: selectedJob.job_url || applicationContext.job_url || sourceProfile.job_url || null,
-        theme_color: normalizeHexColor(applicationContext.theme_color || sourceProfile.theme_color, null),
-        show_profile_image: applicationContext.show_profile_image !== false,
-        header_text_align: applicationContext.header_text_align || sourceProfile.header_text_align || "right",
-        header_title_size: applicationContext.header_title_size || sourceProfile.header_title_size || "Huge",
-        header_subtitle_size: applicationContext.header_subtitle_size || sourceProfile.header_subtitle_size || "Large",
-        ...buildLineageFields({
+      const payload = buildJobEditDraftPayload({
+        sourceProfile,
+        nextDraftId,
+        selectedJob,
+        applicationContext,
+        resumeText,
+        normalizeHexColorFn: normalizeHexColor,
+        lineageFields: buildLineageFields({
           sourceProfile,
           nextProfileId: nextDraftId,
-          branchReason: "job-edit-draft"
-        }),
-        audit: {
-          ...(sourceProfile.audit || {}),
-          raw_resume_text: resumeText || sourceProfile.audit?.raw_resume_text || ""
-        }
-      };
+          branchReason: "job-edit-draft",
+          sanitizeProfileIdFn: sanitizeProfileId
+        })
+      });
 
       const saved = await saveCvProfile(nextDraftId, payload);
       upsertCvProfileInList(saved);
