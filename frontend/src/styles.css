@@ -18,6 +18,71 @@ body {
   min-height: 100vh;
 }
 
+.auth-gate-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-gate-card {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 10px;
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid #e6e6e6;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.08);
+}
+
+.auth-gate-card h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.auth-gate-card p {
+  margin: 0 0 6px;
+  color: #4b5563;
+}
+
+.auth-gate-card label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.auth-gate-card input {
+  border: 1px solid #d6d6d6;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.auth-gate-card button {
+  margin-top: 6px;
+  border: none;
+  border-radius: 10px;
+  background: #8a3b00;
+  color: #ffffff;
+  padding: 10px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-gate-card button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.auth-error {
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
 .app-rail {
   background: rgba(255, 255, 255, 0.9);
   border-right: 1px solid #e6e6e6;
@@ -48,6 +113,11 @@ body {
 .rail-button.is-active {
   background: #fff2dd;
   color: #8a3b00;
+}
+
+.rail-logout {
+  background: #fff4f2;
+  color: #942400;
 }
 
 .rail-toggle {

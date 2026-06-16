@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  fetchAuthStatus,
   fetchHealth,
   getCvProfile,
+  loginWithPassword,
+  logoutSession,
   renderCvFromTemplate,
   uploadCvProfileImage
 } from "./api/llm";
@@ -118,6 +121,14 @@ export default function App() {
   const [isPdfDownloading, setIsPdfDownloading] = useState(false);
   const [pendingPreviewSaveCount, setPendingPreviewSaveCount] = useState(0);
   const [cvThemeColors, setCvThemeColors] = useState(DEFAULT_TEMPLATE_THEME_COLORS);
+  const [authEnabled, setAuthEnabled] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
+  const canAccessProtectedApi = !authEnabled || isAuthenticated;
 
   const pdfPreviewRequestVersionRef = useRef(0);
   const clearPreviewTrackingRef = useRef(null);
@@ -367,11 +378,29 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (!canAccessProtectedApi) return;
     loadProfiles();
-  }, []);
+  }, [canAccessProtectedApi]);
 
   useEffect(() => {
     let cancelled = false;
+
+    const loadAuth = async () => {
+      try {
+        const authStatus = await fetchAuthStatus();
+        if (cancelled) return;
+        const enabled = authStatus?.auth_enabled === true;
+        setAuthEnabled(enabled);
+        setIsAuthenticated(enabled ? authStatus?.authenticated === true : true);
+      } catch (_err) {
+        if (cancelled) return;
+        setAuthEnabled(false);
+        setIsAuthenticated(true);
+      } finally {
+        if (!cancelled) setIsAuthChecking(false);
+      }
+    };
+
     const loadHealth = async () => {
       try {
         const health = await fetchHealth();
@@ -389,6 +418,7 @@ export default function App() {
       }
     };
 
+    loadAuth();
     loadHealth();
     return () => {
       cancelled = true;
@@ -403,15 +433,50 @@ export default function App() {
 
   useEffect(() => {
     if (activeView === "create") {
+      if (!canAccessProtectedApi) return;
       loadProfiles();
     }
-  }, [activeView]);
+  }, [activeView, canAccessProtectedApi]);
 
   useEffect(() => {
     if (activeView === "find" && cvProfiles.length === 0 && !profilesLoading) {
+      if (!canAccessProtectedApi) return;
       loadProfiles();
     }
-  }, [activeView, cvProfiles.length, profilesLoading]);
+  }, [activeView, cvProfiles.length, profilesLoading, canAccessProtectedApi]);
+
+  const handleAuthLogin = async (event) => {
+    event.preventDefault();
+    setIsAuthSubmitting(true);
+    setAuthError("");
+    try {
+      const result = await loginWithPassword(authUsername.trim(), authPassword);
+      if (result?.authenticated) {
+        setIsAuthenticated(true);
+        setAuthPassword("");
+        loadProfiles();
+      } else {
+        setAuthError("Login failed. Please verify your credentials.");
+      }
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  };
+
+  const handleAuthLogout = async () => {
+    try {
+      await logoutSession();
+    } catch (_err) {
+      // Keep UI responsive even if logout request fails.
+    }
+    setIsAuthenticated(false);
+    setCvProfiles([]);
+    setSelectedProfileId("");
+    setCvReview(null);
+    setSelectedJob(null);
+  };
 
   const handleStartCvReview = ({ canonical, job, templateId, docType, outputLanguage }) => {
     pdfPreviewRequestVersionRef.current += 1;
@@ -1049,6 +1114,46 @@ export default function App() {
     onBeforeStepLeave: handleCreateStepLeave
   };
 
+  if (isAuthChecking) {
+    return (
+      <Box className="auth-gate-shell">
+        <div className="auth-gate-card">Checking authentication status...</div>
+      </Box>
+    );
+  }
+
+  if (authEnabled && !isAuthenticated) {
+    return (
+      <Box className="auth-gate-shell">
+        <form className="auth-gate-card" onSubmit={handleAuthLogin}>
+          <h1>Sign in to Job Agent</h1>
+          <p>Private beta access is enabled for this environment.</p>
+          <label htmlFor="authUsername">Username</label>
+          <input
+            id="authUsername"
+            value={authUsername}
+            onChange={(event) => setAuthUsername(event.target.value)}
+            autoComplete="username"
+            required
+          />
+          <label htmlFor="authPassword">Password</label>
+          <input
+            id="authPassword"
+            type="password"
+            value={authPassword}
+            onChange={(event) => setAuthPassword(event.target.value)}
+            autoComplete="current-password"
+            required
+          />
+          {authError ? <div className="auth-error">{authError}</div> : null}
+          <button type="submit" disabled={isAuthSubmitting}>
+            {isAuthSubmitting ? "Signing in..." : "Sign in"}
+          </button>
+        </form>
+      </Box>
+    );
+  }
+
   if (showPanel) {
     return (
       <>
@@ -1078,6 +1183,16 @@ export default function App() {
         minHeight="100vh"
       >
         <GridItem className="app-rail">
+          {authEnabled && (
+            <button
+              type="button"
+              className="rail-button rail-logout"
+              onClick={handleAuthLogout}
+            >
+              <span className="rail-icon">🔐</span>
+              <span>Logout</span>
+            </button>
+          )}
           {isScrapingEnabled && (
             <button
               type="button"
