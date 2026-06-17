@@ -63,7 +63,7 @@ fi
 echo "OK /api/health response"
 
 echo "[4/5] Checking CORS denies disallowed origin"
-cors_disallowed="$(curl "${curl_args[@]}" -I -H "Origin: ${DISALLOWED_ORIGIN}" "${api_health}" | tr -d '\r' | awk -F': ' 'tolower($1)=="access-control-allow-origin" {print $2}' | head -n1 || true)"
+cors_disallowed="$(curl "${curl_args[@]}" -D - -o /dev/null -H "Origin: ${DISALLOWED_ORIGIN}" "${api_health}" | tr -d '\r' | awk -F': ' 'tolower($1)=="access-control-allow-origin" {print $2}' | head -n1 || true)"
 if [[ "${cors_disallowed}" == "${DISALLOWED_ORIGIN}" ]]; then
   echo "Disallowed origin was accepted: ${DISALLOWED_ORIGIN}"
   exit 1
@@ -72,7 +72,7 @@ echo "OK disallowed origin was not echoed"
 
 echo "[5/5] Checking CORS allows configured origin (optional)"
 if [[ -n "${ALLOWED_ORIGIN}" ]]; then
-  cors_allowed="$(curl "${curl_args[@]}" -I -H "Origin: ${ALLOWED_ORIGIN}" "${api_health}" | tr -d '\r' | awk -F': ' 'tolower($1)=="access-control-allow-origin" {print $2}' | head -n1 || true)"
+  cors_allowed="$(curl "${curl_args[@]}" -D - -o /dev/null -H "Origin: ${ALLOWED_ORIGIN}" "${api_health}" | tr -d '\r' | awk -F': ' 'tolower($1)=="access-control-allow-origin" {print $2}' | head -n1 || true)"
   if [[ "${cors_allowed}" != "${ALLOWED_ORIGIN}" ]]; then
     echo "Expected allowed origin ${ALLOWED_ORIGIN}, got: ${cors_allowed:-<none>}"
     exit 1

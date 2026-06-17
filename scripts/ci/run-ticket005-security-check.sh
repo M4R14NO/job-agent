@@ -47,8 +47,11 @@ start_local_smoke_stack() {
     return 1
   fi
 
+  local local_allowed_origin="${ALLOWED_ORIGIN:-https://localhost:8443}"
+
   export AUTH_ENABLED="0"
   export ENABLE_SCRAPING="0"
+  export CORS_ALLOW_ORIGINS="${local_allowed_origin}"
 
   python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 >"${BACKEND_LOG}" 2>&1 &
   backend_pid="$!"
@@ -89,9 +92,7 @@ start_local_smoke_stack() {
   export CURL_INSECURE="1"
   export REDIRECT_HTTP_URL="http://localhost:8080"
   STAGING_URL="https://localhost:8443"
-  if [[ -z "${ALLOWED_ORIGIN}" ]]; then
-    ALLOWED_ORIGIN="https://localhost:8443"
-  fi
+  ALLOWED_ORIGIN="${local_allowed_origin}"
 
   echo "Local smoke stack is ready"
   echo "STAGING_URL=${STAGING_URL}"
