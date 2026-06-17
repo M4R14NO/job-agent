@@ -1,0 +1,30 @@
+{
+	# Admin endpoint is optional; disable in production if not needed.
+	admin off
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Baseline security headers for all responses.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Content-Security-Policy "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+	}
+
+	@api path /api/*
+	handle @api {
+		uri strip_prefix /api
+		reverse_proxy {$BACKEND_UPSTREAM}
+	}
+
+	handle {
+		reverse_proxy {$FRONTEND_UPSTREAM}
+	}
+}
+
+http://{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}

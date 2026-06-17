@@ -1,0 +1,29 @@
+{
+	local_certs
+	admin off
+}
+
+https://localhost:8443 {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Content-Security-Policy "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+	}
+
+	@api path /api/*
+	handle @api {
+		uri strip_prefix /api
+		reverse_proxy localhost:8000
+	}
+
+	handle {
+		reverse_proxy localhost:4173
+	}
+}
+
+http://localhost:8080 {
+	redir https://localhost:8443{uri} permanent
+}

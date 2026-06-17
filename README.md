@@ -78,6 +78,79 @@ Save CV profiles, edit section content in detail (for example, role history), an
    uvicorn backend.app.main:app --reload --port 8000
    ```
 
+## Local auth setup (Ticket 004)
+
+Local development now supports cookie-based authentication.
+
+1. Create your local auth env file:
+
+   ```bash
+   cp backend/.env.local.example backend/.env.local
+   ```
+
+2. Start backend via VS Code task (recommended):
+
+   - `backend: dev server (scraping disabled)`
+   - or `backend: dev server (scraping enabled)`
+
+   Both tasks automatically source `backend/.env.local`.
+
+3. Default local credentials (from example file):
+
+   - Username: `devadmin`
+   - Password: `localdev123`
+
+4. Rotate local password/hash (recommended):
+
+   ```bash
+   /Users/mariano/git_projekte/job-agent/.venv/bin/python -c "from argon2 import PasswordHasher; print(PasswordHasher().hash('your-new-password'))"
+   ```
+
+   Then replace `AUTH_ADMIN_PASSWORD_HASH` in `backend/.env.local`.
+
+Notes:
+
+- `AUTH_COOKIE_SECURE=0` is correct for plain HTTP localhost.
+- For HTTPS environments, set `AUTH_COOKIE_SECURE=1`.
+- `backend/.env.local` is ignored by git.
+- Browser CORS allowlist is configured via `CORS_ALLOW_ORIGINS` (comma-separated).
+
+## Production Edge (Caddy)
+
+Ticket 005 standardizes Caddy (not Nginx) as the edge/TLS layer.
+
+- Caddy config: `deploy/caddy/Caddyfile`
+- Deployment docs: `docs/deployment/CADDY-CONFIG.md`
+- CORS policy docs: `docs/deployment/CORS-POLICY.md`
+- Validation script: `scripts/validate-security-headers.sh`
+
+Recommended routing model:
+
+- Frontend served at `/`
+- Backend reverse-proxied at `/api`
+
+Validation example after staging deployment:
+
+```bash
+bash scripts/validate-security-headers.sh https://your-domain.example https://your-domain.example
+```
+
+Local smoke helper (self-signed certs via Caddy local_certs):
+
+```bash
+bash scripts/local/run-caddy-smoke.sh
+CURL_INSECURE=1 bash scripts/validate-security-headers.sh https://localhost:8443 https://localhost:8443
+```
+
+## CI Pipeline
+
+Minimum CI workflow lives at `.github/workflows/ci.yml` and includes:
+
+- Backend tests
+- Frontend build + tests
+- Ticket-005 security validation stage with artifact upload
+- LLM tracing validation placeholder artifact (Tickets 019/020)
+
 ## Run frontend
 
 1. Install dependencies:
@@ -106,6 +179,7 @@ Environment variables (optional):
 - `LMSTUDIO_BASE_URL` (default: `http://localhost:1234`)
 - `LMSTUDIO_TIMEOUT` (default: `30` seconds)
 - `LMSTUDIO_EMBEDDING_MODEL` (default: `text-embedding-3-small`)
+- `ENABLE_SCRAPING` (default: `0`). Set to `1`/`true` only in non-production environments to enable `/search` and `/search/linkedin/enrich`. When disabled, both endpoints return HTTP `503` with code `SCRAPING_DISABLED`.
 
 The frontend fetches available models from `GET /models` and lets you select a chat model for reranking and cover letter generation.
 
@@ -213,7 +287,7 @@ sudo -u latex_sandbox -H bash -lc 'cd /path/to/job-agent && source .venv/bin/act
 
 ## Current limitations
 
-- Local-only (no auth, no hosted deployment).
+- Local-first prototype (hosted deployment hardening is still in progress).
 - Resume input is plain text.
 - Docker and production deployment are out of scope.
 - Job sources are limited to what the backend service currently supports.
