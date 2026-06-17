@@ -87,6 +87,7 @@ start_local_smoke_stack() {
   fi
 
   export CURL_INSECURE="1"
+  export REDIRECT_HTTP_URL="http://localhost:8080"
   STAGING_URL="https://localhost:8443"
   if [[ -z "${ALLOWED_ORIGIN}" ]]; then
     ALLOWED_ORIGIN="https://localhost:8443"
@@ -95,6 +96,7 @@ start_local_smoke_stack() {
   echo "Local smoke stack is ready"
   echo "STAGING_URL=${STAGING_URL}"
   echo "ALLOWED_ORIGIN=${ALLOWED_ORIGIN}"
+  echo "REDIRECT_HTTP_URL=${REDIRECT_HTTP_URL}"
 }
 
 trap cleanup EXIT

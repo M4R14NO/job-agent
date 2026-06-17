@@ -23,5 +23,5 @@ echo "Validating deploy/caddy/Caddyfile.local"
 caddy validate --config deploy/caddy/Caddyfile.local
 
 echo "Starting Caddy local smoke edge on :8080 and :8443"
-echo "Run this in another terminal: CURL_INSECURE=1 bash scripts/validate-security-headers.sh https://localhost:8443 https://localhost:8443"
+echo "Run this in another terminal: REDIRECT_HTTP_URL=http://localhost:8080 CURL_INSECURE=1 bash scripts/validate-security-headers.sh https://localhost:8443 https://localhost:8443"
 exec caddy run --config deploy/caddy/Caddyfile.local

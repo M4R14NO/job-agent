@@ -5,6 +5,7 @@ BASE_URL="${1:-}"
 ALLOWED_ORIGIN="${2:-}"
 DISALLOWED_ORIGIN="${3:-https://evil.example.com}"
 CURL_INSECURE="${CURL_INSECURE:-0}"
+REDIRECT_HTTP_URL="${REDIRECT_HTTP_URL:-}"
 
 curl_args=(-sS)
 if [[ "${CURL_INSECURE}" == "1" ]]; then
@@ -25,6 +26,7 @@ fi
 host="${BASE_URL#https://}"
 host="${host%%/*}"
 http_url="http://${host}"
+redirect_source_url="${REDIRECT_HTTP_URL:-${http_url}}"
 api_health="${BASE_URL%/}/api/health"
 
 function require_header() {
@@ -38,9 +40,9 @@ function require_header() {
 }
 
 echo "[1/5] Checking HTTP -> HTTPS redirect"
-redirect_location="$(curl "${curl_args[@]}" -I "${http_url}" | tr -d '\r' | awk -F': ' 'tolower($1)=="location" {print $2}' | head -n1)"
+redirect_location="$(curl "${curl_args[@]}" -I "${redirect_source_url}" | tr -d '\r' | awk -F': ' 'tolower($1)=="location" {print $2}' | head -n1)"
 if [[ "${redirect_location}" != https://* ]]; then
-  echo "Expected HTTPS redirect from ${http_url}, got: ${redirect_location:-<none>}"
+  echo "Expected HTTPS redirect from ${redirect_source_url}, got: ${redirect_location:-<none>}"
   exit 1
 fi
 echo "OK redirect: ${redirect_location}"
