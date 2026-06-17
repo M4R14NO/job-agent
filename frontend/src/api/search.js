@@ -13,8 +13,15 @@ const SCORE_JOBS_API_URL = `${BASE_URL}/search/score-jobs`;
 const RERANK_JOBS_API_URL = `${BASE_URL}/search/rerank`;
 const LINKEDIN_ENRICH_API_URL = `${BASE_URL}/search/linkedin/enrich`;
 
+function apiFetch(url, options = {}) {
+  return fetch(url, {
+    credentials: "include",
+    ...options
+  });
+}
+
 export async function searchJobs(input, options = {}) {
-  const response = await fetch(SEARCH_API_URL, {
+  const response = await apiFetch(SEARCH_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(buildSearchRequest(input)),
@@ -30,7 +37,7 @@ export async function searchJobs(input, options = {}) {
 }
 
 export async function enrichLinkedInJobs(jobs, options = {}) {
-  const response = await fetch(LINKEDIN_ENRICH_API_URL, {
+  const response = await apiFetch(LINKEDIN_ENRICH_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jobs }),
@@ -46,7 +53,7 @@ export async function enrichLinkedInJobs(jobs, options = {}) {
 }
 
 export async function fetchQueryDebug(input, options = {}) {
-  const response = await fetch(QUERY_DEBUG_API_URL, {
+  const response = await apiFetch(QUERY_DEBUG_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(buildQueryDebugRequest(input)),
@@ -61,7 +68,7 @@ export async function fetchQueryDebug(input, options = {}) {
 }
 
 export async function scoreJobsWithQueryDebug(input, options = {}) {
-  const response = await fetch(SCORE_JOBS_API_URL, {
+  const response = await apiFetch(SCORE_JOBS_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(buildScoreJobsRequest(input)),
@@ -77,7 +84,7 @@ export async function scoreJobsWithQueryDebug(input, options = {}) {
 }
 
 export async function rerankJobs(input, options = {}) {
-  const response = await fetch(RERANK_JOBS_API_URL, {
+  const response = await apiFetch(RERANK_JOBS_API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(buildRerankJobsRequest(input)),

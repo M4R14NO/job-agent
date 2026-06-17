@@ -1,6 +1,9 @@
 import math
+import os
+import re
+import logging
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -32,6 +35,7 @@ from .schemas.search import (
     RerankJobsRequest,
     ScoreJobsRequest,
 )
+from .schemas.auth import AuthStatusResponse, LoginRequest
 from .services.cv_mappers import get_deterministic_mapper, get_llm_mapper
 from .services.cv_service import (
     ALLOWED_DOC_TYPES,
@@ -49,8 +53,31 @@ from .services.lmstudio_client import chat_completion, list_models, safe_request
 from .services.linkedin_detail_service import fetch_linkedin_job_details
 from .services.search_service import fetch_jobs
 from .services.ranking_service import build_query_debug, score_jobs
+from .services.logging_utils import build_pii_safe_log_extra
+from .services.auth_service import (
+    AuthConfigError,
+    authenticate_admin_credentials,
+    clear_login_failures,
+    create_session_token,
+    enforce_login_rate_limit,
+    is_auth_enabled,
+    register_login_failure,
+    require_authenticated_user,
+    set_session_cookie,
+    clear_session_cookie,
+)
 
 app = FastAPI(title="Job Agent API")
+logger = logging.getLogger(__name__)
+
+SCRAPING_ENABLED_ENV_VAR = "ENABLE_SCRAPING"
+CORS_ALLOW_ORIGINS_ENV_VAR = "CORS_ALLOW_ORIGINS"
+DEFAULT_CORS_ALLOW_ORIGINS = ("http://localhost:5173",)
+SCRAPING_DISABLED_DETAIL = {
+    "code": "SCRAPING_DISABLED",
+    "message": "Scraping and LinkedIn enrichment are disabled by configuration.",
+    "env_var": SCRAPING_ENABLED_ENV_VAR,
+}
 
 ALLOWED_OUTPUT_LANGUAGES = {"english", "german", "french", "chinese", "spanish"}
 
@@ -62,9 +89,45 @@ OUTPUT_LANGUAGE_PROMPTS = {
     "spanish": "Spanish",
 }
 
+GENERIC_UPSTREAM_ERROR_DETAIL = "Upstream processing failed."
+LMSTUDIO_UNAVAILABLE_DETAIL = "LLM service is currently unavailable. Start LM Studio, load a model, and retry."
+LMSTUDIO_TIMEOUT_DETAIL = "LLM service timed out. Check LM Studio and model readiness, then retry."
+LMSTUDIO_REJECTED_DETAIL = "LLM service rejected this request. Verify selected model and input, then retry."
+LMSTUDIO_MODEL_INCOMPATIBLE_DETAIL = (
+    "Selected model appears incompatible with this CV parsing mode. "
+    "Choose a chat/instruct text model in LM Studio and retry."
+)
+
+_ERROR_DETAIL_REDACTIONS = (
+    (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[redacted-email]"),
+    (re.compile(r"https?://\S+", flags=re.IGNORECASE), "[redacted-url]"),
+    # Broad number-pattern masking to avoid leaking phone-like identifiers.
+    (re.compile(r"\+?\d[\d\s()./-]{6,}\d"), "[redacted-number]"),
+)
+
+
+def _parse_cors_allow_origins() -> list[str]:
+    raw_value = os.getenv(CORS_ALLOW_ORIGINS_ENV_VAR, "")
+    if not raw_value.strip():
+        return list(DEFAULT_CORS_ALLOW_ORIGINS)
+
+    origins = [origin.strip() for origin in raw_value.split(",") if origin.strip()]
+    if not origins:
+        raise RuntimeError(f"{CORS_ALLOW_ORIGINS_ENV_VAR} must include at least one valid origin")
+
+    has_wildcard = "*" in origins
+    if has_wildcard and len(origins) > 1:
+        raise RuntimeError(
+            f"{CORS_ALLOW_ORIGINS_ENV_VAR} cannot mix '*' with explicit origins"
+        )
+    return origins
+
+
+_cors_allow_origins = _parse_cors_allow_origins()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_cors_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -73,7 +136,52 @@ app.add_middleware(
 
 @app.get("/health")
 def health_check() -> dict:
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "scraping_enabled": _is_scraping_enabled(),
+    }
+
+
+@app.post("/auth/login", response_model=AuthStatusResponse)
+def login(payload: LoginRequest, request: Request, response: Response) -> AuthStatusResponse:
+    if not is_auth_enabled():
+        raise HTTPException(status_code=503, detail="Authentication is disabled by configuration")
+
+    try:
+        enforce_login_rate_limit(request)
+        is_valid = authenticate_admin_credentials(payload.username, payload.password)
+    except AuthConfigError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    if not is_valid:
+        register_login_failure(request)
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    clear_login_failures(request)
+
+    try:
+        token = create_session_token(payload.username)
+        set_session_cookie(response, token)
+    except AuthConfigError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return AuthStatusResponse(auth_enabled=True, authenticated=True, username=payload.username)
+
+
+@app.post("/auth/logout", response_model=AuthStatusResponse)
+def logout(response: Response) -> AuthStatusResponse:
+    if not is_auth_enabled():
+        return AuthStatusResponse(auth_enabled=False, authenticated=True, username=None)
+    clear_session_cookie(response)
+    return AuthStatusResponse(auth_enabled=True, authenticated=False, username=None)
+
+
+@app.get("/auth/me", response_model=AuthStatusResponse)
+def auth_me(request: Request) -> AuthStatusResponse:
+    if not is_auth_enabled():
+        return AuthStatusResponse(auth_enabled=False, authenticated=True, username=None)
+    username = require_authenticated_user(request)
+    return AuthStatusResponse(auth_enabled=True, authenticated=True, username=username)
 
 
 def _default_rerank_top_n(total_jobs: int, results_wanted: int) -> int:
@@ -103,6 +211,71 @@ def _normalize_mapping_mode(value: str | None) -> str:
     if normalized not in {"deterministic", "llm"}:
         raise HTTPException(status_code=400, detail="Unsupported mapping_mode. Use 'deterministic' or 'llm'.")
     return normalized
+
+
+def _is_truthy(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_scraping_enabled() -> bool:
+    return _is_truthy(os.getenv(SCRAPING_ENABLED_ENV_VAR, "0"))
+
+
+def _ensure_scraping_enabled() -> None:
+    if not _is_scraping_enabled():
+        raise HTTPException(status_code=503, detail=SCRAPING_DISABLED_DETAIL)
+
+
+def _redact_error_detail(message: str) -> str:
+    redacted = message
+    for pattern, replacement in _ERROR_DETAIL_REDACTIONS:
+        redacted = pattern.sub(replacement, redacted)
+    redacted = redacted.strip()
+    if not redacted:
+        return GENERIC_UPSTREAM_ERROR_DETAIL
+    return redacted
+
+
+def _runtime_error_response(exc: RuntimeError) -> HTTPException:
+    message = str(exc)
+    normalized = message.lower()
+    logger.warning(
+        "Runtime upstream error (sanitized): %s",
+        _redact_error_detail(message),
+        extra=build_pii_safe_log_extra(error=exc),
+    )
+    if "error code:" in normalized or "traceback" in normalized or "lmstudio" in normalized:
+        if "timed out" in normalized or "timeout" in normalized:
+            return HTTPException(status_code=504, detail=LMSTUDIO_TIMEOUT_DETAIL)
+        if "llguidance" in normalized or "pointer" in normalized or "json_schema" in normalized:
+            return HTTPException(status_code=502, detail=LMSTUDIO_MODEL_INCOMPATIBLE_DETAIL)
+        if "error code: 400" in normalized or "bad request" in normalized:
+            return HTTPException(status_code=502, detail=LMSTUDIO_REJECTED_DETAIL)
+        return HTTPException(status_code=502, detail=LMSTUDIO_UNAVAILABLE_DETAIL)
+
+    redacted_detail = _redact_error_detail(message)
+    if "timed out" in message.lower():
+        return HTTPException(status_code=504, detail=redacted_detail)
+    return HTTPException(status_code=502, detail=redacted_detail)
+
+
+def _lmstudio_error_response(error: str | None) -> HTTPException:
+    message = str(error or "")
+    normalized = message.lower()
+    logger.warning(
+        "LMStudio request failed (sanitized): %s",
+        _redact_error_detail(message),
+        extra=build_pii_safe_log_extra(error=RuntimeError(message or "LMStudio request failed")),
+    )
+    if "timed out" in normalized or "timeout" in normalized:
+        return HTTPException(status_code=504, detail=LMSTUDIO_TIMEOUT_DETAIL)
+    if "llguidance" in normalized or "pointer" in normalized or "json_schema" in normalized:
+        return HTTPException(status_code=502, detail=LMSTUDIO_MODEL_INCOMPATIBLE_DETAIL)
+    if "error code: 400" in normalized or "bad request" in normalized:
+        return HTTPException(status_code=502, detail=LMSTUDIO_REJECTED_DETAIL)
+    return HTTPException(status_code=502, detail=LMSTUDIO_UNAVAILABLE_DETAIL)
 
 
 def _build_profile_query_context(profile: CvCanonicalProfile) -> str:
@@ -157,12 +330,13 @@ def _load_query_profile_context(profile_id: str | None) -> tuple[str | None, str
 def get_models() -> ModelsResponse:
     models, error = safe_request(list_models)
     if error:
-        raise HTTPException(status_code=502, detail=f"LMStudio error: {error}")
+        raise _lmstudio_error_response(error)
     return ModelsResponse(models=models or [])
 
 
 @app.post("/search", response_model=SearchResponse)
 def start_search(payload: SearchRequest) -> SearchResponse:
+    _ensure_scraping_enabled()
     search_term = payload.search_term or "software engineer"
     # LinkedIn-only mode keeps source behavior deterministic and enables one-pass detail enrichment.
     sites = ["linkedin"]
@@ -324,6 +498,7 @@ def rerank_existing_jobs(payload: RerankJobsRequest) -> SearchResponse:
 
 @app.post("/search/linkedin/enrich", response_model=LinkedInEnrichResponse)
 def enrich_linkedin_details(payload: LinkedInEnrichRequest) -> LinkedInEnrichResponse:
+    _ensure_scraping_enabled()
     jobs = [job.model_dump() for job in payload.jobs]
     results = fetch_linkedin_job_details(
         jobs,
@@ -345,7 +520,10 @@ def enrich_linkedin_details(payload: LinkedInEnrichRequest) -> LinkedInEnrichRes
 
 
 @app.post("/cover-letter", response_model=CoverLetterResponse)
-def generate_cover_letter(payload: CoverLetterRequest) -> CoverLetterResponse:
+def generate_cover_letter(
+    payload: CoverLetterRequest,
+    _current_user: str = Depends(require_authenticated_user),
+) -> CoverLetterResponse:
     if not payload.model:
         raise HTTPException(status_code=400, detail="Model is required")
 
@@ -379,16 +557,19 @@ def generate_cover_letter(payload: CoverLetterRequest) -> CoverLetterResponse:
         timeout=payload.lm_timeout,
     )
     if error:
-        raise HTTPException(status_code=502, detail=f"LMStudio error: {error}")
+        raise _lmstudio_error_response(error)
 
     if not content:
-        raise HTTPException(status_code=502, detail="LMStudio returned empty content")
+        raise HTTPException(status_code=502, detail="LLM service returned an empty response. Please retry.")
 
     return CoverLetterResponse(cover_letter=content or "")
 
 
 @app.post("/cv")
-def generate_cv(payload: CvRequest) -> Response:
+def generate_cv(
+    payload: CvRequest,
+    _current_user: str = Depends(require_authenticated_user),
+) -> Response:
     if not payload.model:
         raise HTTPException(status_code=400, detail="Model is required")
     output_language = _normalize_output_language(payload.output_language)
@@ -408,10 +589,7 @@ def generate_cv(payload: CvRequest) -> Response:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
-        message = str(exc)
-        if "timed out" in message:
-            raise HTTPException(status_code=504, detail=message) from exc
-        raise HTTPException(status_code=502, detail=message) from exc
+        raise _runtime_error_response(exc) from exc
 
     filename = f"cv-{payload.doc_type}.pdf"
     return Response(
@@ -422,7 +600,10 @@ def generate_cv(payload: CvRequest) -> Response:
 
 
 @app.post("/cv/parse", response_model=CvParseResponse)
-def parse_cv(payload: CvParseRequest) -> CvParseResponse:
+def parse_cv(
+    payload: CvParseRequest,
+    _current_user: str = Depends(require_authenticated_user),
+) -> CvParseResponse:
     if not payload.model:
         raise HTTPException(status_code=400, detail="Model is required")
     output_language = _normalize_output_language(payload.output_language)
@@ -438,22 +619,25 @@ def parse_cv(payload: CvParseRequest) -> CvParseResponse:
             job_url=payload.job_url,
         )
     except RuntimeError as exc:
-        message = str(exc)
-        if "timed out" in message:
-            raise HTTPException(status_code=504, detail=message) from exc
-        raise HTTPException(status_code=502, detail=message) from exc
+        raise _runtime_error_response(exc) from exc
     return CvParseResponse(schema_version=CANONICAL_SCHEMA_VERSION, data=data)
 
 
 @app.post("/cv/validate")
-def validate_cv(payload: CvValidateRequest) -> dict:
+def validate_cv(
+    payload: CvValidateRequest,
+    _current_user: str = Depends(require_authenticated_user),
+) -> dict:
     if payload.schema_version != CANONICAL_SCHEMA_VERSION:
         raise HTTPException(status_code=400, detail="Unsupported canonical schema version")
     return {"ok": True}
 
 
 @app.post("/cv/profile-image")
-async def upload_cv_profile_image(file: UploadFile = File(...)) -> dict:
+async def upload_cv_profile_image(
+    file: UploadFile = File(...),
+    _current_user: str = Depends(require_authenticated_user),
+) -> dict:
     if not file.filename:
         raise HTTPException(status_code=400, detail="Missing filename")
     if file.content_type and not file.content_type.startswith("image/"):
@@ -474,7 +658,10 @@ async def upload_cv_profile_image(file: UploadFile = File(...)) -> dict:
 
 
 @app.get("/cv/profile-image/{image_name}")
-def get_cv_profile_image(image_name: str) -> FileResponse:
+def get_cv_profile_image(
+    image_name: str,
+    _current_user: str = Depends(require_authenticated_user),
+) -> FileResponse:
     resolved = _resolve_profile_image_path(image_name)
     if resolved is None:
         raise HTTPException(status_code=404, detail="Profile image not found")
@@ -482,7 +669,7 @@ def get_cv_profile_image(image_name: str) -> FileResponse:
 
 
 @app.get("/cv/profiles", response_model=CvProfileListResponse)
-def list_cv_profiles() -> CvProfileListResponse:
+def list_cv_profiles(_current_user: str = Depends(require_authenticated_user)) -> CvProfileListResponse:
     store = get_profile_store()
     try:
         profiles = store.list_profiles()
@@ -495,7 +682,10 @@ def list_cv_profiles() -> CvProfileListResponse:
 
 
 @app.get("/cv/profiles/{profile_id}", response_model=CvCanonicalProfile)
-def get_cv_profile(profile_id: str) -> CvCanonicalProfile:
+def get_cv_profile(
+    profile_id: str,
+    _current_user: str = Depends(require_authenticated_user),
+) -> CvCanonicalProfile:
     store = get_profile_store()
     profile = store.get_profile(profile_id)
     if not profile:
@@ -504,7 +694,11 @@ def get_cv_profile(profile_id: str) -> CvCanonicalProfile:
 
 
 @app.put("/cv/profiles/{profile_id}", response_model=CvCanonicalProfile)
-def save_cv_profile(profile_id: str, payload: CvCanonicalProfile) -> CvCanonicalProfile:
+def save_cv_profile(
+    profile_id: str,
+    payload: CvCanonicalProfile,
+    _current_user: str = Depends(require_authenticated_user),
+) -> CvCanonicalProfile:
     if payload.profile_id != profile_id:
         raise HTTPException(status_code=400, detail="Profile ID mismatch")
     if payload.schema_version != CANONICAL_SCHEMA_VERSION:
@@ -533,14 +727,20 @@ def save_cv_profile(profile_id: str, payload: CvCanonicalProfile) -> CvCanonical
 
 
 @app.delete("/cv/profiles/{profile_id}")
-def delete_cv_profile(profile_id: str) -> dict:
+def delete_cv_profile(
+    profile_id: str,
+    _current_user: str = Depends(require_authenticated_user),
+) -> dict:
     store = get_profile_store()
     store.delete_profile(profile_id)
     return {"ok": True}
 
 
 @app.post("/cv/render")
-def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
+def render_cv_from_canonical(
+    payload: CvRenderRequest,
+    _current_user: str = Depends(require_authenticated_user),
+) -> Response:
     deterministic_mapper = get_deterministic_mapper(payload.template_id)
     llm_mapper = get_llm_mapper(payload.template_id)
     if not deterministic_mapper and not llm_mapper:
@@ -582,10 +782,7 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
             )
         pdf_bytes = render_cv_pdf_from_payload(payload=template_payload.model_dump(), doc_type=payload.doc_type)
     except RuntimeError as exc:
-        message = str(exc)
-        if "timed out" in message:
-            raise HTTPException(status_code=504, detail=message) from exc
-        raise HTTPException(status_code=502, detail=message) from exc
+        raise _runtime_error_response(exc) from exc
 
     filename = f"cv-{payload.doc_type}.pdf"
     return Response(
@@ -596,7 +793,10 @@ def render_cv_from_canonical(payload: CvRenderRequest) -> Response:
 
 
 @app.post("/cv/preview", response_model=CvPreviewResponse)
-def preview_cv_mapping(payload: CvPreviewRequest) -> CvPreviewResponse:
+def preview_cv_mapping(
+    payload: CvPreviewRequest,
+    _current_user: str = Depends(require_authenticated_user),
+) -> CvPreviewResponse:
     deterministic_mapper = get_deterministic_mapper(payload.template_id)
     llm_mapper = get_llm_mapper(payload.template_id)
     if not deterministic_mapper and not llm_mapper:
@@ -637,16 +837,16 @@ def preview_cv_mapping(payload: CvPreviewRequest) -> CvPreviewResponse:
                 main_section_order=payload.main_section_order,
             )
     except RuntimeError as exc:
-        message = str(exc)
-        if "timed out" in message:
-            raise HTTPException(status_code=504, detail=message) from exc
-        raise HTTPException(status_code=502, detail=message) from exc
+        raise _runtime_error_response(exc) from exc
 
     return CvPreviewResponse(payload=template_payload.model_dump())
 
 
 @app.post("/cv/rewrite", response_model=CvRewriteResponse)
-def rewrite_cv(payload: CvRewriteRequest) -> CvRewriteResponse:
+def rewrite_cv(
+    payload: CvRewriteRequest,
+    _current_user: str = Depends(require_authenticated_user),
+) -> CvRewriteResponse:
     if not payload.model:
         raise HTTPException(status_code=400, detail="Model is required")
     output_language = _normalize_output_language(payload.output_language)
@@ -666,16 +866,16 @@ def rewrite_cv(payload: CvRewriteRequest) -> CvRewriteResponse:
             job_url=payload.job_url,
         )
     except RuntimeError as exc:
-        message = str(exc)
-        if "timed out" in message:
-            raise HTTPException(status_code=504, detail=message) from exc
-        raise HTTPException(status_code=502, detail=message) from exc
+        raise _runtime_error_response(exc) from exc
 
     return CvRewriteResponse(schema_version=CANONICAL_SCHEMA_VERSION, data=data)
 
 
 @app.post("/cv/render-template")
-def render_cv_from_template(payload: CvRenderTemplateRequest) -> Response:
+def render_cv_from_template(
+    payload: CvRenderTemplateRequest,
+    _current_user: str = Depends(require_authenticated_user),
+) -> Response:
     if not get_deterministic_mapper(payload.template_id) and not get_llm_mapper(payload.template_id):
         raise HTTPException(status_code=400, detail="Unsupported template_id")
     if payload.doc_type not in ALLOWED_DOC_TYPES:
@@ -688,10 +888,7 @@ def render_cv_from_template(payload: CvRenderTemplateRequest) -> Response:
             template_id=payload.template_id,
         )
     except RuntimeError as exc:
-        message = str(exc)
-        if "timed out" in message:
-            raise HTTPException(status_code=504, detail=message) from exc
-        raise HTTPException(status_code=502, detail=message) from exc
+        raise _runtime_error_response(exc) from exc
 
     filename = f"cv-{payload.doc_type}.pdf"
     return Response(

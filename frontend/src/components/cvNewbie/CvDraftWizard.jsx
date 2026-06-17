@@ -11,6 +11,26 @@ const STEP_LABELS = {
   review: "Edit CV"
 };
 
+export function buildParseCvCanonicalPayload({
+  resumeText,
+  selectedModel,
+  lmTimeout,
+  cvOutputLanguage,
+  applicationContext,
+}) {
+  const context = applicationContext || {};
+  return {
+    resume_text: resumeText,
+    model: selectedModel,
+    lm_timeout: lmTimeout,
+    output_language: cvOutputLanguage,
+    job_title: context.job_title || undefined,
+    company: context.company || undefined,
+    job_description: context.job_description || undefined,
+    job_url: context.job_url || undefined,
+  };
+}
+
 export default function CvDraftWizard({
   cvTemplateId,
   onTemplateIdChange,
@@ -111,16 +131,15 @@ export default function CvDraftWizard({
     setDraftError("");
     setIsGeneratingDraft(true);
     try {
-      const parsed = await parseCvCanonical({
-        resume_text: resumeText,
-        model: selectedModel,
-        lm_timeout: lmTimeout,
-        output_language: cvOutputLanguage,
-        job_title: applicationContext.job_title || undefined,
-        company: applicationContext.company || undefined,
-        job_description: applicationContext.job_description || undefined,
-        job_url: applicationContext.job_url || undefined
-      });
+      const parsed = await parseCvCanonical(
+        buildParseCvCanonicalPayload({
+          resumeText,
+          selectedModel,
+          lmTimeout,
+          cvOutputLanguage,
+          applicationContext,
+        })
+      );
 
       const safeProfileId = sanitizeProfileId(newProfileId || "newbie-cv");
       const canonical = {
