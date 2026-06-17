@@ -120,6 +120,7 @@ jobs:
           bash scripts/ci/run-ticket005-security-check.sh artifacts/ticket005
 
       - name: Upload Ticket-005 validation artifacts
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ticket005-security-validation

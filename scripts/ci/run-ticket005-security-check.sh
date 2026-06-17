@@ -30,7 +30,7 @@ wait_for_url() {
   local n=1
 
   while (( n <= attempts )); do
-    if curl -sS -o /dev/null "$url"; then
+    if curl -sS -o /dev/null "$url" 2>/dev/null; then
       return 0
     fi
     n=$((n + 1))
@@ -58,6 +58,12 @@ start_local_smoke_stack() {
   npm --prefix frontend run preview -- --host 127.0.0.1 --port 4173 >"${FRONTEND_LOG}" 2>&1 &
   frontend_pid="$!"
 
+  if ! caddy validate --config deploy/caddy/Caddyfile.local >>"${CADDY_LOG}" 2>&1; then
+    echo "Caddy config validation failed"
+    tail -n 120 "${CADDY_LOG}" || true
+    return 1
+  fi
+
   caddy run --config deploy/caddy/Caddyfile.local >"${CADDY_LOG}" 2>&1 &
   caddy_pid="$!"
 
@@ -71,6 +77,12 @@ start_local_smoke_stack() {
   fi
   if ! wait_for_url "http://localhost:8080" 60 1; then
     echo "Caddy HTTP listener did not become healthy in time"
+    echo "--- Caddy log tail ---"
+    tail -n 120 "${CADDY_LOG}" || true
+    echo "--- Frontend log tail ---"
+    tail -n 120 "${FRONTEND_LOG}" || true
+    echo "--- Backend log tail ---"
+    tail -n 120 "${BACKEND_LOG}" || true
     return 1
   fi
 
