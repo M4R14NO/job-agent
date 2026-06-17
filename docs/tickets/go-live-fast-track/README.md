@@ -29,9 +29,9 @@ Dieses Verzeichnis enthaelt die technischen Tickets fuer den priorisierten Go-Li
 ## Current Checkpoint
 
 - Phase 1: abgeschlossen.
-- Phase 2: teilweise abgeschlossen (TICKET-004 erledigt; TICKET-005 in Arbeit; TICKET-006 offen).
+- Phase 2: teilweise abgeschlossen (TICKET-004 erledigt; TICKET-005 erledigt; TICKET-006 offen).
 - Parallel: TICKET-019 (Langfuse + vLLM Go/No-Go) als schneller Entscheidungs-Gate.
-- Naechster Schwerpunkt: TICKET-005 (Caddy TLS/Security Headers, laufende Implementierung) -> TICKET-006 -> Phase-3 Tickets 007/008/009.
+- Naechster Schwerpunkt: TICKET-006 -> Phase-3 Tickets 007/008/009.
 
 ## Empfohlene Umsetzungsreihenfolge
 
@@ -132,16 +132,44 @@ Fuer jeden relevanten CI-Lauf (mindestens pro Release-Kandidat) bitte ausfuellen
 
 - Datum (UTC):
 - Owner:
-- Workflow: `CI` (`.github/workflows/ci.yml`)
+- Workflow:
+  - Core CI: `CI` (`.github/workflows/ci.yml`)
+  - Security Validation: `Ticket-005 Security Validation` (`.github/workflows/ticket005-security-validation.yml`)
 - Run-Link:
 - Commit/PR-Link:
+
+Letzter erfolgreicher Nachweislauf (Ticket-005/008):
+
+- Datum (UTC): 2026-06-17T20:12:58Z
+- Owner: M4R14NO
+- Workflow:
+  - CI (.github/workflows/ci.yml)
+  - Ticket-005 Security Validation (.github/workflows/ticket005-security-validation.yml)
+- Run-Link: bitte aus Actions-Lauf eintragen
+- Commit/PR-Link: bitte aus PR/Commit eintragen
+- Job-Status:
+  - backend-tests: Pass
+  - frontend-build-and-test: Pass
+  - llm-tracing-validation-placeholder: Pass
+  - ticket005-security-validation: Pass
+- Artifact-Status:
+  - ticket005-security-validation: vorhanden
+  - ticket005-result.txt: passed
+  - llm-tracing-placeholder: vorhanden
+- Ticket-005 Nachweisfelder:
+  - STAGING_URL: https://localhost:8443
+  - ALLOWED_ORIGIN: https://localhost:8443
+  - Disallowed Origin: https://evil.example.com
+  - Redirect Check: Pass
+  - Header Check: Pass
+  - CORS Check: Pass
 
 Erwartete Jobs:
 
 - `backend-tests`: Pass
 - `frontend-build-and-test`: Pass
-- `ticket005-security-validation`: Pass
 - `llm-tracing-validation-placeholder`: Pass (Placeholder bis Ticket-020)
+- `ticket005-security-validation`: Pass
 
 Erwartete Artifacts:
 
@@ -171,7 +199,7 @@ Abweichungen / Incidents:
 
 So startest du den CI-Lauf manuell fuer Ticket-005 Nachweise:
 
-1. GitHub Repository -> Actions -> Workflow `CI` oeffnen.
+1. GitHub Repository -> Actions -> Workflow `Ticket-005 Security Validation` oeffnen.
 2. `Run workflow` waehlen.
 3. Inputs setzen:
   - `staging_url`: Default `https://localhost:8443` (kein public domain notwendig)

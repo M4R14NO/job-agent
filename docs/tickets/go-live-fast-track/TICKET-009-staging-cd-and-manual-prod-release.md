@@ -27,3 +27,11 @@ Deploy automatically to staging and require manual approval for production.
 
 ## Priority
 P1
+
+## Follow-up from Ticket-005
+- Ticket-005 wurde im CI erfolgreich im localhost smoke setup verifiziert.
+- In Ticket-009 ist zusaetzlich ein echter Domain-Nachweis fuer Staging/Production verpflichtend:
+	- Redirect-Validierung gegen reale Staging/Prod-Hostnamen.
+	- Security-Header-Pruefung gegen reale Staging/Prod-Hostnamen.
+	- CORS-Allowlist-Checks mit realen Frontend-Origin(s).
+	- Nachweis per Workflow-Run-Link und Artefaktprotokoll.

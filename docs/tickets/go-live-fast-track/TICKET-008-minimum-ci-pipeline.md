@@ -25,15 +25,22 @@ Create a baseline CI workflow for build and test gates.
 ## Priority
 P0
 
+## Status
+Erledigt
+
 ## Implementation Notes (Current)
 
-- Workflow file: `.github/workflows/ci.yml`
-- Trigger: `pull_request`, `push` on `main`, and `workflow_dispatch`
+- Workflow files:
+	- `.github/workflows/ci.yml` (Core Build/Test)
+	- `.github/workflows/ticket005-security-validation.yml` (Ticket-005 Security Validation)
+- Trigger:
+	- Core CI: `pull_request`, `push` on `main`, `workflow_dispatch`
+	- Ticket-005 Security Validation: `workflow_dispatch` plus path-based Trigger auf `pull_request`/`push`
 - Jobs:
 	- `backend-tests`
 	- `frontend-build-and-test`
-	- `ticket005-security-validation`
 	- `llm-tracing-validation-placeholder`
+	- `ticket005-security-validation` (separater Workflow)
 
 ### Ticket-005 Stage
 
@@ -51,3 +58,14 @@ P0
 - Artifact output path: `artifacts/llm-tracing`
 - Artifact name: `llm-tracing-placeholder`
 - Purpose: keep CI surface ready for Tickets 019/020 validation logic.
+
+## Evidence (Current)
+- PRs und Pushes triggern CI automatisch.
+- Build/Test-Gates blockieren bei Fehlern.
+- Ticket-005 Security-Stage laeuft erfolgreich und erzeugt Nachweisartefakte.
+- Erfolgreicher Nachweislauf dokumentiert in `docs/tickets/go-live-fast-track/README.md` unter "CI Evidence (Ticket-005/008)".
+
+## Follow-up Optimization
+- Optionaler naechster Schritt zur weiteren Minutes-Optimierung:
+	- Path-Filter des Ticket-005-Workflows bei Bedarf weiter verfeinern,
+	- oder Security-Validierung zusaetzlich nur fuer Release-Branches/Tags ausfuehren.

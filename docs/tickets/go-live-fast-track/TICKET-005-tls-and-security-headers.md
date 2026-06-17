@@ -36,3 +36,28 @@ Enforce HTTPS and baseline security headers for frontend and backend.
 
 ## Priority
 P0
+
+## Status
+Erledigt (CI Smoke-Nachweis erfolgreich)
+
+## Implementation Summary
+- Caddy als kanonischer Edge/TLS-Layer etabliert (Nginx-Annahme ersetzt).
+- HTTP -> HTTPS Redirect im Caddy-Setup umgesetzt.
+- Baseline Security-Header aktiv: HSTS, X-Content-Type-Options, Referrer-Policy, CSP.
+- Backend CORS von hardcoded Origin auf environment-variable-basierte Allowlist umgestellt.
+- Validierungsskript fuer Redirect/Header/CORS erstellt und in CI integriert.
+- CI-Artefakte als Nachweis aktiviert (auch bei Fehlern uploadbar).
+
+## Evidence
+- Workflow: `.github/workflows/ticket005-security-validation.yml`
+- Ticket-005 Stage: `ticket005-security-validation`
+- Nachweisartefakte:
+	- `ticket005-security-check.log`
+	- `ticket005-result.txt` (Wert: `passed`)
+
+## Follow-up (Ticket-009)
+- Reale Domain-Validierung fuer Staging/Production (nicht localhost) bleibt Bestandteil von Ticket-009.
+- Dort verifizieren:
+	- Redirect- und Header-Checks gegen reale Hostnamen.
+	- CORS-Allowlist gegen echte Frontend-Origin(s).
+	- Rollback-Prozedur fuer Caddy-Konfigurationsaenderungen.
