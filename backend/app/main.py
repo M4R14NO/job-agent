@@ -71,6 +71,8 @@ app = FastAPI(title="Job Agent API")
 logger = logging.getLogger(__name__)
 
 SCRAPING_ENABLED_ENV_VAR = "ENABLE_SCRAPING"
+CORS_ALLOW_ORIGINS_ENV_VAR = "CORS_ALLOW_ORIGINS"
+DEFAULT_CORS_ALLOW_ORIGINS = ("http://localhost:5173",)
 SCRAPING_DISABLED_DETAIL = {
     "code": "SCRAPING_DISABLED",
     "message": "Scraping and LinkedIn enrichment are disabled by configuration.",
@@ -103,9 +105,29 @@ _ERROR_DETAIL_REDACTIONS = (
     (re.compile(r"\+?\d[\d\s()./-]{6,}\d"), "[redacted-number]"),
 )
 
+
+def _parse_cors_allow_origins() -> list[str]:
+    raw_value = os.getenv(CORS_ALLOW_ORIGINS_ENV_VAR, "")
+    if not raw_value.strip():
+        return list(DEFAULT_CORS_ALLOW_ORIGINS)
+
+    origins = [origin.strip() for origin in raw_value.split(",") if origin.strip()]
+    if not origins:
+        raise RuntimeError(f"{CORS_ALLOW_ORIGINS_ENV_VAR} must include at least one valid origin")
+
+    has_wildcard = "*" in origins
+    if has_wildcard and len(origins) > 1:
+        raise RuntimeError(
+            f"{CORS_ALLOW_ORIGINS_ENV_VAR} cannot mix '*' with explicit origins"
+        )
+    return origins
+
+
+_cors_allow_origins = _parse_cors_allow_origins()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_cors_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

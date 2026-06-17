@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      staging_url:
+        description: "Staging URL for Ticket-005 validation; default uses local smoke mode"
+        required: false
+        default: "https://localhost:8443"
+        type: string
+      allowed_origin:
+        description: "Allowed origin for CORS check"
+        required: false
+        default: "https://localhost:8443"
+        type: string
+      disallowed_origin:
+        description: "Optional disallowed origin for negative CORS check"
+        required: false
+        default: "https://evil.example.com"
+        type: string
+
+jobs:
+  backend-tests:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run backend tests
+        env:
+          AUTH_ENABLED: "0"
+          ENABLE_SCRAPING: "0"
+        run: |
+          cd backend
+          pytest
+
+  frontend-build-and-test:
+    name: Frontend build and tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm run test:run
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+
+  ticket005-security-validation:
+    name: Ticket-005 security validation
+    runs-on: ubuntu-latest
+    needs:
+      - backend-tests
+      - frontend-build-and-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Install Caddy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y caddy
+
+      - name: Run Ticket-005 security check script
+        env:
+          STAGING_URL: ${{ github.event.inputs.staging_url || secrets.STAGING_URL || 'https://localhost:8443' }}
+          ALLOWED_ORIGIN: ${{ github.event.inputs.allowed_origin || secrets.ALLOWED_ORIGIN || 'https://localhost:8443' }}
+          DISALLOWED_ORIGIN: ${{ github.event.inputs.disallowed_origin || 'https://evil.example.com' }}
+        run: |
+          mkdir -p artifacts/ticket005
+          bash scripts/ci/run-ticket005-security-check.sh artifacts/ticket005
+
+      - name: Upload Ticket-005 validation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ticket005-security-validation
+          path: artifacts/ticket005
+          if-no-files-found: error
+
+  llm-tracing-validation-placeholder:
+    name: LLM tracing validation placeholder
+    runs-on: ubuntu-latest
+    needs:
+      - backend-tests
+      - frontend-build-and-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Emit placeholder evidence
+        run: |
+          mkdir -p artifacts/llm-tracing
+          {
+            echo "LLM tracing validation placeholder"
+            echo "Tickets: 019 (decision), 020 (implementation)"
+            echo "Status: pending implementation"
+            echo "Timestamp (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > artifacts/llm-tracing/placeholder.txt
+
+      - name: Upload placeholder artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-tracing-placeholder
+          path: artifacts/llm-tracing
+          if-no-files-found: error
