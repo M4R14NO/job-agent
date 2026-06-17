@@ -39,8 +39,17 @@ def _extract_description_from_html(html: str) -> tuple[str | None, str | None]:
     if container is None:
         return None, None
 
-    # Plain text for LLM prompts and keyword ranking (no HTML noise).
-    plain_text = container.get_text(separator="\n", strip=True).strip() or None
+    # Plain text for LLM prompts and keyword ranking while preserving list semantics.
+    text_soup = BeautifulSoup(str(container), "html.parser")
+    text_container = text_soup.find("div")
+    if text_container is None:
+        plain_text = container.get_text(separator="\n", strip=True).strip() or None
+    else:
+        for list_item in text_container.find_all("li"):
+            item_text = list_item.get_text(" ", strip=True)
+            list_item.clear()
+            list_item.append(f"- {item_text}")
+        plain_text = text_container.get_text(separator="\n", strip=True).strip() or None
 
     # Clean HTML for display: strip presentational / tracking attributes but
     # keep all semantic tags (<strong>, <ul>, <li>, <p>, <br>, etc.) intact so
