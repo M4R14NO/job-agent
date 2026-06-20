@@ -6,7 +6,8 @@ import {
   normalizeSearchResponse
 } from "./searchSchema";
 
-const BASE_URL = "http://localhost:8000";
+const DEFAULT_API_BASE_URL = "http://localhost:8000";
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/$/, "");
 const SEARCH_API_URL = `${BASE_URL}/search`;
 const QUERY_DEBUG_API_URL = `${BASE_URL}/search/query-debug`;
 const SCORE_JOBS_API_URL = `${BASE_URL}/search/score-jobs`;
