@@ -21,6 +21,16 @@ AUTH_COOKIE_SAMESITE = "lax"
 AUTH_JWT_ALGORITHM = "HS256"
 DEFAULT_SESSION_MAX_AGE_SECONDS = 28800
 DEFAULT_LOGIN_LIMIT_PER_MINUTE = 5
+MIN_SESSION_SECRET_LENGTH = 24
+
+_DISALLOWED_SESSION_SECRETS = {
+    "changeme",
+    "change-me",
+    "dev-session-secret-change-me",
+    "password",
+    "secret",
+    "test-session-secret",
+}
 
 _password_hasher = PasswordHasher()
 _login_attempts_by_ip: dict[str, deque[float]] = defaultdict(deque)
@@ -44,6 +54,14 @@ def _session_secret() -> str:
     value = os.getenv(AUTH_SESSION_SECRET_ENV_VAR, "").strip()
     if not value:
         raise AuthConfigError(f"Missing {AUTH_SESSION_SECRET_ENV_VAR} while auth is enabled.")
+    if len(value) < MIN_SESSION_SECRET_LENGTH:
+        raise AuthConfigError(
+            f"Invalid {AUTH_SESSION_SECRET_ENV_VAR}: must be at least {MIN_SESSION_SECRET_LENGTH} characters"
+        )
+    if value.lower() in _DISALLOWED_SESSION_SECRETS:
+        raise AuthConfigError(
+            f"Invalid {AUTH_SESSION_SECRET_ENV_VAR}: weak placeholder values are not allowed"
+        )
     return value
 
 
@@ -85,6 +103,33 @@ def _admin_password_hash() -> str:
     if not value:
         raise AuthConfigError(f"Missing {AUTH_ADMIN_PASSWORD_HASH_ENV_VAR} while auth is enabled.")
     return value
+
+
+def validate_auth_runtime_config() -> None:
+    if not is_auth_enabled():
+        return
+
+    username = _admin_username()
+    if len(username) < 3:
+        raise AuthConfigError(
+            f"Invalid {AUTH_ADMIN_USERNAME_ENV_VAR}: must be at least 3 characters"
+        )
+
+    password_hash = _admin_password_hash()
+    if not password_hash.startswith("$argon2"):
+        raise AuthConfigError(
+            f"Invalid {AUTH_ADMIN_PASSWORD_HASH_ENV_VAR}: expected argon2 hash"
+        )
+    try:
+        _password_hasher.check_needs_rehash(password_hash)
+    except InvalidHashError as exc:
+        raise AuthConfigError(
+            f"Invalid {AUTH_ADMIN_PASSWORD_HASH_ENV_VAR}: malformed argon2 hash"
+        ) from exc
+
+    _session_secret()
+    _session_max_age_seconds()
+    _login_limit_per_minute()
 
 
 def _client_ip(request: Request) -> str:

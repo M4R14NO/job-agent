@@ -95,18 +95,19 @@ Local development now supports cookie-based authentication.
 
    Both tasks automatically source `backend/.env.local`.
 
-3. Default local credentials (from example file):
-
-   - Username: `devadmin`
-   - Password: `localdev123`
-
-4. Rotate local password/hash (recommended):
+3. Generate local auth secrets:
 
    ```bash
+   openssl rand -hex 32
    /Users/mariano/git_projekte/job-agent/.venv/bin/python -c "from argon2 import PasswordHasher; print(PasswordHasher().hash('your-new-password'))"
    ```
 
-   Then replace `AUTH_ADMIN_PASSWORD_HASH` in `backend/.env.local`.
+   Then set `AUTH_SESSION_SECRET` and `AUTH_ADMIN_PASSWORD_HASH` in `backend/.env.local`.
+
+4. Use your configured login values:
+
+   - Username: value from `AUTH_ADMIN_USERNAME`
+   - Password: the password used to generate `AUTH_ADMIN_PASSWORD_HASH`
 
 Notes:
 
@@ -121,6 +122,7 @@ Ticket 005 standardizes Caddy (not Nginx) as the edge/TLS layer.
 
 - Caddy config: `deploy/caddy/Caddyfile`
 - Deployment docs: `docs/deployment/CADDY-CONFIG.md`
+- Secret management runbook: `docs/deployment/SECRET-MANAGEMENT.md`
 - CORS policy docs: `docs/deployment/CORS-POLICY.md`
 - Validation script: `scripts/validate-security-headers.sh`
 
