@@ -65,6 +65,7 @@ from .services.auth_service import (
     require_authenticated_user,
     set_session_cookie,
     clear_session_cookie,
+    validate_auth_runtime_config,
 )
 
 app = FastAPI(title="Job Agent API")
@@ -132,6 +133,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def _validate_runtime_configuration() -> None:
+    try:
+        validate_auth_runtime_config()
+    except AuthConfigError as exc:
+        logger.error(
+            "Authentication runtime configuration invalid: %s",
+            str(exc),
+            extra=build_pii_safe_log_extra(error=exc),
+        )
+        raise
 
 
 @app.get("/health")

@@ -29,9 +29,15 @@ Dieses Verzeichnis enthaelt die technischen Tickets fuer den priorisierten Go-Li
 ## Current Checkpoint
 
 - Phase 1: abgeschlossen.
-- Phase 2: teilweise abgeschlossen (TICKET-004 erledigt; TICKET-005 erledigt; TICKET-006 offen).
+- Phase 2: teilweise abgeschlossen (TICKET-004 erledigt; TICKET-005 erledigt; TICKET-006 in Arbeit).
 - Parallel: TICKET-019 (Langfuse + vLLM Go/No-Go) als schneller Entscheidungs-Gate.
 - Naechster Schwerpunkt: TICKET-006 -> Phase-3 Tickets 007/008/009.
+
+TICKET-006 Umsetzungspfad (aktuell):
+
+- Primary: Coolify-first (low-ops) mit Secret-Injection ueber Plattform-Secrets.
+- Fallback: Caddy + bestehende Repo-Workflows/Skripte bleiben als Backup gepflegt.
+- Gemeinsamer Env-Contract fuer beide Pfade (kein App-Code-Fork).
 
 ## Empfohlene Umsetzungsreihenfolge
 
@@ -212,3 +218,33 @@ Hinweise:
 
 - Mit Default-Inputs laeuft der Stage im CI in einem lokalen Smoke-Setup auf dem Runner (Backend + Frontend + Caddy).
 - Fuer einen gueltigen Ticket-005 Nachweis muss `ticket005-result.txt` den Wert `passed` enthalten.
+
+## Ticket-006 Rotation Evidence (Coolify-first)
+
+Fuer jeden Rotationstest bitte ausfuellen:
+
+- Datum (UTC):
+- Owner:
+- Environment: staging/prod
+- Secret: AUTH_SESSION_SECRET
+- Coolify Deploy-Referenz (ID/Link):
+- Vorher-Check `/api/health`:
+- Nachher-Check `/api/health`:
+- Bestehende Session nach Rotation (erwartet: invalidiert):
+- Neuer Login nach Rotation (erwartet: erfolgreich):
+- Incidents/Abweichungen:
+- Mitigation/Fix-PR:
+
+Erster geplanter Nachweislauf (Ticket-006):
+
+- Datum (UTC):
+- Owner: M4R14NO
+- Environment: staging
+- Secret: AUTH_SESSION_SECRET
+- Coolify Deploy-Referenz (ID/Link):
+- Vorher-Check `/api/health`:
+- Nachher-Check `/api/health`:
+- Bestehende Session nach Rotation:
+- Neuer Login nach Rotation:
+- Incidents/Abweichungen:
+- Mitigation/Fix-PR:

@@ -25,6 +25,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
+      - name: Guard against committed auth placeholders
+        run: |
+          ! rg -n "dev-session-secret-change-me|localdev123" \
+            .vscode/tasks.json backend/.env.local.example README.md
+
       - name: Run backend tests
         env:
           AUTH_ENABLED: "0"

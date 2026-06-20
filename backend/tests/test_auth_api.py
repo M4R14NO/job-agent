@@ -1,7 +1,9 @@
 from argon2 import PasswordHasher
 from fastapi.testclient import TestClient
+import pytest
 
 from app import main
+from app.services.auth_service import AuthConfigError, validate_auth_runtime_config
 
 
 client = TestClient(main.app)
@@ -19,7 +21,7 @@ def _set_auth_env(monkeypatch, *, cookie_secure="0"):
     monkeypatch.setenv("AUTH_ENABLED", "1")
     monkeypatch.setenv("AUTH_ADMIN_USERNAME", "admin")
     monkeypatch.setenv("AUTH_ADMIN_PASSWORD_HASH", _password_hasher.hash("secret-password"))
-    monkeypatch.setenv("AUTH_SESSION_SECRET", "test-session-secret")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "test-session-secret-minimum-24")
     monkeypatch.setenv("AUTH_SESSION_MAX_AGE_SECONDS", "28800")
     monkeypatch.setenv("AUTH_COOKIE_SECURE", cookie_secure)
 
@@ -113,3 +115,23 @@ def test_auth_me_reports_enabled_false_when_auth_disabled(monkeypatch):
         "authenticated": True,
         "username": None,
     }
+
+
+def test_validate_auth_runtime_config_rejects_weak_session_secret(monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "1")
+    monkeypatch.setenv("AUTH_ADMIN_USERNAME", "admin")
+    monkeypatch.setenv("AUTH_ADMIN_PASSWORD_HASH", _password_hasher.hash("secret-password"))
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "short-secret")
+
+    with pytest.raises(AuthConfigError, match="AUTH_SESSION_SECRET"):
+        validate_auth_runtime_config()
+
+
+def test_validate_auth_runtime_config_requires_argon2_hash(monkeypatch):
+    monkeypatch.setenv("AUTH_ENABLED", "1")
+    monkeypatch.setenv("AUTH_ADMIN_USERNAME", "admin")
+    monkeypatch.setenv("AUTH_ADMIN_PASSWORD_HASH", "plaintext-not-valid")
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "test-session-secret-minimum-24")
+
+    with pytest.raises(AuthConfigError, match="AUTH_ADMIN_PASSWORD_HASH"):
+        validate_auth_runtime_config()
