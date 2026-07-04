@@ -77,8 +77,28 @@
 \defaultfontfeatures{Ligatures=TeX}
 % Needed to manage math fonts
 \RequirePackage{unicode-math}
-% Needed to use icons from font-awesome
-\RequirePackage{fontawesome6}
+% Needed to use icons from font-awesome.
+% Debian TeX images can miss fontawesome6; fall back to legacy fontawesome package.
+\IfFileExists{fontawesome6.sty}{%
+  \RequirePackage{fontawesome6}%
+}{%
+  \RequirePackage{fontawesome}%
+  \providecommand{\faEnvelope}{\faEnvelopeO}
+  \providecommand{\faMobile}{\faMobilePhone}
+  \providecommand{\faCakeCandles}{\faBirthdayCake}
+  \providecommand{\faHouseChimney}{\faHome}
+  \providecommand{\faSquareGithub}{\faGithubSquare}
+  \providecommand{\faGitlab}{\faGithub}
+  \providecommand{\faLinkedin}{\faLinkedinSquare}
+  \providecommand{\faOrcid}{\faGraduationCap}
+  \providecommand{\faXTwitter}{\faTwitter}
+  \providecommand{\faMastodon}{\faTwitter}
+  \providecommand{\faResearchgate}{\faGraduationCap}
+  \providecommand{\faHackerrank}{\faCode}
+  \providecommand{\faKaggle}{\faLineChart}
+  \providecommand{\faSquareXing}{\faXingSquare}
+  \providecommand{\faTelegram}{\faPaperPlane}
+}
 \RequirePackage{roboto}
 \RequirePackage[default,opentype]{sourcesanspro}
 

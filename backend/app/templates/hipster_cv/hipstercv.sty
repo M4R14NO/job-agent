@@ -1,7 +1,11 @@
 
 \usepackage[T1]{fontenc}
 
-\RequirePackage{fontawesome6} % ohne 5
+\IfFileExists{fontawesome6.sty}{%
+\RequirePackage{fontawesome6}%
+}{%
+\RequirePackage{fontawesome}%
+}
 \usepackage{hyperref}
 \setlength{\parindent}{0cm}
 \usepackage{paracol}
