@@ -1,10 +1,10 @@
 # Caddy Edge Configuration (Ticket 005)
 
-This project uses Caddy as the canonical edge/TLS layer for staging and production.
+Primary hosted deployment is Coolify-first.
 
-Primary deployment path is Coolify-first. This Caddy path remains a maintained fallback strategy.
+This document describes the maintained Caddy fallback strategy (and local/CI fallback validation path) when Coolify is unavailable.
 
-## Scope
+## Scope (Fallback Mode)
 
 - HTTPS termination and automatic certificate handling.
 - HTTP to HTTPS redirect.
@@ -19,6 +19,11 @@ Primary deployment path is Coolify-first. This Caddy path remains a maintained f
 - Fallback mode: Caddy + existing repository scripts/workflows in this project.
 
 Both modes must use the same backend environment variable contract so switching mode does not require code changes.
+
+Important:
+
+- In primary mode, do not add an extra Caddy layer in front of Coolify.
+- Use this Caddy setup only for fallback operations and periodic readiness drills.
 
 ## Config Files
 

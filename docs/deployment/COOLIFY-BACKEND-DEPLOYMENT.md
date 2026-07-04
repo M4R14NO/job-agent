@@ -33,6 +33,23 @@ Domain placeholder legend:
 - `<project-domain>`: your registered base domain (for example `myproduct`)
 - `<tld>`: top-level domain (for example `com`, `net`, `org`, `io`)
 
+## 1.1) Health check setup in Coolify
+
+Configure a container health check so traffic is routed only after the app is ready.
+
+Recommended values:
+
+- Type: `HTTP`
+- Port: `8000`
+- Path: `/health`
+- Expected status: `200`
+- Interval: `10s`
+- Timeout: `3s`
+- Retries: `10-12`
+- Start period (grace): `20-30s`
+
+After saving these settings, run one `Redeploy` and verify the deployment reaches `Healthy`.
+
 ## 2) Environment variable policy (important)
 
 For backend variables in Coolify:
@@ -129,6 +146,7 @@ Expected:
 - `/health` returns `{"status":"ok","scraping_enabled":false}`
 - `/auth/me` returns auth status (401 if not logged in is expected)
 - `/models` returns model list when Infercom key/base URL are valid
+- Coolify status shows the container as `Healthy` (not only `Running`)
 
 ## 8) Common failure patterns
 

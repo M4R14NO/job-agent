@@ -2,6 +2,8 @@
 
 This runbook defines a Coolify-first secret strategy with a maintained Caddy fallback path.
 
+Primary hosted environments should terminate TLS and route domains at Coolify. Caddy is fallback-only.
+
 ## Ownership
 
 - Rotation owner: repository owner (solo developer)
@@ -58,6 +60,7 @@ Edge/deployment values:
 - [ ] Primary path is Coolify.
 - [ ] Fallback path is Caddy/workflow-based.
 - [ ] Shared env contract is documented.
+- [ ] No extra edge proxy is layered in front of Coolify in primary mode.
 
 Done criteria:
 

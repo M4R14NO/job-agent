@@ -116,12 +116,14 @@ Notes:
 - `backend/.env.local` is ignored by git.
 - Browser CORS allowlist is configured via `CORS_ALLOW_ORIGINS` (comma-separated).
 
-## Production Edge (Caddy)
+## Production Edge (Coolify primary, Caddy fallback)
 
-Ticket 005 standardizes Caddy (not Nginx) as the edge/TLS layer.
+Primary hosted deployment uses Coolify as edge/TLS/domain routing. Caddy remains documented as a maintained fallback path and for Ticket-005 fallback validation.
 
 - Caddy config: `deploy/caddy/Caddyfile`
 - Deployment docs: `docs/deployment/CADDY-CONFIG.md`
+- Coolify backend runbook: `docs/deployment/COOLIFY-BACKEND-DEPLOYMENT.md`
+- Coolify frontend runbook: `docs/deployment/COOLIFY-FRONTEND-DEPLOYMENT.md`
 - Secret management runbook: `docs/deployment/SECRET-MANAGEMENT.md`
 - CORS policy docs: `docs/deployment/CORS-POLICY.md`
 - Validation script: `scripts/validate-security-headers.sh`
@@ -130,6 +132,8 @@ Recommended routing model:
 
 - Frontend served at `/`
 - Backend reverse-proxied at `/api`
+
+For containerized frontend deployments in Coolify, use `frontend/Dockerfile` (multi-stage build) with `frontend/nginx.conf` serving the built app on internal port `80`.
 
 Validation example after staging deployment:
 
