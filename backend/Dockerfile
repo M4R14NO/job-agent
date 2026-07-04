@@ -13,7 +13,7 @@ RUN apt-get update \
         ca-certificates \
         curl \
         fonts-font-awesome \
-        fonts-lmodern \
+        lmodern \
         texlive-fonts-recommended \
         texlive-latex-extra \
         texlive-xetex \
