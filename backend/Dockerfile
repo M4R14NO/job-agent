@@ -12,8 +12,11 @@ RUN apt-get update \
         build-essential \
         ca-certificates \
         curl \
+        fontconfig \
         fonts-font-awesome \
+        fonts-noto-cjk \
         lmodern \
+        texlive-fonts-extra \
         texlive-fonts-recommended \
         texlive-latex-extra \
         texlive-xetex \
